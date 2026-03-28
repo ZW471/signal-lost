@@ -10,24 +10,24 @@ Signal Lost is a cyberpunk knowledge-roguelike text RPG. The game engine is a La
 
 ```bash
 # Run the browser GUI (primary interface)
-python gui/run_gui.py
-python gui/run_gui.py --port 8080
+uv run gui/run_gui.py
+uv run gui/run_gui.py --port 8080
 
 # Run headless for agentic testing
-python tests/scripts/play_headless.py
+uv run tests/scripts/play_headless.py
 ```
 
 ## Running Tests
 
 ```bash
 # Smoke tests (no LLM required)
-python tests/scenarios/smoke_test.py
+uv run tests/scenarios/smoke_test.py
 
 # Regression tests (no LLM required)
-python tests/scenarios/regression.py
+uv run tests/scenarios/regression.py
 
 # Full playthrough test (requires configured LLM in settings/provider.json)
-python tests/scenarios/full_playthrough.py --turns 20
+uv run tests/scenarios/full_playthrough.py --turns 20
 ```
 
 ## Build & Dependencies

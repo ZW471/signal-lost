@@ -23,9 +23,9 @@ This is not a story about saving the world. This is a story about understanding 
 The GUI provides a real-time game interface in your browser with a chat panel and live game state dashboard.
 
 ```bash
-python gui/run_gui.py
-python gui/run_gui.py --port 8080
-python gui/run_gui.py --no-open   # don't auto-open browser
+uv run gui/run_gui.py
+uv run gui/run_gui.py --port 8080
+uv run gui/run_gui.py --no-open   # don't auto-open browser
 ```
 
 The GUI supports: New Game, Resume, Load Game, Save Game, and provider configuration — all from the browser.
@@ -35,7 +35,7 @@ The GUI supports: New Game, Resume, Load Game, Save Game, and provider configura
 For automated playthroughs or agentic testing:
 
 ```bash
-python tests/scripts/play_headless.py
+uv run tests/scripts/play_headless.py
 ```
 
 The headless engine uses file-polling (`session/headless/player_action.json`) for communication, making it compatible with Claude Code and other AI agents.
@@ -75,12 +75,22 @@ Edit `settings/provider.json` to configure the LLM provider.
 ## Testing
 
 ```bash
-python tests/scenarios/smoke_test.py       # Quick validation (no LLM)
-python tests/scenarios/regression.py       # Bug regression tests (no LLM)
-python tests/scenarios/full_playthrough.py # Automated playthrough (requires LLM)
+uv run tests/scenarios/smoke_test.py       # Quick validation (no LLM)
+uv run tests/scenarios/regression.py       # Bug regression tests (no LLM)
+uv run tests/scenarios/full_playthrough.py # Automated playthrough (requires LLM)
 ```
 
 See `tests/README.md` for details.
+
+---
+
+## Prerequisites
+
+This project uses [uv](https://docs.astral.sh/uv/) as its package manager. Install it first, then:
+
+```bash
+uv sync
+```
 
 ---
 

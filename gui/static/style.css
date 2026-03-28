@@ -617,6 +617,10 @@ html, body {
 
 .saves-list {
   margin: 20px 0;
+  max-height: calc(90vh - 150px);
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--cyan) var(--bg-dark);
 }
 
 .save-entry {
