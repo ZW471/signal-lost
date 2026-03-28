@@ -126,7 +126,6 @@ def test_game_data_integrity():
 def test_llm_factory_providers():
     """LLM factory supports expected providers (without creating actual instances)."""
     from engine.llm_factory import create_llm
-    import pytest
 
     # Unknown provider should raise
     try:

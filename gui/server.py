@@ -59,6 +59,33 @@ SESSION_DIR = os.path.join(GAME_ROOT, "session")
 SAVES_DIR = os.path.join(GAME_ROOT, "saves")
 STATIC_DIR = os.path.join(_GUI_DIR, "static")
 
+
+def _get_langsmith_status() -> dict:
+    """Return current LangSmith config (without exposing the full key)."""
+    enabled = bool(os.environ.get("LANGCHAIN_TRACING_V2", "").lower() == "true"
+                   and os.environ.get("LANGCHAIN_API_KEY"))
+    return {
+        "enabled": enabled,
+        "project": os.environ.get("LANGCHAIN_PROJECT", "signal_lost"),
+    }
+
+
+def _apply_langsmith(cfg: dict):
+    """Apply LangSmith settings to environment variables."""
+    api_key = cfg.get("api_key", "")
+    project = cfg.get("project", "signal_lost")
+
+    if api_key:
+        os.environ["LANGCHAIN_API_KEY"] = api_key
+        os.environ["LANGCHAIN_TRACING_V2"] = "true"
+        os.environ["LANGCHAIN_PROJECT"] = project or "signal_lost"
+        save_env_key("LANGCHAIN_API_KEY", api_key)
+        save_env_key("LANGCHAIN_TRACING_V2", "true")
+        save_env_key("LANGCHAIN_PROJECT", project or "signal_lost")
+    elif project:
+        os.environ["LANGCHAIN_PROJECT"] = project
+        save_env_key("LANGCHAIN_PROJECT", project)
+
 # ---------------------------------------------------------------------------
 # FastAPI app
 # ---------------------------------------------------------------------------
@@ -151,6 +178,7 @@ async def status():
         "saves": _list_saves(),
         "settings": load_settings(),
         "provider": load_provider_config(),
+        "langsmith": _get_langsmith_status(),
     }
 
 
@@ -185,6 +213,7 @@ async def websocket_endpoint(ws: WebSocket):
                     "saves": _list_saves(),
                     "settings": load_settings(),
                     "provider": load_provider_config(),
+                    "langsmith": _get_langsmith_status(),
                 })
 
             elif action == "new_game":
@@ -203,7 +232,7 @@ async def websocket_endpoint(ws: WebSocket):
                         os.environ["OPENAI_API_KEY"] = api_key
 
                 extra = {}
-                if provider == "lmstudio":
+                if provider in ("lmstudio", "local"):
                     extra["base_url"] = provider_cfg.get("base_url", "http://localhost:1234/v1")
 
                 try:
@@ -277,7 +306,7 @@ async def websocket_endpoint(ws: WebSocket):
                         os.environ["OPENAI_API_KEY"] = api_key
 
                 extra = {}
-                if provider == "lmstudio":
+                if provider in ("lmstudio", "local"):
                     extra["base_url"] = provider_cfg.get("base_url", "http://localhost:1234/v1")
 
                 try:
@@ -318,7 +347,7 @@ async def websocket_endpoint(ws: WebSocket):
                         os.environ["OPENAI_API_KEY"] = api_key
 
                 extra = {}
-                if provider == "lmstudio":
+                if provider in ("lmstudio", "local"):
                     extra["base_url"] = provider_cfg.get("base_url", "http://localhost:1234/v1")
 
                 try:
@@ -398,9 +427,14 @@ async def websocket_endpoint(ws: WebSocket):
                     os.environ[env_var] = api_key
                     save_env_key(env_var, api_key)
 
+                langsmith_cfg = msg.get("langsmith")
+                if langsmith_cfg:
+                    _apply_langsmith(langsmith_cfg)
+
                 await ws.send_json({
                     "type": "provider_saved",
                     "provider": cfg_to_save,
+                    "langsmith": _get_langsmith_status(),
                 })
 
     except WebSocketDisconnect:

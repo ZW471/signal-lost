@@ -114,6 +114,7 @@ const LABELS = {
     btn_initialize: 'INITIALIZE', btn_back: 'BACK',
     // Load game screen
     load_title: '// LOAD SAVED SESSION',
+    resume_title: '// RESUME SESSION',
     no_saves: 'No saved games found.',
     // Save dialog
     save_title: '// SAVE SESSION', label_save_name: 'SAVE NAME',
@@ -127,6 +128,8 @@ const LABELS = {
     settings_provider_title: '// LLM PROVIDER',
     label_provider: 'PROVIDER', label_model: 'MODEL',
     label_api_key: 'API KEY', label_base_url: 'BASE URL', label_temperature: 'TEMPERATURE',
+    settings_langsmith_title: '// LANGSMITH TRACING',
+    label_langsmith_key: 'API KEY', label_langsmith_project: 'PROJECT NAME',
     btn_close: 'CLOSE',
     settings_saved: 'Settings saved', saving: 'Saving...', saved: 'Saved',
     // Chat prefixes
@@ -191,6 +194,7 @@ const LABELS = {
     btn_initialize: '初始化', btn_back: '返回',
     // Load game screen
     load_title: '// 载入存档',
+    resume_title: '// 继续游戏',
     no_saves: '未找到存档。',
     // Save dialog
     save_title: '// 保存游戏', label_save_name: '存档名称',
@@ -204,6 +208,8 @@ const LABELS = {
     settings_provider_title: '// 语言模型',
     label_provider: '提供商', label_model: '模型',
     label_api_key: 'API密钥', label_base_url: '地址', label_temperature: '温度',
+    settings_langsmith_title: '// LangSmith 记录',
+    label_langsmith_key: 'API密钥', label_langsmith_project: '项目名称',
     btn_close: '关闭',
     settings_saved: '设置已保存', saving: '保存中...', saved: '已保存',
     // Chat prefixes
@@ -397,11 +403,13 @@ function setLanguage(lang) {
   const settingsTitle = document.querySelector('#settingsOverlay .config-title');
   if (settingsTitle) settingsTitle.textContent = L('settings_title');
   _setLabelsInOverlay('#settingsOverlay', [
-    [0, 'label_ui_language'], [2, 'label_provider'], [3, 'label_model'],
-    [4, 'label_api_key'], [5, 'label_base_url'], [6, 'label_temperature'],
+    [0, 'label_ui_language'], [1, 'label_provider'], [2, 'label_model'],
+    [3, 'label_api_key'], [4, 'label_base_url'], [5, 'label_temperature'],
+    [6, 'label_langsmith_key'], [7, 'label_langsmith_project'],
   ]);
-  const providerTitle = document.querySelector('#settingsOverlay .config-subtitle');
-  if (providerTitle) providerTitle.textContent = L('settings_provider_title');
+  const subtitles = document.querySelectorAll('#settingsOverlay .config-subtitle');
+  if (subtitles[0]) subtitles[0].textContent = L('settings_provider_title');
+  if (subtitles[1]) subtitles[1].textContent = L('settings_langsmith_title');
   const settingsBtns = document.querySelectorAll('#settingsOverlay .cyber-btn-text');
   if (settingsBtns[0]) settingsBtns[0].textContent = L('btn_save');
   if (settingsBtns[1]) settingsBtns[1].textContent = L('btn_close');
@@ -643,6 +651,7 @@ function sendWS(data) {
 // ================================================================
 
 let cachedSaves = [];
+let cachedSessions = [];
 let selectedBackground = 'street_runner';
 let isFirstInput = true; // Track if first input after resume (to remove system message)
 let resumeMessageEl = null; // Reference to the resume system message element
@@ -654,12 +663,16 @@ let resumeMessageEl = null; // Reference to the resume system message element
 function handleServerMessage(msg) {
   switch (msg.type) {
     case 'status':
-      if (msg.has_session) document.getElementById('btnResume').style.display = '';
+      cachedSessions = msg.sessions || [];
+      document.getElementById('btnResume').style.display = cachedSessions.length > 0 ? '' : 'none';
       if (msg.saves && msg.saves.length > 0) {
         document.getElementById('btnLoadGame').style.display = '';
         cachedSaves = msg.saves;
+      } else {
+        document.getElementById('btnLoadGame').style.display = 'none';
       }
       if (msg.provider) prefillProviderSettings(msg.provider);
+      if (msg.langsmith) prefillLangsmithSettings(msg.langsmith);
       // Read language from settings
       if (msg.settings && msg.settings.language) {
         const lang = msg.settings.language.display || msg.settings.language.tui || 'en';
@@ -706,6 +719,7 @@ function handleServerMessage(msg) {
     case 'provider_saved':
       notify(L('settings_saved'));
       if (msg.provider) prefillProviderSettings(msg.provider);
+      if (msg.langsmith) prefillLangsmithSettings(msg.langsmith);
       document.getElementById('settingsStatus').textContent = L('saved');
       setTimeout(() => { document.getElementById('settingsStatus').textContent = ''; }, 2000);
       break;
@@ -733,6 +747,13 @@ function prefillProviderSettings(p) {
   onProviderChange();
 }
 
+function prefillLangsmithSettings(ls) {
+  if (!ls) return;
+  if (ls.project) document.getElementById('inputLangsmithProject').value = ls.project;
+  // Don't prefill the API key for security — just show placeholder if set
+  if (ls.enabled) document.getElementById('inputLangsmithKey').placeholder = '••••••• (configured)';
+}
+
 function openSettings() {
   document.getElementById('settingsOverlay').style.display = 'flex';
   document.getElementById('settingsStatus').textContent = '';
@@ -745,15 +766,23 @@ function closeSettings() {
 
 function saveSettings() {
   const lang = document.getElementById('selectUiLanguage').value;
-  sendWS({ action: 'save_provider', provider: getProviderConfig(), language: lang });
+  const payload = { action: 'save_provider', provider: getProviderConfig(), language: lang };
+  const lsKey = document.getElementById('inputLangsmithKey').value;
+  const lsProject = document.getElementById('inputLangsmithProject').value;
+  if (lsKey || lsProject) {
+    payload.langsmith = {};
+    if (lsKey) payload.langsmith.api_key = lsKey;
+    if (lsProject) payload.langsmith.project = lsProject;
+  }
+  sendWS(payload);
   setLanguage(lang);
   document.getElementById('settingsStatus').textContent = L('saving');
 }
 
 function onProviderChange() {
   const p = document.getElementById('selectProvider').value;
-  document.getElementById('apiKeyGroup').style.display = p === 'lmstudio' ? 'none' : '';
-  document.getElementById('baseUrlGroup').style.display = p === 'lmstudio' ? '' : 'none';
+  document.getElementById('apiKeyGroup').style.display = p === 'local' ? 'none' : '';
+  document.getElementById('baseUrlGroup').style.display = p === 'local' ? '' : 'none';
 }
 
 document.getElementById('inputTemp').addEventListener('input', function() {
@@ -764,7 +793,7 @@ function getProviderConfig() {
   const provider = document.getElementById('selectProvider').value;
   const config = { provider, model: document.getElementById('inputModel').value || 'gpt-4o',
     temperature: parseFloat(document.getElementById('inputTemp').value) };
-  if (provider === 'lmstudio') config.base_url = document.getElementById('inputBaseUrl').value;
+  if (provider === 'local') config.base_url = document.getElementById('inputBaseUrl').value;
   else { const k = document.getElementById('inputApiKey').value; if (k) config.api_key = k; }
   return config;
 }
@@ -842,10 +871,38 @@ function startNewGame() {
   switchScreen('gameScreen'); showThinking(); disableInput();
 }
 
-function resumeGame() {
+function resumeGame(sessionName) {
+  if (!sessionName) {
+    if (cachedSessions.length === 1) {
+      sessionName = cachedSessions[0].name;
+    } else if (cachedSessions.length > 1) {
+      showResumeSessionPicker();
+      return;
+    } else {
+      return;
+    }
+  }
   clearChat(); isFirstInput = true; resumeMessageEl = null;
-  sendWS({ action: 'resume', provider: getProviderConfig() });
+  sendWS({ action: 'resume', session_name: sessionName, provider: getProviderConfig() });
   switchScreen('gameScreen'); showThinking(); disableInput();
+}
+
+function showResumeSessionPicker() {
+  const list = document.getElementById('savesList');
+  list.innerHTML = '';
+  const loadTitle = document.querySelector('#loadGameScreen .config-title');
+  if (loadTitle) loadTitle.textContent = L('resume_title');
+  cachedSessions.forEach(sess => {
+    const el = document.createElement('div');
+    el.className = 'save-entry';
+    const turnLabel = L('turn');
+    el.innerHTML = `<div><div class="save-name">${esc(sess.name)}</div>
+      <div class="save-info">${esc(sess.player_name)} — ${turnLabel} ${sess.turn}</div></div>
+      <div style="color:var(--cyan)">⟩</div>`;
+    el.onclick = () => resumeGame(sess.name);
+    list.appendChild(el);
+  });
+  switchScreen('loadGameScreen');
 }
 
 function loadGame(saveName) {

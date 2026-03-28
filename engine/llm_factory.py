@@ -102,7 +102,7 @@ def load_provider_config(settings_dir: str | None = None) -> dict:
 def create_llm(provider: str, model: str, **kwargs: Any):
     """Create an LLM instance for the given provider.
 
-    Supported providers: anthropic, openai, lmstudio, claude-code.
+    Supported providers: anthropic, openai, local (LM Studio/Ollama/vLLM), claude-code.
     """
     if provider == "claude-code":
         from tests.scripts.claude_llm import ClaudeCodeLLM
@@ -113,9 +113,9 @@ def create_llm(provider: str, model: str, **kwargs: Any):
     elif provider == "openai":
         from langchain_openai import ChatOpenAI
         return ChatOpenAI(model=model, **kwargs)
-    elif provider == "lmstudio":
+    elif provider in ("local", "lmstudio"):
         from langchain_openai import ChatOpenAI
         base_url = kwargs.pop("base_url", "http://localhost:1234/v1")
-        return ChatOpenAI(model=model, base_url=base_url, api_key="lm-studio", **kwargs)
+        return ChatOpenAI(model=model, base_url=base_url, api_key="not-needed", **kwargs)
     else:
         raise ValueError(f"Unknown provider: {provider}")

@@ -20,20 +20,20 @@ tests/
 
 ### Smoke Test (no LLM required)
 ```bash
-python tests/scenarios/smoke_test.py
+uv run tests/scenarios/smoke_test.py
 ```
 Validates: graph compilation, tool schemas, session create/save/load roundtrip.
 
 ### Full Playthrough (requires LLM)
 ```bash
 # Configure provider in settings/provider.json first
-python tests/scenarios/full_playthrough.py --turns 20
+uv run tests/scenarios/full_playthrough.py --turns 20
 ```
 Runs an automated game and generates a review in `tests/reviews/`.
 
 ### Headless Engine (for Claude Code play)
 ```bash
-python tests/scripts/play_headless.py
+uv run tests/scripts/play_headless.py
 ```
 Starts the engine in file-polling mode. Write actions to `session/headless/player_action.json`.
 
