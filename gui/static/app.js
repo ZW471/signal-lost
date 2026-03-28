@@ -130,6 +130,7 @@ const LABELS = {
     label_api_key: 'API KEY', label_base_url: 'BASE URL', label_temperature: 'TEMPERATURE',
     settings_langsmith_title: '// LANGSMITH TRACING',
     label_langsmith_key: 'API KEY', label_langsmith_project: 'PROJECT NAME',
+    settings_audio_title: '// AUDIO', label_music_volume: 'MUSIC VOLUME',
     btn_close: 'CLOSE',
     settings_saved: 'Settings saved', saving: 'Saving...', saved: 'Saved',
     // Chat prefixes
@@ -210,6 +211,7 @@ const LABELS = {
     label_api_key: 'API密钥', label_base_url: '地址', label_temperature: '温度',
     settings_langsmith_title: '// LangSmith 记录',
     label_langsmith_key: 'API密钥', label_langsmith_project: '项目名称',
+    settings_audio_title: '// 音频', label_music_volume: '音乐音量',
     btn_close: '关闭',
     settings_saved: '设置已保存', saving: '保存中...', saved: '已保存',
     // Chat prefixes
@@ -406,10 +408,12 @@ function setLanguage(lang) {
     [0, 'label_ui_language'], [1, 'label_provider'], [2, 'label_model'],
     [3, 'label_api_key'], [4, 'label_base_url'], [5, 'label_temperature'],
     [6, 'label_langsmith_key'], [7, 'label_langsmith_project'],
+    [8, 'label_music_volume'],
   ]);
   const subtitles = document.querySelectorAll('#settingsOverlay .config-subtitle');
   if (subtitles[0]) subtitles[0].textContent = L('settings_provider_title');
   if (subtitles[1]) subtitles[1].textContent = L('settings_langsmith_title');
+  if (subtitles[2]) subtitles[2].textContent = L('settings_audio_title');
   const settingsBtns = document.querySelectorAll('#settingsOverlay .cyber-btn-text');
   if (settingsBtns[0]) settingsBtns[0].textContent = L('btn_save');
   if (settingsBtns[1]) settingsBtns[1].textContent = L('btn_close');
@@ -420,7 +424,7 @@ function setLanguage(lang) {
 
   // Status bar button titles
   const statusBtns = document.querySelectorAll('.status-btn');
-  const btnTitles = lang === 'zh' ? ['保存', '设置', '菜单'] : ['Save Game', 'Settings', 'Menu'];
+  const btnTitles = lang === 'zh' ? ['音乐', '保存', '设置', '菜单'] : ['Music', 'Save Game', 'Settings', 'Menu'];
   statusBtns.forEach((btn, i) => { if (btnTitles[i]) btn.title = btnTitles[i]; });
 
   // Re-render all panels if we have cached session
@@ -570,6 +574,10 @@ function switchScreen(id) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   const t = document.getElementById(id);
   if (t) { t.classList.add('active'); triggerGlitch(); playBeep(1200, 0.04); }
+  // Music: play menu track on menu/boot screens, game music handled by updateAllPanels
+  if (id === 'menuScreen' || id === 'bootScreen' || id === 'newGameScreen' || id === 'loadGameScreen') {
+    MusicEngine.playMenu();
+  }
 }
 
 // ================================================================
@@ -757,6 +765,10 @@ function prefillLangsmithSettings(ls) {
 function openSettings() {
   document.getElementById('settingsOverlay').style.display = 'flex';
   document.getElementById('settingsStatus').textContent = '';
+  // Sync music volume slider
+  const vol = MusicEngine.getVolume();
+  document.getElementById('inputMusicVolume').value = vol;
+  document.getElementById('musicVolValue').textContent = Math.round(vol * 100) + '%';
   playBeep(1000, 0.04);
 }
 
@@ -988,6 +1000,13 @@ function disableInput() { document.getElementById('chatInput').disabled = true; 
 // SAVE / LOAD
 // ================================================================
 
+function toggleMusic() {
+  const muted = MusicEngine.toggleMute();
+  const btn = document.getElementById('btnMusicToggle');
+  if (btn) btn.textContent = muted ? '\u{1F507}' : '\u{1F50A}';
+  playBeep(muted ? 400 : 800, 0.03);
+}
+
 function saveGame() { document.getElementById('saveDialog').style.display = 'flex'; document.getElementById('saveName').focus(); playBeep(1000, 0.04); }
 function confirmSave() { sendWS({ action: 'save_game', save_name: document.getElementById('saveName').value.trim() || 'quicksave' }); }
 function closeSaveDialog() { document.getElementById('saveDialog').style.display = 'none'; }
@@ -1058,6 +1077,8 @@ function updateAllPanels(session) {
   updateWorldPanel(session.world_state);
   updateLogPanel(session.log);
   updateConversationPanel(session.conversation);
+  // Update background music based on current district
+  MusicEngine.updateFromSession(session);
 }
 
 // ---------- STATUS BAR (matches TUI StatusBar) ----------
@@ -1589,3 +1610,9 @@ document.addEventListener('keydown', (e) => {
 // ================================================================
 
 window.addEventListener('load', () => { runBootSequence(); });
+
+// Start music on first user interaction (browsers require gesture for AudioContext)
+document.addEventListener('click', function _initMusic() {
+  MusicEngine.playMenu();
+  document.removeEventListener('click', _initMusic);
+}, { once: true });
