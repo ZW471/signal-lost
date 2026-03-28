@@ -1,9 +1,0 @@
-{
-  "district": "The Undercroft",
-  "area": "Lower Service Shaft / 下层检修井",
-  "signal_strength": 90,
-  "npcs_here": [
-    "Patch"
-  ],
-  "description": "维护子节点下方是一段狭窄笔直的旧式检修井，金属梯嵌在冰冷井壁上，一路没入更深的黑暗。空气更冷，带着臭氧、潮湿灰尘和旧电子元件低热后的焦苦味。下方隐约可见一片微弱平面反光，像某种仍在待机的旧终端或观察窗。"
-}
