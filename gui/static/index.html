@@ -171,6 +171,7 @@
         <span class="status-value" id="statTime">—</span>
       </div>
       <div class="status-item actions">
+        <button class="status-btn" onclick="toggleMusic()" title="Music" id="btnMusicToggle">🔊</button>
         <button class="status-btn" onclick="saveGame()" title="Save Game">💾</button>
         <button class="status-btn" onclick="openSettings()" title="Settings">⚙</button>
         <button class="status-btn" onclick="showMenu()" title="Menu">☰</button>
@@ -327,6 +328,14 @@
             <input type="text" class="cyber-input" id="inputLangsmithProject" placeholder="signal_lost" value="signal_lost">
           </div>
         </div>
+        <h4 class="config-subtitle">// AUDIO</h4>
+        <div class="form-group">
+          <label class="cyber-label">MUSIC VOLUME</label>
+          <div class="slider-container">
+            <input type="range" class="cyber-slider" id="inputMusicVolume" min="0" max="1" step="0.05" value="0.35" oninput="MusicEngine.setVolume(parseFloat(this.value)); document.getElementById('musicVolValue').textContent = Math.round(this.value * 100) + '%'">
+            <span class="slider-value" id="musicVolValue">35%</span>
+          </div>
+        </div>
         <div class="form-actions">
           <button class="cyber-btn accent" onclick="saveSettings()">
             <span class="cyber-btn-text">SAVE</span>
@@ -343,6 +352,7 @@
   <!-- ========== NOTIFICATION ========== -->
   <div id="notification" class="notification"></div>
 
+  <script src="/static/music.js"></script>
   <script src="/static/app.js"></script>
 </body>
 </html>
