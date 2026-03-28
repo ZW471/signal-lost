@@ -1,0 +1,9 @@
+{
+  "district": "The Undercroft",
+  "area": "Station Master's Office",
+  "signal_strength": 35,
+  "npcs_present": [
+    "Patch"
+  ],
+  "description": "一间由废弃站务室改成的临时居所。墙上钉着老线路图、拆开的终端壳体和几卷绝缘线。空气里有焊锡、机油和潮湿混凝土的味道。门缝下透出一点冷白灯光。"
+}

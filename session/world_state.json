@@ -1,0 +1,100 @@
+{
+  "nexus_alert": {
+    "current": 0,
+    "status": "Calm",
+    "status_zh": "平静"
+  },
+  "fragment_decay": {
+    "current": 0,
+    "status": "Stable",
+    "status_zh": "稳定"
+  },
+  "district_access": [
+    {
+      "name": "The Sprawl",
+      "name_zh": "蔓城",
+      "status": "Open",
+      "notes": "起始区域"
+    },
+    {
+      "name": "The Neon Quarter",
+      "name_zh": "霓虹区",
+      "status": "Open",
+      "notes": "娱乐与情报区"
+    },
+    {
+      "name": "The Undercroft",
+      "name_zh": "地底城",
+      "status": "Open",
+      "notes": "地下聆听者领地"
+    }
+  ],
+  "_district_registry": {
+    "hidden": true,
+    "undiscovered": [
+      {
+        "name": "The Undercroft",
+        "name_zh": "地底城",
+        "status": "Locked",
+        "unlock": "Requires TRACE-L1-03",
+        "notes": "Underground Listener territory. No NEXUS patrols. High Signal."
+      },
+      {
+        "name": "Sector 7",
+        "name_zh": "第七区",
+        "status": "Restricted",
+        "unlock": "Requires keycard or disguise",
+        "notes": "Corporate zone. NEXUS offices, research labs. Heavy patrols."
+      },
+      {
+        "name": "The Resonance Chamber",
+        "name_zh": "共鸣室",
+        "status": "Hidden",
+        "unlock": "Requires Layer 3 completion",
+        "notes": "Ancient pre-Severance facility. Extreme Signal."
+      },
+      {
+        "name": "The Spire",
+        "name_zh": "尖塔",
+        "status": "Locked",
+        "unlock": "Requires Layer 4 completion",
+        "notes": "NEXUS HQ tower. Endgame location."
+      }
+    ]
+  },
+  "time": {
+    "turn": 23,
+    "time_of_day": "Morning",
+    "time_of_day_zh": "晨",
+    "day": 14,
+    "period": "Morning"
+  },
+  "global_events": [
+    "A quiet rumour begins circulating in back-channel markets that someone has been asking about the player.",
+    "A tunnel-rumour in the Undercroft claims a glowing drifter has been seen lingering near an old relay collapse.",
+    "Market whisper-chains in the lower districts start treating the player's name as risky to repeat.",
+    "Undercroft scavengers quietly avoid a stretch of deeper maintenance hollows after hearing strange voices and seeing pale light there.",
+    "Undercroft scavenger talk shifts: the glowing drifter is no longer being seen on the usual hollow routes, and some believe it slipped into sealed conduit space.",
+    "Night market intermediaries in the lower districts begin quietly trading scraps of identity and overheard names for small favors.",
+    "下层街市里开始流传一句低声告诫：今晚别留下真名。",
+    "更深处的封闭管道里偶尔传出不成句的回声，Undercroft拾荒者因此更避开那一带。",
+    "Undercroft更深层的封闭管道开始传出更清晰的人声残片，拾荒者私下说那不是回声。",
+    "The Undercroft夜间黑市里，身份碎片的价码上涨，更多中间人开始只收匿名交易。",
+    "Undercroft更深层的积水继电暗渠里开始传出断续的人声，像有人隔着水面低声交谈。",
+    "今夜The Undercroft的身份碎片交易点出现临时换位，几个常见中间人提前收摊，改由更陌生的面孔接手。",
+    "今夜The Undercroft里开始流传一句低声提醒：换过人的碎片摊别碰，像是有人在借交易点悄悄收网。",
+    "Undercroft更深的积水继电区里，断续的人声今晚变得更清楚了，像在重复某个名字。",
+    "发出匿名提醒的人在The Undercroft里忽然失了踪，几个知道内情的小贩开始闭口不谈。",
+    "Undercroft深层积水继电区的回声又往更下方偏移了，像是有什么东西在水下引路。",
+    "今夜The Undercroft的几处临时碎片摊在短暂骚动后提前收拢，周边望风的人手明显多了。",
+    "The Undercroft里有人开始低声打听匿名警告的源头，知情者因此换了藏身处。",
+    "深层积水继电区下方的回声源短暂消失，只剩零散的金属敲击声从更低处传来。",
+    "The Undercroft里关于匿名警告来源的试探更频繁了，几条旧黑市线人开始互相甄别口风。",
+    "继电区更深的积水层里，零散敲击声在清晨短暂重新出现，随后又沉了下去。"
+  ],
+  "_ending_trajectory": {
+    "hidden": true,
+    "current": "Neutral",
+    "confidence": "Low"
+  }
+}

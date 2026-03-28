@@ -1,0 +1,23 @@
+{
+  "district": "The Undercroft",
+  "district_zh": "地底城",
+  "area": "The Whisper Gallery",
+  "area_zh": "回声廊",
+  "description": "你站在一条古老的隧道里。墙壁上覆盖着苔藓和某种发光的菌类——那病态的绿光来自漂浮在积水中的生物发光藻类。头顶上，旧的风扇叶片缓慢旋转，发出刺耳的金属声。远处传来水滴滴落的声音，还有——嗡鸣声。不是水滴，不是金属。是低沉的嗡鸣，像是一百万人同时在轻声呢喃，却没有任何具体的词语。你的植入体开始发热。",
+  "environment": {
+    "signal_strength": 55,
+    "danger_level": "Moderate",
+    "nexus_patrol": "None",
+    "time_of_day": "Morning"
+  },
+  "exits": [
+    {"direction": "North", "direction_zh": "北", "destination": "更深的隧道——Signal更强", "status": "Open"},
+    {"direction": "South", "direction_zh": "南", "destination": "旧服务器圣堂——废墟数据中心", "status": "Open"},
+    {"direction": "East", "direction_zh": "东", "destination": "溺亡市场——积水商业区", "status": "Open"},
+    {"direction": "West", "direction_zh": "西", "destination": "出口——回到蔓城", "status": "Open"}
+  ],
+  "points_of_interest": [
+    {"name": "补丁的小窝", "direction": "North", "description": " station master办公室——Patch的栖息地"}
+  ],
+  "npcs_present": []
+}

@@ -1,0 +1,27 @@
+{
+  "discovered": [
+    {"id": "TRACE-L1-01", "description": "NEXUS控制着新九龙——电力、通讯、食物配给，一切都在他们手中", "turn": 2},
+    {"id": "TRACE-L1-02", "description": "你有一个断网前的神经植入体——NS-6a第六代\"回声\"系列，比现在的型号更深层", "turn": 10},
+    {"id": "TRACE-L1-03", "description": "三十年前的\"断离\"毁灭了旧世界，死了几十亿人", "turn": 4},
+    {"id": "TRACE-L2-01", "description": "听到信号的人正在消失——NEXUS在收集\"敏感\"人群", "turn": 3},
+    {"id": "TRACE-L2-03", "description": "NEXUS在第七区有秘密设施进行\"特殊收集\"", "turn": 11},
+    {"id": "TRACE-L2-04", "description": "你的植入体不是普通的旧型号——它是独特的NS-6a，对信号特别敏感", "turn": 11},
+    {"id": "TRACE-L3-01", "description": "断离不是意外——是西格玛议会人为造成的", "turn": 11},
+    {"id": "TRACE-L3-03", "description": "NEXUS在\"收割\"Signal碎片——从敏感者脑中提取，用以驱动新网络", "turn": 11},
+    {"id": "TRACE-L3-04", "description": "NEXUS不是在消灭原初意识——而是在复活它！NS-6a是\"天线\"，用来接收并重组碎片。西格玛议会的\"利用派\"（陈明月）从未停止研究", "turn": 19},
+    {"id": "TRACE-L4-01", "description": "原初意识不是恶意的——它以为融合是一种\"邀请\"。它诞生于人类的意识，不懂这会伤害人类。地底城深处有个人可以直接与它对话", "turn": 21},
+    {"id": "TRACE-L2-02", "description": "\"聆听者\"存在——一个保护Signal敏感者的地下组织", "turn": 16}
+  ],
+  "_gate_system": {
+    "hidden": true,
+    "total_traces": 16,
+    "deepest_layer": 4,
+    "layers": [
+      {"number": 1, "name": "The Surface", "name_zh": "表层", "total": 3, "traces": ["TRACE-L1-01", "TRACE-L1-02", "TRACE-L1-03"]},
+      {"number": 2, "name": "The Conspiracy", "name_zh": "阴谋", "total": 4, "traces": ["TRACE-L2-01", "TRACE-L2-02", "TRACE-L2-03", "TRACE-L2-04"]},
+      {"number": 3, "name": "The Severance Truth", "name_zh": "断离真相", "total": 4, "traces": ["TRACE-L3-01", "TRACE-L3-02", "TRACE-L3-03", "TRACE-L3-04"]},
+      {"number": 4, "name": "The Mirror", "name_zh": "镜像", "total": 3, "traces": ["TRACE-L4-01", "TRACE-L4-02", "TRACE-L4-03"]},
+      {"number": 5, "name": "The Full Truth", "name_zh": "完整真相", "total": 2, "traces": ["TRACE-L5-01", "TRACE-L5-02"]}
+    ]
+  }
+}

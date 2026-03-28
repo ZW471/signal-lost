@@ -1,0 +1,68 @@
+{
+  "game": {
+    "title": "Signal Lost",
+    "title_zh": "信号遗失",
+    "version": "1.0"
+  },
+  "language": {
+    "display": "en",
+    "tui": "en",
+    "options": ["zh", "en"]
+  },
+  "difficulty": {
+    "mode": "standard",
+    "modes": {
+      "paranoid": {
+        "description": "For those who fear the dark / 为那些畏惧黑暗的人",
+        "nexus_alert_rate": 0.5,
+        "integrity_max": 4,
+        "hint_level": "moderate",
+        "fragment_decay_rate": 0.25,
+        "npc_patience": "forgiving"
+      },
+      "cautious": {
+        "description": "Tread carefully / 小心行事",
+        "nexus_alert_rate": 0.75,
+        "integrity_max": 3,
+        "hint_level": "subtle",
+        "fragment_decay_rate": 0.4,
+        "npc_patience": "normal"
+      },
+      "standard": {
+        "description": "The city doesn't care about you / 这座城市不在乎你",
+        "nexus_alert_rate": 1.0,
+        "integrity_max": 3,
+        "hint_level": "none",
+        "fragment_decay_rate": 0.5,
+        "npc_patience": "normal"
+      },
+      "reckless": {
+        "description": "You were already dead / 你早已死去",
+        "nexus_alert_rate": 1.5,
+        "integrity_max": 2,
+        "hint_level": "none",
+        "fragment_decay_rate": 0.75,
+        "npc_patience": "unforgiving"
+      }
+    }
+  },
+  "narrative": {
+    "verbosity": "standard",
+    "verbosity_options": ["terse", "standard", "immersive"],
+    "tone": "noir",
+    "tone_options": ["noir", "clinical", "poetic"],
+    "death_description": "moderate",
+    "death_description_options": ["fade_to_black", "moderate", "graphic"],
+    "signal_manifestations": true
+  },
+  "gameplay": {
+    "auto_save_turns": 5,
+    "max_inventory_slots": 6,
+    "starting_district": "the_sprawl",
+    "time_periods_per_day": 3,
+    "max_log_entries": 30,
+    "traces_for_resonance_access": 5,
+    "traces_for_good_ending": 7,
+    "knowledge_gate_strictness": "standard"
+  }
+}

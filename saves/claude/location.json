@@ -1,0 +1,9 @@
+{
+  "name": "Mira's Noodle Shop",
+  "district": "The Sprawl",
+  "signal": 15,
+  "npcs": [
+    "Mira - owner, behind counter, has been watching Ghost since awakening, cautious neutral"
+  ],
+  "atmosphere": "Steam, synth-broth smell, low chatter from two laborers at far end of counter. Rain on roof. Flickering fluorescent strip."
+}

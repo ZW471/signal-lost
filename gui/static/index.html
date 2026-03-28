@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SIGNAL LOST</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+  <!-- Scanline overlay -->
+  <div class="scanlines"></div>
+
+  <!-- Particle canvas -->
+  <canvas id="particles"></canvas>
+
+  <!-- Glitch overlay -->
+  <div class="glitch-overlay" id="glitchOverlay"></div>
+
+  <!-- ========== BOOT SCREEN ========== -->
+  <div id="bootScreen" class="screen active">
+    <div class="boot-container">
+      <div class="boot-logo">
+        <div class="logo-glitch" data-text="SIGNAL LOST">SIGNAL LOST</div>
+        <div class="logo-sub">// NEURAL INTERFACE v3.7.1</div>
+      </div>
+      <div class="boot-log" id="bootLog"></div>
+      <div class="boot-progress">
+        <div class="boot-progress-bar" id="bootProgressBar"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== MENU SCREEN ========== -->
+  <div id="menuScreen" class="screen">
+    <div class="menu-container">
+      <div class="menu-title">
+        <h1 class="glitch-text" data-text="SIGNAL LOST">SIGNAL LOST</h1>
+        <p class="menu-subtitle typewriter">信号遗失 — A Cyberpunk Knowledge Roguelike</p>
+      </div>
+      <div class="menu-buttons">
+        <button class="cyber-btn" id="btnNewGame" onclick="showNewGame()">
+          <span class="cyber-btn-text">NEW GAME</span>
+          <span class="cyber-btn-glitch"></span>
+          <span class="cyber-btn-tag">01</span>
+        </button>
+        <button class="cyber-btn" id="btnResume" onclick="resumeGame()" style="display:none">
+          <span class="cyber-btn-text">RESUME</span>
+          <span class="cyber-btn-glitch"></span>
+          <span class="cyber-btn-tag">02</span>
+        </button>
+        <button class="cyber-btn" id="btnLoadGame" onclick="showLoadGame()" style="display:none">
+          <span class="cyber-btn-text">LOAD GAME</span>
+          <span class="cyber-btn-glitch"></span>
+          <span class="cyber-btn-tag">03</span>
+        </button>
+        <button class="cyber-btn" id="btnSettings" onclick="openSettings()">
+          <span class="cyber-btn-text">SETTINGS</span>
+          <span class="cyber-btn-glitch"></span>
+          <span class="cyber-btn-tag">04</span>
+        </button>
+      </div>
+      <div class="menu-footer">
+        <span class="blink">_</span> NEXUS MONITORING ACTIVE
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== NEW GAME SCREEN ========== -->
+  <div id="newGameScreen" class="screen">
+    <div class="config-container">
+      <h2 class="config-title">// IDENTITY CONFIGURATION</h2>
+      <div class="config-form">
+        <div class="form-group">
+          <label class="cyber-label">DESIGNATION</label>
+          <input type="text" class="cyber-input" id="inputName" placeholder="Enter name..." value="Kael">
+        </div>
+        <div class="form-group">
+          <label class="cyber-label">ALIAS</label>
+          <input type="text" class="cyber-input" id="inputAlias" placeholder="Enter alias..." value="Ghost">
+        </div>
+        <div class="form-group">
+          <label class="cyber-label">BACKGROUND</label>
+          <div class="cyber-select-group">
+            <button class="cyber-select active" data-bg="street_runner" onclick="selectBg(this)">
+              <span class="select-icon">⚡</span>
+              <span class="select-name">Street Runner</span>
+              <span class="select-desc">街头行者</span>
+            </button>
+            <button class="cyber-select" data-bg="corporate_exile" onclick="selectBg(this)">
+              <span class="select-icon">🏢</span>
+              <span class="select-name">Corporate Exile</span>
+              <span class="select-desc">企业流亡者</span>
+            </button>
+            <button class="cyber-select" data-bg="netrunner" onclick="selectBg(this)">
+              <span class="select-icon">🔌</span>
+              <span class="select-name">Netrunner</span>
+              <span class="select-desc">网行者</span>
+            </button>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group half">
+            <label class="cyber-label">DIFFICULTY</label>
+            <select class="cyber-input" id="selectDifficulty">
+              <option value="paranoid">Paranoid — 为那些畏惧黑暗的人</option>
+              <option value="cautious">Cautious — 小心行事</option>
+              <option value="standard" selected>Standard — 这座城市不在乎你</option>
+              <option value="reckless">Reckless — 你早已死去</option>
+            </select>
+          </div>
+          <div class="form-group half">
+            <label class="cyber-label">LANGUAGE</label>
+            <select class="cyber-input" id="selectLanguage">
+              <option value="en" selected>English</option>
+              <option value="zh">中文</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-actions">
+          <button class="cyber-btn accent" onclick="startNewGame()">
+            <span class="cyber-btn-text">INITIALIZE</span>
+            <span class="cyber-btn-glitch"></span>
+          </button>
+          <button class="cyber-btn" onclick="showMenu()">
+            <span class="cyber-btn-text">BACK</span>
+            <span class="cyber-btn-glitch"></span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== LOAD GAME SCREEN ========== -->
+  <div id="loadGameScreen" class="screen">
+    <div class="config-container">
+      <h2 class="config-title">// LOAD SAVED SESSION</h2>
+      <div id="savesList" class="saves-list"></div>
+      <div class="form-actions">
+        <button class="cyber-btn" onclick="showMenu()">
+          <span class="cyber-btn-text">BACK</span>
+          <span class="cyber-btn-glitch"></span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== GAME SCREEN ========== -->
+  <div id="gameScreen" class="screen">
+    <!-- Status bar -->
+    <div class="status-bar" id="statusBar">
+      <div class="status-item">
+        <span class="status-label" id="statLabelAlias">ALIAS</span>
+        <span class="status-value cyan-bright" id="statAlias">—</span>
+      </div>
+      <div class="status-item">
+        <span class="status-label" id="statLabelIntegrity">INTEGRITY</span>
+        <div class="integrity-pips" id="statIntegrityPips"></div>
+      </div>
+      <div class="status-item">
+        <span class="status-label" id="statLabelLocation">LOCATION</span>
+        <span class="status-value truncate cyan" id="statLocation">—</span>
+      </div>
+      <div class="status-item">
+        <span class="status-label" id="statLabelTime">TIME</span>
+        <span class="status-value" id="statTime">—</span>
+      </div>
+      <div class="status-item actions">
+        <button class="status-btn" onclick="saveGame()" title="Save Game">💾</button>
+        <button class="status-btn" onclick="openSettings()" title="Settings">⚙</button>
+        <button class="status-btn" onclick="showMenu()" title="Menu">☰</button>
+      </div>
+    </div>
+
+    <!-- Main layout -->
+    <div class="game-layout" id="gameLayout">
+      <!-- Chat panel (left) -->
+      <div class="chat-panel" id="chatPanel">
+        <div class="chat-messages" id="chatMessages"></div>
+        <div class="thinking-indicator" id="thinkingIndicator" style="display:none">
+          <div class="thinking-dots">
+            <span></span><span></span><span></span>
+          </div>
+          <span class="thinking-text">PROCESSING NEURAL INPUT</span>
+        </div>
+        <div class="chat-input-container">
+          <div class="input-prefix">▶</div>
+          <input type="text" class="chat-input" id="chatInput" placeholder="What do you do?" autocomplete="off" onkeydown="if(event.key==='Enter')sendMessage()">
+          <button class="send-btn" onclick="sendMessage()">⟩</button>
+        </div>
+      </div>
+
+      <!-- Resize handle -->
+      <div class="resize-handle" id="resizeHandle" title="Drag to resize"></div>
+
+      <!-- Info panels (right) -->
+      <div class="info-panels" id="infoPanels">
+        <div class="panel-tabs">
+          <button class="panel-tab active" data-panel="identity" onclick="switchPanel(this)">ID</button>
+          <button class="panel-tab" data-panel="knowledge" onclick="switchPanel(this)">KNOW</button>
+          <button class="panel-tab" data-panel="traces" onclick="switchPanel(this)">TRACE</button>
+          <button class="panel-tab" data-panel="district" onclick="switchPanel(this)">LOC</button>
+          <button class="panel-tab" data-panel="inventory" onclick="switchPanel(this)">INV</button>
+          <button class="panel-tab" data-panel="network" onclick="switchPanel(this)">NPC</button>
+          <button class="panel-tab" data-panel="world" onclick="switchPanel(this)">WORLD</button>
+          <button class="panel-tab" data-panel="log" onclick="switchPanel(this)">LOG</button>
+          <button class="panel-tab" data-panel="conversation" onclick="switchPanel(this)">CONV</button>
+        </div>
+        <div class="panel-content" id="panelContent">
+          <div class="panel active" id="panel-identity"></div>
+          <div class="panel" id="panel-knowledge"></div>
+          <div class="panel" id="panel-traces"></div>
+          <div class="panel" id="panel-district"></div>
+          <div class="panel" id="panel-inventory"></div>
+          <div class="panel" id="panel-network"></div>
+          <div class="panel" id="panel-world"></div>
+          <div class="panel" id="panel-log"></div>
+          <div class="panel" id="panel-conversation"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== GAME OVER OVERLAY ========== -->
+  <div id="gameOverOverlay" class="overlay" style="display:none">
+    <div class="game-over-container">
+      <h1 class="game-over-title glitch-text" data-text="SIGNAL LOST">SIGNAL LOST</h1>
+      <div class="game-over-ending" id="gameOverEnding"></div>
+      <div class="game-over-narrative" id="gameOverNarrative"></div>
+      <button class="cyber-btn accent" onclick="location.reload()">
+        <span class="cyber-btn-text">RECONNECT</span>
+        <span class="cyber-btn-glitch"></span>
+      </button>
+    </div>
+  </div>
+
+  <!-- ========== CONFIRM MENU DIALOG ========== -->
+  <div id="confirmMenuDialog" class="overlay" style="display:none">
+    <div class="save-dialog">
+      <h3 class="config-title" id="confirmMenuTitle">// RETURN TO MENU?</h3>
+      <p class="confirm-text" id="confirmMenuText">Any unsaved progress will be lost.</p>
+      <div class="form-actions">
+        <button class="cyber-btn accent" onclick="confirmReturnToMenu()">
+          <span class="cyber-btn-text" id="confirmMenuYes">CONFIRM</span>
+        </button>
+        <button class="cyber-btn" onclick="closeConfirmMenu()">
+          <span class="cyber-btn-text" id="confirmMenuNo">CANCEL</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== SAVE DIALOG ========== -->
+  <div id="saveDialog" class="overlay" style="display:none">
+    <div class="save-dialog">
+      <h3 class="config-title">// SAVE SESSION</h3>
+      <div class="form-group">
+        <label class="cyber-label">SAVE NAME</label>
+        <input type="text" class="cyber-input" id="saveName" placeholder="quicksave" value="quicksave">
+      </div>
+      <div class="form-actions">
+        <button class="cyber-btn accent" onclick="confirmSave()">
+          <span class="cyber-btn-text">SAVE</span>
+        </button>
+        <button class="cyber-btn" onclick="closeSaveDialog()">
+          <span class="cyber-btn-text">CANCEL</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== SETTINGS OVERLAY ========== -->
+  <div id="settingsOverlay" class="overlay" style="display:none">
+    <div class="settings-dialog">
+      <h3 class="config-title">// SETTINGS</h3>
+      <div class="config-form">
+        <div class="form-group">
+          <label class="cyber-label">UI LANGUAGE / 界面语言</label>
+          <select class="cyber-input" id="selectUiLanguage" onchange="setLanguage(this.value)">
+            <option value="en">English</option>
+            <option value="zh">中文</option>
+          </select>
+        </div>
+        <h4 class="config-subtitle">// LLM PROVIDER</h4>
+        <div class="form-row">
+          <div class="form-group half">
+            <label class="cyber-label">PROVIDER</label>
+            <select class="cyber-input" id="selectProvider" onchange="onProviderChange()">
+              <option value="openai">OpenAI</option>
+              <option value="anthropic">Anthropic</option>
+              <option value="lmstudio">LM Studio (Local)</option>
+            </select>
+          </div>
+          <div class="form-group half">
+            <label class="cyber-label">MODEL</label>
+            <input type="text" class="cyber-input" id="inputModel" placeholder="gpt-4o" value="gpt-4o">
+          </div>
+        </div>
+        <div class="form-group" id="apiKeyGroup">
+          <label class="cyber-label">API KEY</label>
+          <input type="password" class="cyber-input" id="inputApiKey" placeholder="sk-...">
+        </div>
+        <div class="form-group" id="baseUrlGroup" style="display:none">
+          <label class="cyber-label">BASE URL</label>
+          <input type="text" class="cyber-input" id="inputBaseUrl" placeholder="http://localhost:1234/v1" value="http://localhost:1234/v1">
+        </div>
+        <div class="form-group">
+          <label class="cyber-label">TEMPERATURE</label>
+          <div class="slider-container">
+            <input type="range" class="cyber-slider" id="inputTemp" min="0" max="1" step="0.1" value="0.7">
+            <span class="slider-value" id="tempValue">0.7</span>
+          </div>
+        </div>
+        <div class="form-actions">
+          <button class="cyber-btn accent" onclick="saveSettings()">
+            <span class="cyber-btn-text">SAVE</span>
+          </button>
+          <button class="cyber-btn" onclick="closeSettings()">
+            <span class="cyber-btn-text">CLOSE</span>
+          </button>
+        </div>
+      </div>
+      <div class="settings-status" id="settingsStatus"></div>
+    </div>
+  </div>
+
+  <!-- ========== NOTIFICATION ========== -->
+  <div id="notification" class="notification"></div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

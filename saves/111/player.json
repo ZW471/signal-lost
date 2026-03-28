@@ -1,0 +1,14 @@
+{
+  "name": "洪杰",
+  "alias": "洪老爷",
+  "background": "Netrunner",
+  "integrity": {"current": 3, "max": 3},
+  "credits": 50,
+  "neural_implant": "Active",
+  "current_disguise": null,
+  "turn": 22,
+  "time": "Morning",
+  "status_effects": [
+    {"name": "Signal Sensitivity", "intensity": "faint"}
+  ]
+}

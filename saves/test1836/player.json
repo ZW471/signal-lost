@@ -1,0 +1,17 @@
+{
+  "name": "洪杰",
+  "alias": "洪老爷",
+  "background": "Netrunner",
+  "integrity": 2,
+  "credits": 50,
+  "neural_implant": "Overloaded",
+  "current_disguise": null,
+  "turn": 40,
+  "time": "Night",
+  "status_effects": [
+    "Signal Sensitivity",
+    "Neural Fatigue",
+    "Disoriented",
+    "Resonance Burn"
+  ]
+}

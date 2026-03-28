@@ -1,0 +1,19 @@
+{
+  "title": "Knowledge Database / 知识库",
+  "facts": [],
+  "rumors": [
+    {
+      "id": "RUMOR-001",
+      "description": "The old network didn't just crash — something was in it",
+      "source": "net_memory"
+    },
+    {
+      "id": "RUMOR-002",
+      "description": "A hacker called Ghost can crack anything",
+      "source": "net_memory"
+    }
+  ],
+  "evidence": [],
+  "theories": [],
+  "connections": []
+}
