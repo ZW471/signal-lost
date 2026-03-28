@@ -41,7 +41,9 @@ if os.path.exists(env_path):
                     os.environ[key] = val
 
 # --- Config ---
-SESSION_DIR = os.path.join(_GAME_ROOT, "session")
+SESSIONS_ROOT = os.path.join(_GAME_ROOT, "session")
+HEADLESS_SESSION_NAME = "headless"
+SESSION_DIR = os.path.join(SESSIONS_ROOT, HEADLESS_SESSION_NAME)
 SETTINGS_DIR = os.path.join(_GAME_ROOT, "settings")
 LOG_FILE = os.path.join(_GAME_ROOT, "game_playthrough_log.md")
 

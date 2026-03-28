@@ -29,6 +29,7 @@ from state import (
 )
 from tui.screens import (
     DEFAULT_SESSION_DIR,
+    SAVES_DIR,
     ENV_PATH,
     GAME_ROOT,
     StartScreen,
@@ -81,6 +82,8 @@ class SignalLostApp(App):
         super().__init__(**kwargs)
         self.new_game_config: dict | None = None
         self.load_save_path: str | None = None
+        self.load_save_name: str | None = None
+        self.resume_session_path: str | None = None
 
     def on_mount(self) -> None:
         # Load any .env keys into the process environment
@@ -108,15 +111,17 @@ class SignalLostApp(App):
         llm = create_llm(provider, model, temperature=temperature, **extra)
         set_llm(llm)
 
-        # Prepare session directory based on mode
+        # Determine the specific session subdirectory
         if mode == "new_game":
             cfg = self.new_game_config or {}
+            save_name = cfg.get("save_name", cfg.get("alias", "Unknown"))
+            session_dir = os.path.join(DEFAULT_SESSION_DIR, save_name)
             # Update language in custom.json
             self._update_language_setting(cfg.get("language", "en"))
             # Update difficulty in custom.json
             self._update_difficulty_setting(cfg.get("difficulty", "standard"))
             create_new_session(
-                session_dir=DEFAULT_SESSION_DIR,
+                session_dir=session_dir,
                 name=cfg.get("name", "Unknown"),
                 alias=cfg.get("alias", "Unknown"),
                 background=cfg.get("background", "street_runner"),
@@ -124,12 +129,18 @@ class SignalLostApp(App):
                 language=cfg.get("language", "en"),
             )
         elif mode == "load_game" and self.load_save_path:
-            copy_save_to_session(self.load_save_path, DEFAULT_SESSION_DIR)
-        # mode == "resume": session dir already has files
+            save_name = self.load_save_name or os.path.basename(self.load_save_path)
+            session_dir = os.path.join(DEFAULT_SESSION_DIR, save_name)
+            copy_save_to_session(self.load_save_path, session_dir)
+        elif mode == "resume" and self.resume_session_path:
+            session_dir = self.resume_session_path
+        else:
+            # Fallback — shouldn't normally happen
+            session_dir = DEFAULT_SESSION_DIR
 
         # Compile graph and load state
         app_graph = compile_graph()
-        state = initial_state(DEFAULT_SESSION_DIR)
+        state = initial_state(session_dir)
 
         # Save graph visualization asynchronously
         import asyncio
@@ -147,7 +158,7 @@ class SignalLostApp(App):
 
         # Switch to game screen (replaces entire screen stack)
         self.switch_screen(GameScreen(
-            session_dir=DEFAULT_SESSION_DIR,
+            session_dir=session_dir,
             graph=app_graph,
             state=state,
             mode=mode,

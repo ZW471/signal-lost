@@ -1,0 +1,107 @@
+{
+  "title": "Traces of Truth / 真相痕迹",
+  "total_discovered": "0 / 16",
+  "layers": {
+    "layer_1_surface": {
+      "name": "The Surface / 表层",
+      "progress": "0/3",
+      "traces": {
+        "TRACE-L1-01": {
+          "status": "undiscovered",
+          "description": "[???]"
+        },
+        "TRACE-L1-02": {
+          "status": "undiscovered",
+          "description": "[???]"
+        },
+        "TRACE-L1-03": {
+          "status": "undiscovered",
+          "description": "[???]"
+        }
+      }
+    },
+    "layer_2_conspiracy": {
+      "name": "The Conspiracy / 阴谋",
+      "progress": "0/4",
+      "traces": {
+        "TRACE-L2-01": {
+          "status": "undiscovered",
+          "description": "[???]"
+        },
+        "TRACE-L2-02": {
+          "status": "undiscovered",
+          "description": "[???]"
+        },
+        "TRACE-L2-03": {
+          "status": "undiscovered",
+          "description": "[???]"
+        },
+        "TRACE-L2-04": {
+          "status": "undiscovered",
+          "description": "[???]"
+        }
+      }
+    },
+    "layer_3_severance_truth": {
+      "name": "The Severance Truth / 断离真相",
+      "progress": "0/4",
+      "traces": {
+        "TRACE-L3-01": {
+          "status": "undiscovered",
+          "description": "[???]"
+        },
+        "TRACE-L3-02": {
+          "status": "undiscovered",
+          "description": "[???]"
+        },
+        "TRACE-L3-03": {
+          "status": "undiscovered",
+          "description": "[???]"
+        },
+        "TRACE-L3-04": {
+          "status": "undiscovered",
+          "description": "[???]"
+        }
+      }
+    },
+    "layer_4_mirror": {
+      "name": "The Mirror / 镜像",
+      "progress": "0/3",
+      "traces": {
+        "TRACE-L4-01": {
+          "status": "undiscovered",
+          "description": "[???]"
+        },
+        "TRACE-L4-02": {
+          "status": "undiscovered",
+          "description": "[???]"
+        },
+        "TRACE-L4-03": {
+          "status": "undiscovered",
+          "description": "[???]"
+        }
+      }
+    },
+    "layer_5_full_truth": {
+      "name": "The Full Truth / 完整真相",
+      "progress": "0/2",
+      "traces": {
+        "TRACE-L5-01": {
+          "status": "undiscovered",
+          "description": "[???]"
+        },
+        "TRACE-L5-02": {
+          "status": "undiscovered",
+          "description": "[???]"
+        }
+      }
+    }
+  },
+  "discovered": [
+    {
+      "id": "TRACE-L1-01",
+      "description": "Neo-Kowloon is controlled by NEXUS megacorp",
+      "turn": 1
+    }
+  ]
+}

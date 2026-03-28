@@ -241,7 +241,11 @@ def create_new_session(
     difficulty: str,
     language: str = "en",
 ) -> None:
-    """Create all session files for a new game from templates."""
+    """Create all session files for a new game from templates.
+
+    *session_dir* is the specific session path, e.g. ``…/session/my_save``.
+    Only that subdirectory is (re)created — sibling sessions are untouched.
+    """
     if os.path.exists(session_dir):
         shutil.rmtree(session_dir)
     os.makedirs(session_dir, exist_ok=True)
@@ -393,10 +397,40 @@ def create_new_session(
 
 
 def copy_save_to_session(save_dir: str, session_dir: str) -> None:
-    """Restore a save into the active session directory."""
+    """Restore a save into a named session subdirectory.
+
+    *session_dir* is the target path, e.g. ``…/session/my_save``.
+    Only that subdirectory is replaced — other active sessions are untouched.
+    """
     if os.path.exists(session_dir):
         shutil.rmtree(session_dir)
     shutil.copytree(save_dir, session_dir)
+
+
+def list_active_sessions(sessions_root: str) -> list[dict]:
+    """Return metadata for every active session under *sessions_root*.
+
+    Each entry is a dict with keys: name, player_name, alias, turn, background.
+    """
+    sessions: list[dict] = []
+    if not os.path.isdir(sessions_root):
+        return sessions
+    for entry in sorted(os.listdir(sessions_root)):
+        sess_path = os.path.join(sessions_root, entry)
+        if not os.path.isdir(sess_path):
+            continue
+        player = _read_json(os.path.join(sess_path, "player.json"))
+        if not player:
+            continue
+        sessions.append({
+            "name": entry,
+            "path": sess_path,
+            "player_name": player.get("name", "Unknown"),
+            "alias": player.get("alias", ""),
+            "turn": player.get("turn", "?"),
+            "background": player.get("background", "?"),
+        })
+    return sessions
 
 
 def save_game_to_slot(session_dir: str, save_name: str, saves_dir: str) -> str:

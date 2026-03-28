@@ -51,6 +51,7 @@ from state import (  # noqa: E402
     create_new_session,
     copy_save_to_session,
     initial_state,
+    list_active_sessions,
     load_session,
     save_game_to_slot,
     _read_json,
@@ -97,6 +98,7 @@ app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 _game_graph = None
 _game_state = None
 _game_lock = threading.Lock()
+_active_session_dir: str | None = None  # path to the current session/{name}/ subdir
 
 
 def _create_llm(provider: str, model: str, **kwargs):
@@ -146,13 +148,14 @@ def _filter_hidden(obj):
     return obj
 
 
-def _get_session_data() -> dict:
+def _get_session_data(session_dir: str | None = None) -> dict:
     """Read all session JSON files, filter hidden fields, and return as a dict."""
-    data = load_session(SESSION_DIR)
+    sd = session_dir or _active_session_dir or SESSION_DIR
+    data = load_session(sd)
     # Filter hidden fields (same as TUI's filter_hidden)
     data = _filter_hidden(data)
     # Also read conversation.jsonl
-    conv_path = os.path.join(SESSION_DIR, "conversation.jsonl")
+    conv_path = os.path.join(sd, "conversation.jsonl")
     conversation = []
     if os.path.exists(conv_path):
         with open(conv_path, "r", encoding="utf-8") as f:
@@ -183,9 +186,14 @@ def _list_saves() -> list[dict]:
     return saves
 
 
+def _list_sessions() -> list[dict]:
+    """List active sessions under session/."""
+    return list_active_sessions(SESSION_DIR)
+
+
 def _has_session() -> bool:
-    """Check if a resumable session exists."""
-    return os.path.isfile(os.path.join(SESSION_DIR, "player.json"))
+    """Check if any resumable sessions exist under session/."""
+    return bool(_list_sessions())
 
 
 # ---------------------------------------------------------------------------
@@ -201,6 +209,7 @@ async def index():
 async def status():
     return {
         "has_session": _has_session(),
+        "sessions": _list_sessions(),
         "saves": _list_saves(),
         "settings": _load_settings(),
         "provider": _load_provider_config(),
@@ -209,7 +218,7 @@ async def status():
 
 @app.get("/api/session")
 async def session_data():
-    if not _has_session():
+    if not _active_session_dir:
         return {"error": "No active session"}
     return _get_session_data()
 
@@ -220,7 +229,7 @@ async def session_data():
 
 @app.websocket("/ws")
 async def websocket_endpoint(ws: WebSocket):
-    global _game_graph, _game_state
+    global _game_graph, _game_state, _active_session_dir
 
     await ws.accept()
 
@@ -235,6 +244,7 @@ async def websocket_endpoint(ws: WebSocket):
                 await ws.send_json({
                     "type": "status",
                     "has_session": _has_session(),
+                    "sessions": _list_sessions(),
                     "saves": _list_saves(),
                     "settings": _load_settings(),
                     "provider": _load_provider_config(),
@@ -288,9 +298,15 @@ async def websocket_endpoint(ws: WebSocket):
                         "temperature": temperature,
                     }, f, indent=2)
 
+                # Determine session subdir name
+                import re as _re
+                save_name = config.get("save_name", config.get("alias", "Unknown"))
+                save_name = _re.sub(r"[^\w\-]", "_", save_name)
+                _active_session_dir = os.path.join(SESSION_DIR, save_name)
+
                 # Create session
                 create_new_session(
-                    session_dir=SESSION_DIR,
+                    session_dir=_active_session_dir,
                     name=config.get("name", "Unknown"),
                     alias=config.get("alias", "Unknown"),
                     background=config.get("background", "street_runner"),
@@ -300,7 +316,7 @@ async def websocket_endpoint(ws: WebSocket):
 
                 # Compile graph
                 _game_graph = compile_graph()
-                _game_state = initial_state(SESSION_DIR)
+                _game_state = initial_state(_active_session_dir)
 
                 # Send game started + initial state
                 await ws.send_json({
@@ -312,6 +328,16 @@ async def websocket_endpoint(ws: WebSocket):
                 await _run_turn(ws, mode="resume")
 
             elif action == "resume":
+                # Requires session_name to identify which session to resume
+                session_name = msg.get("session_name", "")
+                if not session_name:
+                    await ws.send_json({"type": "error", "message": "No session_name provided."})
+                    continue
+                sess_path = os.path.join(SESSION_DIR, session_name)
+                if not os.path.isdir(sess_path):
+                    await ws.send_json({"type": "error", "message": f"Session not found: {session_name}"})
+                    continue
+
                 provider_cfg = msg.get("provider", _load_provider_config())
                 provider = provider_cfg.get("provider", "openai")
                 model = provider_cfg.get("model", "gpt-4o")
@@ -335,8 +361,9 @@ async def websocket_endpoint(ws: WebSocket):
                     await ws.send_json({"type": "error", "message": f"Failed to create LLM: {e}"})
                     continue
 
+                _active_session_dir = sess_path
                 _game_graph = compile_graph()
-                _game_state = initial_state(SESSION_DIR)
+                _game_state = initial_state(_active_session_dir)
 
                 await ws.send_json({
                     "type": "game_started",
@@ -375,9 +402,11 @@ async def websocket_endpoint(ws: WebSocket):
                     await ws.send_json({"type": "error", "message": f"Failed to create LLM: {e}"})
                     continue
 
-                copy_save_to_session(save_path, SESSION_DIR)
+                # Load save into session/{save_name}/
+                _active_session_dir = os.path.join(SESSION_DIR, save_name)
+                copy_save_to_session(save_path, _active_session_dir)
                 _game_graph = compile_graph()
-                _game_state = initial_state(SESSION_DIR)
+                _game_state = initial_state(_active_session_dir)
 
                 await ws.send_json({
                     "type": "game_started",
@@ -398,14 +427,17 @@ async def websocket_endpoint(ws: WebSocket):
 
             elif action == "save_game":
                 save_name = msg.get("save_name", "quicksave")
+                if not _active_session_dir:
+                    await ws.send_json({"type": "error", "message": "No active session to save."})
+                    continue
                 try:
-                    path = save_game_to_slot(SESSION_DIR, save_name, SAVES_DIR)
+                    path = save_game_to_slot(_active_session_dir, save_name, SAVES_DIR)
                     await ws.send_json({"type": "saved", "save_name": save_name, "path": path})
                 except Exception as e:
                     await ws.send_json({"type": "error", "message": f"Save failed: {e}"})
 
             elif action == "refresh":
-                if _has_session():
+                if _active_session_dir:
                     await ws.send_json({
                         "type": "session_update",
                         "session": _get_session_data(),

@@ -1,0 +1,18 @@
+{
+  "title": "Player Status / 玩家状态",
+  "name": "王大帅",
+  "alias": "丧彪",
+  "background": "Corporate Exile",
+  "integrity": {
+    "current": 2,
+    "max": 2
+  },
+  "credits": 50,
+  "neural_implant": "Active",
+  "current_disguise": "None",
+  "turn": 1,
+  "time": "晨",
+  "status_effects": [
+    "Signal Sensitivity (faint)"
+  ]
+}

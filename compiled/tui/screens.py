@@ -25,7 +25,7 @@ from rich.text import Text
 
 _COMPILED_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 GAME_ROOT = os.path.abspath(os.path.join(_COMPILED_DIR, ".."))
-DEFAULT_SESSION_DIR = os.path.join(GAME_ROOT, "session")
+DEFAULT_SESSION_DIR = os.path.join(GAME_ROOT, "session")  # root for all active sessions
 SAVES_DIR = os.path.join(GAME_ROOT, "saves")
 SETTINGS_DIR = os.path.join(GAME_ROOT, "settings")
 ENV_PATH = os.path.join(GAME_ROOT, ".env")
@@ -234,14 +234,7 @@ class StartScreen(_ProviderReadyMixin, Screen):
         elif event.button.id == "btn-load":
             self.app.push_screen(LoadGameScreen())
         elif event.button.id == "btn-resume":
-            player_path = os.path.join(DEFAULT_SESSION_DIR, "player.json")
-            if os.path.isfile(player_path):
-                if self._provider_ready():
-                    self._launch_directly("resume")
-                else:
-                    self.app.push_screen(ProviderScreen(mode="resume"))
-            else:
-                self.notify("No active session found. Start a new game or load a save.", severity="error", timeout=4)
+            self.app.push_screen(ResumeSessionScreen())
         elif event.button.id == "btn-settings":
             self.app.push_screen(SettingsScreen())
         elif event.button.id == "btn-quit":
@@ -249,6 +242,128 @@ class StartScreen(_ProviderReadyMixin, Screen):
 
     def action_quit_app(self) -> None:
         self.app.exit()
+
+
+# =============================================================================
+# RESUME SESSION SCREEN — pick an active session to resume
+# =============================================================================
+
+RESUME_CSS = """
+ResumeSessionScreen {
+    align: center middle;
+    background: #0a0a0f;
+}
+
+#resume-container {
+    width: 70;
+    height: auto;
+    max-height: 80%;
+    padding: 2 4;
+    border: heavy #00ff41;
+    background: #0d0d1a;
+}
+
+#resume-title {
+    text-align: center;
+    color: #00ff41;
+    text-style: bold;
+    margin-bottom: 1;
+}
+
+#session-list {
+    height: auto;
+    max-height: 20;
+    margin: 1 0;
+}
+
+#no-sessions {
+    text-align: center;
+    color: #666688;
+    margin: 2 0;
+}
+
+#btn-resume-back {
+    margin-top: 1;
+    width: 100%;
+    background: #1a0000;
+    color: #ff3333;
+}
+
+#btn-delete-session {
+    margin-top: 1;
+    width: 100%;
+    background: #1a0000;
+    color: #ff5555;
+}
+"""
+
+
+class ResumeSessionScreen(_ProviderReadyMixin, Screen):
+    """Lists all active sessions under session/ and lets the player pick one."""
+    DEFAULT_CSS = RESUME_CSS
+
+    BINDINGS = [
+        Binding("escape", "go_back", "Back", show=True),
+    ]
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self._session_dirs: list[str] = []
+
+    def compose(self) -> ComposeResult:
+        sessions: list[tuple[str, str]] = []  # (display_text, session_path)
+
+        if os.path.isdir(DEFAULT_SESSION_DIR):
+            for entry in sorted(os.listdir(DEFAULT_SESSION_DIR)):
+                sess_path = os.path.join(DEFAULT_SESSION_DIR, entry)
+                if not os.path.isdir(sess_path):
+                    continue
+                player = _read_json_safe(os.path.join(sess_path, "player.json"))
+                if not player:
+                    continue
+                world = _read_json_safe(os.path.join(sess_path, "world_state.json"))
+                traces = _read_json_safe(os.path.join(sess_path, "traces.json"))
+
+                alias = player.get("alias", player.get("name", "???"))
+                bg = player.get("background", "?")
+                turn = player.get("turn", "?")
+                integrity = player.get("integrity", "?")
+                int_str = f"{integrity.get('current', '?')}/{integrity.get('max', '?')}" if isinstance(integrity, dict) else str(integrity)
+                alert = world.get("nexus_alert", {})
+                alert_val = alert.get("current", alert) if isinstance(alert, dict) else alert
+                total_traces = traces.get("total_discovered", "?")
+
+                line = f"{entry}  |  {alias} ({bg})  |  Turn {turn}  |  HP {int_str}  |  Alert {alert_val}%  |  Traces {total_traces}"
+                sessions.append((line, sess_path))
+
+        with Center():
+            with Vertical(id="resume-container"):
+                yield Static("RESUME SESSION / 继续游戏", id="resume-title")
+                if sessions:
+                    options = []
+                    for display, path in sessions:
+                        options.append(Option(display, id=path))
+                        self._session_dirs.append(path)
+                    yield OptionList(*options, id="session-list")
+                else:
+                    yield Static("No active sessions found. Start a new game or load a save.", id="no-sessions")
+                yield Button("BACK", id="btn-resume-back")
+
+    def on_option_list_option_selected(self, event: OptionList.OptionSelected) -> None:
+        idx = event.option_index
+        if 0 <= idx < len(self._session_dirs):
+            self.app.resume_session_path = self._session_dirs[idx]
+            if self._provider_ready():
+                self._launch_directly("resume")
+            else:
+                self.app.push_screen(ProviderScreen(mode="resume"))
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "btn-resume-back":
+            self.action_go_back()
+
+    def action_go_back(self) -> None:
+        self.app.pop_screen()
 
 
 # =============================================================================
@@ -598,6 +713,10 @@ class NewGameScreen(_ProviderReadyMixin, Screen):
             with VerticalScroll(id="newgame-container"):
                 yield Static("CHARACTER CREATION / 角色创建", id="newgame-title")
 
+                yield Label("Save Name / 存档名", classes="form-label")
+                yield Static("(used as session folder name)", classes="form-desc")
+                yield Input(placeholder="e.g. my_run_1", id="input-save-name")
+
                 yield Label("Name / 姓名", classes="form-label")
                 yield Input(placeholder="What is your name?", id="input-name")
 
@@ -644,15 +763,29 @@ class NewGameScreen(_ProviderReadyMixin, Screen):
         if event.button.id == "btn-begin":
             name = self.query_one("#input-name", Input).value.strip()
             alias = self.query_one("#input-alias", Input).value.strip()
+            save_name = self.query_one("#input-save-name", Input).value.strip()
             if not name:
                 self.notify("Name cannot be empty.", severity="error", timeout=3)
                 return
             if not alias:
                 alias = name
+            # Sanitize save name — default to alias if empty
+            if not save_name:
+                save_name = alias
+            save_name = re.sub(r"[^\w\-]", "_", save_name)
+            if not save_name:
+                self.notify("Save name cannot be empty.", severity="error", timeout=3)
+                return
+            # Check for collision with existing session
+            target = os.path.join(DEFAULT_SESSION_DIR, save_name)
+            if os.path.exists(target):
+                self.notify(f"Session '{save_name}' already exists. Choose a different name.", severity="error", timeout=4)
+                return
 
             self.app.new_game_config = {
                 "name": name,
                 "alias": alias,
+                "save_name": save_name,
                 "background": self.query_one("#select-background", Select).value,
                 "difficulty": self.query_one("#select-difficulty", Select).value,
                 "language": self.query_one("#select-language", Select).value,
@@ -774,7 +907,10 @@ class LoadGameScreen(_ProviderReadyMixin, Screen):
     def on_option_list_option_selected(self, event: OptionList.OptionSelected) -> None:
         idx = event.option_index
         if 0 <= idx < len(self._save_dirs):
-            self.app.load_save_path = self._save_dirs[idx]
+            save_path = self._save_dirs[idx]
+            save_name = os.path.basename(save_path)
+            self.app.load_save_path = save_path
+            self.app.load_save_name = save_name
             if self._provider_ready():
                 self._launch_directly("load_game")
             else:
