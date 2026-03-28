@@ -600,7 +600,9 @@ def state_writer(state: GameState) -> dict:
                 npcs["npcs"] = npc_list
 
         elif mutation_type == "update_location":
-            location = result.get("data", location)
+            new_loc = result.get("data", {})
+            # Merge into existing location — preserve fields the LLM didn't resend
+            location.update(new_loc)
 
         elif mutation_type == "update_inventory":
             action = result.get("action", "")
