@@ -203,7 +203,12 @@ class StartScreen(_ProviderReadyMixin, Screen):
         Binding("q", "quit_app", "Quit", show=True),
     ]
 
+    def _get_tui_lang(self) -> str:
+        custom = _load_custom_settings()
+        return custom.get("language", {}).get("tui", "en")
+
     def compose(self) -> ComposeResult:
+        zh = self._get_tui_lang() == "zh"
         with Center():
             with Vertical(id="start-container"):
                 yield Static(
@@ -222,11 +227,11 @@ class StartScreen(_ProviderReadyMixin, Screen):
                     id="title-art",
                 )
                 yield Static("信 号 遗 失", id="subtitle")
-                yield Button("NEW GAME", id="btn-new", classes="menu-btn")
-                yield Button("LOAD GAME", id="btn-load", classes="menu-btn")
-                yield Button("RESUME", id="btn-resume", classes="menu-btn")
-                yield Button("SETTINGS", id="btn-settings", classes="menu-btn")
-                yield Button("QUIT", id="btn-quit", classes="menu-btn")
+                yield Button("新游戏" if zh else "NEW GAME", id="btn-new", classes="menu-btn")
+                yield Button("载入存档" if zh else "LOAD GAME", id="btn-load", classes="menu-btn")
+                yield Button("继续游戏" if zh else "RESUME", id="btn-resume", classes="menu-btn")
+                yield Button("设置" if zh else "SETTINGS", id="btn-settings", classes="menu-btn")
+                yield Button("退出" if zh else "QUIT", id="btn-quit", classes="menu-btn")
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "btn-new":

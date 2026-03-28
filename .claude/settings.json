@@ -37,7 +37,8 @@
       "Bash(uv run python -c \":*)",
       "Read(//Users/dricpro/PycharmProjects/agentic_game/Examples/Signal\\\\ Lost/**)",
       "Bash(wc -l compiled/*.py compiled/tui/*.py)",
-      "Bash(wc -l agent/*.md game/*.md)"
+      "Bash(wc -l agent/*.md game/*.md)",
+      "Read(//Users/dricpro/PycharmProjects/agentic_game/Examples/**)"
     ]
   }
 }

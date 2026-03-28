@@ -89,6 +89,7 @@ TRACE_CONDITIONS: list[dict] = [
         "id": "TRACE-L1-01",
         "layer": 1,
         "description": "Neo-Kowloon is controlled by NEXUS megacorp",
+        "description_zh": "新九龙被NEXUS巨型企业所控制",
         "check": lambda k, t, n, p, w: (
             _has_fact_or_rumor_about(k, ["nexus", "控制", "megacorp", "corporation"])
         ),
@@ -97,6 +98,7 @@ TRACE_CONDITIONS: list[dict] = [
         "id": "TRACE-L1-02",
         "layer": 1,
         "description": "You have a pre-Severance neural implant",
+        "description_zh": "你拥有一个断离前的神经植入体",
         "check": lambda k, t, n, p, w: (
             _has_fact_or_rumor_about(k, ["implant", "植入体", "neural", "pre-severance"])
         ),
@@ -105,6 +107,7 @@ TRACE_CONDITIONS: list[dict] = [
         "id": "TRACE-L1-03",
         "layer": 1,
         "description": "The Severance happened 30 years ago and killed billions",
+        "description_zh": "断离发生在三十年前，数十亿人因此丧生",
         "check": lambda k, t, n, p, w: (
             _has_fact_or_rumor_about(k, ["severance", "断离", "30 years", "三十年", "billions"])
         ),
@@ -114,6 +117,7 @@ TRACE_CONDITIONS: list[dict] = [
         "id": "TRACE-L2-01",
         "layer": 2,
         "description": "People who hear the Signal are disappearing",
+        "description_zh": "能听到信号的人正在消失",
         "check": lambda k, t, n, p, w: (
             _npc_trust_at_least(n, "mira", "neutral")
             and _has_fact_or_rumor_about(k, ["disappear", "消失", "missing", "signal"])
@@ -123,6 +127,7 @@ TRACE_CONDITIONS: list[dict] = [
         "id": "TRACE-L2-02",
         "layer": 2,
         "description": "The Listeners exist and protect Signal-sensitive people",
+        "description_zh": "聆听者组织存在，并保护对信号敏感的人",
         "check": lambda k, t, n, p, w: (
             _npc_trust_at_least(n, "mira", "cautious_ally")
             and _has_fact_or_rumor_about(k, ["listener", "聆听者"])
@@ -132,6 +137,7 @@ TRACE_CONDITIONS: list[dict] = [
         "id": "TRACE-L2-03",
         "layer": 2,
         "description": "NEXUS has a secret facility in Sector 7 for 'special acquisitions'",
+        "description_zh": "NEXUS在第七区设有秘密设施，用于'特殊征集'",
         "check": lambda k, t, n, p, w: (
             _npc_trust_at_least(n, "ghost", "neutral")
             and _has_fact_or_rumor_about(k, ["sector 7", "第七区", "facility", "acquisitions"])
@@ -145,6 +151,7 @@ TRACE_CONDITIONS: list[dict] = [
         "id": "TRACE-L2-04",
         "layer": 2,
         "description": "Your implant is unique pre-Severance tech that shouldn't exist",
+        "description_zh": "你的植入体是独一无二的断离前技术，本不应存在",
         "check": lambda k, t, n, p, w: (
             _has_fact_or_rumor_about(k, ["unique", "shouldn't exist", "不应该存在"])
             and (
@@ -159,6 +166,7 @@ TRACE_CONDITIONS: list[dict] = [
         "id": "TRACE-L3-01",
         "layer": 3,
         "description": "The Severance wasn't an accident — it was deliberate",
+        "description_zh": "断离并非意外——而是蓄意为之",
         "check": lambda k, t, n, p, w: (
             _has_evidence(k, ["deliberate", "network termination", "severance evidence"])
             and _npc_trust_at_least(n, "ghost", "cautious_ally")
@@ -168,6 +176,7 @@ TRACE_CONDITIONS: list[dict] = [
         "id": "TRACE-L3-02",
         "layer": 3,
         "description": "Something was alive in the network before the Severance",
+        "description_zh": "断离之前，网络中有某种存在是活着的",
         "check": lambda k, t, n, p, w: (
             _has_evidence(k, ["pre-severance logs", "alive", "network entity"])
             and _npc_trust_at_least(n, "patch", "neutral")
@@ -177,6 +186,7 @@ TRACE_CONDITIONS: list[dict] = [
         "id": "TRACE-L3-03",
         "layer": 3,
         "description": "Fragments of something survive in old implants — 'computational resources'",
+        "description_zh": "某种存在的碎片留存在旧植入体中——被称为'计算资源'",
         "check": lambda k, t, n, p, w: (
             _has_fact_or_rumor_about(k, ["fragment", "碎片", "computational", "survive", "implant"])
             and (
@@ -189,6 +199,7 @@ TRACE_CONDITIONS: list[dict] = [
         "id": "TRACE-L3-04",
         "layer": 3,
         "description": "NEXUS harvests fragments from people — the disappearances are extraction",
+        "description_zh": "NEXUS从人体中收割碎片——那些失踪就是提取行动",
         "check": lambda k, t, n, p, w: (
             _has_evidence(k, ["extraction", "harvesting", "sector 7"])
             or (
@@ -201,6 +212,7 @@ TRACE_CONDITIONS: list[dict] = [
         "id": "TRACE-L4-01",
         "layer": 4,
         "description": "The proto-consciousness grew from human data — our thoughts birthed it",
+        "description_zh": "原意识从人类数据中生长——我们的思想孕育了它",
         "check": lambda k, t, n, p, w: (
             _layer_complete(t, 3)
             and _has_fact_or_rumor_about(k, ["architect", "设计者", "proto-consciousness", "human data"])
@@ -210,6 +222,7 @@ TRACE_CONDITIONS: list[dict] = [
         "id": "TRACE-L4-02",
         "layer": 4,
         "description": "Implants transmitted too — human and machine consciousness co-evolved",
+        "description_zh": "植入体也在传输——人类与机器意识共同进化",
         "check": lambda k, t, n, p, w: (
             _npc_trust_at_least(n, "patch", "trusted")
             and _has_fact_or_rumor_about(k, ["co-evolved", "transmitted", "bilateral", "bridge"])
@@ -219,6 +232,7 @@ TRACE_CONDITIONS: list[dict] = [
         "id": "TRACE-L4-03",
         "layer": 4,
         "description": "The Severance was an act of fear, not defense",
+        "description_zh": "断离是出于恐惧，而非防御",
         "check": lambda k, t, n, p, w: (
             _has_evidence(k, ["severance", "confession", "fear", "lian"])
             and _npc_trust_at_least(n, "lian", "cautious_ally")
@@ -229,6 +243,7 @@ TRACE_CONDITIONS: list[dict] = [
         "id": "TRACE-L5-01",
         "layer": 5,
         "description": "You are the convergence point — the first true bridge",
+        "description_zh": "你是汇聚点——第一座真正的桥梁",
         "check": lambda k, t, n, p, w: (
             _layer_complete(t, 4)
             and _has_fact_or_rumor_about(k, ["convergence", "bridge", "echo", "resonance"])
@@ -239,6 +254,7 @@ TRACE_CONDITIONS: list[dict] = [
         "id": "TRACE-L5-02",
         "layer": 5,
         "description": "The Severance didn't fully kill it — it became part of humanity",
+        "description_zh": "断离并未完全杀死它——它已成为人类的一部分",
         "check": lambda k, t, n, p, w: (
             _trace_discovered(t, "TRACE-L5-01")
             and _has_evidence(k, ["architect data", "architect's"])
@@ -264,11 +280,11 @@ ALERT_INCREASES: dict[str, int] = {
 }
 
 ALERT_THRESHOLDS: list[dict] = [
-    {"threshold": 25, "effect": "Increased patrols in Sector 7 and Chrome Heights"},
-    {"threshold": 50, "effect": "Sector 7 lockdown, Chrome Heights restricted"},
-    {"threshold": 75, "effect": "NEXUS raids Undercroft, Neon Row restricted"},
-    {"threshold": 90, "effect": "Full manhunt, only The Sprawl is safe"},
-    {"threshold": 100, "effect": "Capture — funneled to Order ending or death"},
+    {"threshold": 25, "effect": "Increased patrols in Sector 7 and Chrome Heights", "effect_zh": "第七区和镀金台巡逻增加"},
+    {"threshold": 50, "effect": "Sector 7 lockdown, Chrome Heights restricted", "effect_zh": "第七区封锁，镀金台限制出入"},
+    {"threshold": 75, "effect": "NEXUS raids Undercroft, Neon Row restricted", "effect_zh": "NEXUS突袭底渊，霓虹街限制出入"},
+    {"threshold": 90, "effect": "Full manhunt, only The Sprawl is safe", "effect_zh": "全城搜捕，仅蔓城尚属安全"},
+    {"threshold": 100, "effect": "Capture — funneled to Order ending or death", "effect_zh": "被捕——走向秩序结局或死亡"},
 ]
 
 
@@ -277,10 +293,10 @@ ALERT_THRESHOLDS: list[dict] = [
 # ---------------------------------------------------------------------------
 
 DECAY_THRESHOLDS: list[dict] = [
-    {"threshold": 25, "effect": "Echo manifestations weaker"},
-    {"threshold": 50, "effect": "Signal artifacts lose potency"},
-    {"threshold": 75, "effect": "Good endings much harder"},
-    {"threshold": 100, "effect": "Good endings impossible"},
+    {"threshold": 25, "effect": "Echo manifestations weaker", "effect_zh": "回响显现减弱"},
+    {"threshold": 50, "effect": "Signal artifacts lose potency", "effect_zh": "信号遗物失去效力"},
+    {"threshold": 75, "effect": "Good endings much harder", "effect_zh": "好结局变得极其困难"},
+    {"threshold": 100, "effect": "Good endings impossible", "effect_zh": "好结局已不可能"},
 ]
 
 
@@ -291,7 +307,8 @@ DECAY_THRESHOLDS: list[dict] = [
 ENDINGS: list[dict] = [
     {
         "id": "liberation",
-        "name": "Liberation / 解放",
+        "name": "Liberation",
+        "name_zh": "解放",
         "type": "bad",
         "check": lambda t, w, p, k: (
             w.get("nexus_alert", {}).get("current", 0) > 75
@@ -301,7 +318,8 @@ ENDINGS: list[dict] = [
     },
     {
         "id": "ascension",
-        "name": "Ascension / 升华",
+        "name": "Ascension",
+        "name_zh": "升华",
         "type": "bad",
         "check": lambda t, w, p, k: (
             _count_discovered_traces(t) >= 5
@@ -310,7 +328,8 @@ ENDINGS: list[dict] = [
     },
     {
         "id": "order",
-        "name": "Order / 秩序",
+        "name": "Order",
+        "name_zh": "秩序",
         "type": "bad",
         "check": lambda t, w, p, k: (
             _npc_trust_at_least({"npcs": []}, "orin", "trusted")  # placeholder
@@ -319,7 +338,8 @@ ENDINGS: list[dict] = [
     },
     {
         "id": "purification",
-        "name": "Purification / 净化",
+        "name": "Purification",
+        "name_zh": "净化",
         "type": "bad",
         "check": lambda t, w, p, k: (
             _has_fact_or_rumor_about(k, ["purify", "destroy fragment", "lian alliance"])
@@ -327,7 +347,8 @@ ENDINGS: list[dict] = [
     },
     {
         "id": "silence",
-        "name": "Silence / 沉默",
+        "name": "Silence",
+        "name_zh": "沉默",
         "type": "neutral",
         "check": lambda t, w, p, k: (
             p.get("turn", 0) >= 100
@@ -335,7 +356,8 @@ ENDINGS: list[dict] = [
     },
     {
         "id": "exile",
-        "name": "Exile / 流放",
+        "name": "Exile",
+        "name_zh": "流放",
         "type": "neutral",
         "check": lambda t, w, p, k: (
             _has_fact_or_rumor_about(k, ["leave neo-kowloon", "exile"])
@@ -343,7 +365,8 @@ ENDINGS: list[dict] = [
     },
     {
         "id": "symbiosis",
-        "name": "Symbiosis / 共生",
+        "name": "Symbiosis",
+        "name_zh": "共生",
         "type": "good",
         "check": lambda t, w, p, k: (
             _count_discovered_traces(t) >= 7
@@ -353,7 +376,8 @@ ENDINGS: list[dict] = [
     },
     {
         "id": "the_bridge",
-        "name": "The Bridge / 桥",
+        "name": "The Bridge",
+        "name_zh": "桥",
         "type": "good",
         "check": lambda t, w, p, k: (
             _count_discovered_traces(t) >= 16
@@ -369,7 +393,20 @@ ENDINGS: list[dict] = [
 # ---------------------------------------------------------------------------
 
 TIME_PERIODS = ["Morning", "Afternoon", "Night"]
+TIME_PERIODS_ZH = ["晨", "午", "夜"]
 TURNS_PER_PERIOD = 3
+
+
+def get_localized(data: dict, key: str, lang: str):
+    """Pick the language-appropriate variant of a field.
+
+    Looks for ``key_zh`` when *lang* is ``"zh"``, falls back to *key*.
+    """
+    if lang == "zh":
+        zh_key = f"{key}_zh"
+        if zh_key in data:
+            return data[zh_key]
+    return data[key]
 
 
 # ---------------------------------------------------------------------------

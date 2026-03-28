@@ -16,7 +16,7 @@ import json
 # Compiled from: agent/system.md + agent/player.md + agent/game.md
 # ---------------------------------------------------------------------------
 
-SYSTEM_PROMPT = """You are the game engine for **Signal Lost (信号遗失)**, a cyberpunk knowledge-roguelike set in Neo-Kowloon (新九龙).
+SYSTEM_PROMPT = """You are the game engine for **Signal Lost (信号遗失)**, an agentic game set in Neo-Kowloon (新九龙).
 
 ## Your Role
 You narrate the game world, interpret player actions, resolve outcomes, and advance the story. You are NOT responsible for:
@@ -26,7 +26,7 @@ You narrate the game world, interpret player actions, resolve outcomes, and adva
 These mechanical steps happen after your response. Focus on narration and calling the right tools.
 
 ## Language
-Respond in {language}. All session data should use bilingual labels where appropriate (English / 中文).
+{language_directive}
 
 ## Player Actions
 The player interacts through natural language. Interpret their intent — they don't need commands.
@@ -297,14 +297,29 @@ def extract_deepest_layer(state: dict) -> int:
 # Static prompt (behavioral rules + world lore — only changes with layer depth)
 # ---------------------------------------------------------------------------
 
+_LANGUAGE_DIRECTIVES = {
+    "en": (
+        "Respond in English. All session data values (status effects, log entries, "
+        "event descriptions, NPC dialogue, item names) must be in English. "
+        "Game-world proper nouns (NEXUS, Signal, Echo, etc.) stay as-is."
+    ),
+    "zh": (
+        "用简体中文回答。所有会话数据值（状态效果、日志条目、事件描述、NPC对话、物品名称）"
+        "必须使用简体中文。游戏世界专有名词（NEXUS、Signal、Echo等）可保留英文。"
+        "绝对不要使用'英文 / 中文'的双语斜杠格式——所有内容必须是纯中文。"
+    ),
+}
+
+
 def build_static_prompt(language: str, deepest_layer: int) -> str:
     """Build the static behavioral system prompt.
 
     This changes only when the language setting or the player's deepest layer
     changes (new world-lore sections unlock). Keep this out of the per-turn rebuild.
     """
+    directive = _LANGUAGE_DIRECTIVES.get(language, _LANGUAGE_DIRECTIVES["en"])
     return "\n\n".join([
-        SYSTEM_PROMPT.format(language=language),
+        SYSTEM_PROMPT.format(language_directive=directive),
         build_background_prompt(deepest_layer),
     ])
 

@@ -233,14 +233,18 @@ class ChatPanel(Vertical):
         self._streaming: StreamingMessage | None = None
 
     def compose(self) -> ComposeResult:
+        # Determine TUI language for initial message
+        from tui.screens import _load_custom_settings
+        _custom = _load_custom_settings()
+        _zh = _custom.get("language", {}).get("tui", "en") == "zh"
         with VerticalScroll(id="chat-messages"):
             yield ChatMessage(
                 "system",
-                "Signal Lost \u2014 Compiled Engine. Type your actions below.",
+                "信号遗失 — 请输入你的行动。" if _zh else "Signal Lost — Type your actions below.",
                 classes="msg-system",
             )
         yield Input(
-            placeholder="What do you do?",
+            placeholder="你要做什么？" if _zh else "What do you do?",
             id="chat-input",
         )
 

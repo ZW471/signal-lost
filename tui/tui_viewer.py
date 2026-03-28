@@ -2,7 +2,7 @@
 """
 Signal Lost / 信号遗失 — TUI Viewer
 ======================================
-A Textual-based terminal UI for the cyberpunk knowledge-roguelike "Signal Lost".
+A Textual-based terminal UI for the agentic game "Signal Lost".
 Neon hacker terminal aesthetic with bilingual (EN/ZH) support.
 
 Usage:

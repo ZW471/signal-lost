@@ -33,10 +33,12 @@ const TAG_COLORS = {
 
 const TIME_ICONS = {
   morning: '\u{1F305}', afternoon: '\u2600\uFE0F', evening: '\u{1F307}', night: '\u{1F319}',
+  '晨': '\u{1F305}', '午': '\u2600\uFE0F', '夕': '\u{1F307}', '夜': '\u{1F319}',
 };
 
 const IMPLANT_COLORS = {
   active: 'green', overloaded: 'red', resonating: 'magenta', damaged: 'yellow',
+  '激活': 'green', '过载': 'red', '共鸣': 'magenta', '损坏': 'yellow',
 };
 
 // ================================================================
@@ -92,6 +94,49 @@ const LABELS = {
     chat_placeholder: 'What do you do?', processing: 'PROCESSING NEURAL INPUT',
     // Danger
     safe: 'Safe', low: 'Low', moderate: 'Moderate', high: 'High', extreme: 'Extreme',
+    // Menu & UI
+    game_title: 'SIGNAL LOST',
+    menu_new_game: 'NEW GAME', menu_resume: 'RESUME',
+    menu_load_game: 'LOAD GAME', menu_settings: 'SETTINGS',
+    menu_footer: 'NEXUS MONITORING ACTIVE',
+    // New game screen
+    config_title: '// IDENTITY CONFIGURATION',
+    label_designation: 'DESIGNATION', label_alias: 'ALIAS', label_background: 'BACKGROUND',
+    label_difficulty: 'DIFFICULTY', label_language: 'LANGUAGE',
+    placeholder_name: 'Enter name...', placeholder_alias: 'Enter alias...',
+    bg_street_runner: 'Street Runner', bg_corporate_exile: 'Corporate Exile', bg_netrunner: 'Netrunner',
+    diff_paranoid: 'Easy', diff_cautious: 'Medium',
+    diff_standard: 'Hard', diff_reckless: 'Very Hard',
+    diff_paranoid_desc: 'More forgiving, extra integrity',
+    diff_cautious_desc: 'Balanced experience',
+    diff_standard_desc: 'The intended challenge',
+    diff_reckless_desc: 'One mistake can be fatal',
+    btn_initialize: 'INITIALIZE', btn_back: 'BACK',
+    // Load game screen
+    load_title: '// LOAD SAVED SESSION',
+    no_saves: 'No saved games found.',
+    // Save dialog
+    save_title: '// SAVE SESSION', label_save_name: 'SAVE NAME',
+    btn_save: 'SAVE', btn_cancel: 'CANCEL',
+    // Confirm menu dialog
+    confirm_menu_title: '// RETURN TO MENU?',
+    confirm_menu_text: 'Any unsaved progress will be lost.',
+    btn_confirm: 'CONFIRM',
+    // Settings
+    settings_title: '// SETTINGS', label_ui_language: 'UI LANGUAGE',
+    settings_provider_title: '// LLM PROVIDER',
+    label_provider: 'PROVIDER', label_model: 'MODEL',
+    label_api_key: 'API KEY', label_base_url: 'BASE URL', label_temperature: 'TEMPERATURE',
+    btn_close: 'CLOSE',
+    settings_saved: 'Settings saved', saving: 'Saving...', saved: 'Saved',
+    // Chat prefixes
+    chat_player: '\u25B6 PLAYER', chat_agent: '\u25C0 SIGNAL LOST', chat_system: '\u25CF SYSTEM',
+    // Game over
+    game_over_reconnect: 'RECONNECT', game_over_fallback: '// CONNECTION TERMINATED',
+    // Connection
+    connection_lost: 'Connection lost. Reconnecting...',
+    // Boot
+    boot_sub: '// NEURAL INTERFACE v3.7.1',
   },
   zh: {
     tab_identity: '身份', tab_knowledge: '知识', tab_traces: '痕迹',
@@ -126,6 +171,49 @@ const LABELS = {
     location: '位置',
     chat_placeholder: '你想做什么？', processing: '正在处理神经输入',
     safe: '安全', low: '低', moderate: '中', high: '高', extreme: '极端',
+    // Menu & UI
+    game_title: '信号遗失',
+    menu_new_game: '新游戏', menu_resume: '继续',
+    menu_load_game: '载入存档', menu_settings: '设置',
+    menu_footer: 'NEXUS监控已激活',
+    // New game screen
+    config_title: '// 身份配置',
+    label_designation: '姓名', label_alias: '化名', label_background: '背景',
+    label_difficulty: '难度', label_language: '语言',
+    placeholder_name: '输入姓名...', placeholder_alias: '输入化名...',
+    bg_street_runner: '街头行者', bg_corporate_exile: '企业流亡者', bg_netrunner: '网行者',
+    diff_paranoid: '简单', diff_cautious: '中等',
+    diff_standard: '困难', diff_reckless: '极难',
+    diff_paranoid_desc: '更宽容，额外完整性',
+    diff_cautious_desc: '均衡体验',
+    diff_standard_desc: '预期的挑战',
+    diff_reckless_desc: '一步失误即可致命',
+    btn_initialize: '初始化', btn_back: '返回',
+    // Load game screen
+    load_title: '// 载入存档',
+    no_saves: '未找到存档。',
+    // Save dialog
+    save_title: '// 保存游戏', label_save_name: '存档名称',
+    btn_save: '保存', btn_cancel: '取消',
+    // Confirm menu dialog
+    confirm_menu_title: '// 返回主菜单？',
+    confirm_menu_text: '未保存的进度将会丢失。',
+    btn_confirm: '确认',
+    // Settings
+    settings_title: '// 设置', label_ui_language: '界面语言',
+    settings_provider_title: '// 语言模型',
+    label_provider: '提供商', label_model: '模型',
+    label_api_key: 'API密钥', label_base_url: '地址', label_temperature: '温度',
+    btn_close: '关闭',
+    settings_saved: '设置已保存', saving: '保存中...', saved: '已保存',
+    // Chat prefixes
+    chat_player: '\u25B6 玩家', chat_agent: '\u25C0 信号遗失', chat_system: '\u25CF 系统',
+    // Game over
+    game_over_reconnect: '重新连接', game_over_fallback: '// 连接已终止',
+    // Connection
+    connection_lost: '连接已断开，正在重连...',
+    // Boot
+    boot_sub: '// 神经接口 v3.7.1',
   },
 };
 
@@ -172,6 +260,12 @@ function L(key) {
   return (LABELS[currentLang] && LABELS[currentLang][key]) || LABELS.en[key] || key;
 }
 
+const DIRECTION_ZH = {
+  north: '北', south: '南', east: '东', west: '西',
+  northeast: '东北', northwest: '西北', southeast: '东南', southwest: '西南',
+  up: '上', down: '下',
+};
+
 /** Translate a data-level value. category is a key into DATA_ZH. */
 function localizeData(category, value) {
   if (!value) return '';
@@ -190,14 +284,167 @@ function setLanguage(lang) {
   tabs.forEach((tab, i) => {
     if (tabKeys[i]) tab.textContent = L('tab_' + tabKeys[i]);
   });
-  // Update chat placeholder
+  // Chat
   const chatInput = document.getElementById('chatInput');
   if (chatInput) chatInput.placeholder = L('chat_placeholder');
-  // Update thinking text
   const thinkingText = document.querySelector('.thinking-text');
   if (thinkingText) thinkingText.textContent = L('processing');
+
+  // Game title (boot logo, menu h1, game over h1)
+  const title = L('game_title');
+  const bootLogo = document.querySelector('.logo-glitch');
+  if (bootLogo) { bootLogo.textContent = title; bootLogo.dataset.text = title; }
+  const menuTitle = document.querySelector('#menuScreen .glitch-text');
+  if (menuTitle) { menuTitle.textContent = title; menuTitle.dataset.text = title; }
+  const gameOverTitle = document.querySelector('.game-over-title');
+  if (gameOverTitle) { gameOverTitle.textContent = title; gameOverTitle.dataset.text = title; }
+  document.title = title;
+
+  // Boot subtitle
+  const bootSub = document.querySelector('.logo-sub');
+  if (bootSub) bootSub.textContent = L('boot_sub');
+
+  // Menu screen
+  setText('btnNewGame', L('menu_new_game'), '.cyber-btn-text');
+  setText('btnResume', L('menu_resume'), '.cyber-btn-text');
+  setText('btnLoadGame', L('menu_load_game'), '.cyber-btn-text');
+  setText('btnSettings', L('menu_settings'), '.cyber-btn-text');
+  const menuFooter = document.querySelector('.menu-footer');
+  if (menuFooter) menuFooter.innerHTML = '<span class="blink">_</span> ' + L('menu_footer');
+
+  // New game screen
+  const configTitle = document.querySelector('#newGameScreen .config-title');
+  if (configTitle) configTitle.textContent = L('config_title');
+  // Labels
+  _setLabelsInForm('#newGameScreen', [
+    ['DESIGNATION', 'label_designation'], ['ALIAS', 'label_alias'],
+    ['BACKGROUND', 'label_background'], ['DIFFICULTY', 'label_difficulty'],
+    ['LANGUAGE', 'label_language'],
+  ]);
+  // Default values + placeholders for new game form
+  const inputName = document.getElementById('inputName');
+  if (inputName) {
+    inputName.placeholder = L('placeholder_name');
+    // Update default value if user hasn't customized it
+    const defaults = { en: 'Kael', zh: '凯尔' };
+    const oldDefaults = Object.values(defaults);
+    if (!inputName.value || oldDefaults.includes(inputName.value)) {
+      inputName.value = defaults[lang] || defaults.en;
+    }
+  }
+  const inputAlias = document.getElementById('inputAlias');
+  if (inputAlias) {
+    inputAlias.placeholder = L('placeholder_alias');
+    const defaults = { en: 'Ghost', zh: '幽灵' };
+    const oldDefaults = Object.values(defaults);
+    if (!inputAlias.value || oldDefaults.includes(inputAlias.value)) {
+      inputAlias.value = defaults[lang] || defaults.en;
+    }
+  }
+  // Sync session language selector with UI language
+  const selectLang = document.getElementById('selectLanguage');
+  if (selectLang) selectLang.value = lang;
+  // Background select buttons
+  document.querySelectorAll('.cyber-select').forEach(btn => {
+    const bg = btn.dataset.bg;
+    const nameEl = btn.querySelector('.select-name');
+    const descEl = btn.querySelector('.select-desc');
+    if (bg && nameEl && descEl) {
+      if (lang === 'zh') {
+        nameEl.textContent = L('bg_' + bg);
+        descEl.textContent = '';
+      } else {
+        const bgNames = { street_runner: 'Street Runner', corporate_exile: 'Corporate Exile', netrunner: 'Netrunner' };
+        const bgZh = { street_runner: '街头行者', corporate_exile: '企业流亡者', netrunner: '网行者' };
+        nameEl.textContent = bgNames[bg] || bg;
+        descEl.textContent = bgZh[bg] || '';
+      }
+    }
+  });
+  // Difficulty options
+  const diffSelect = document.getElementById('selectDifficulty');
+  if (diffSelect) {
+    const diffs = ['paranoid', 'cautious', 'standard', 'reckless'];
+    Array.from(diffSelect.options).forEach((opt, i) => {
+      if (diffs[i]) opt.textContent = L('diff_' + diffs[i]) + ' — ' + L('diff_' + diffs[i] + '_desc');
+    });
+  }
+  // Initialize / Back buttons
+  _setBtnText('#newGameScreen', 0, L('btn_initialize'));
+  _setBtnText('#newGameScreen', 1, L('btn_back'));
+
+  // Load game screen
+  const loadTitle = document.querySelector('#loadGameScreen .config-title');
+  if (loadTitle) loadTitle.textContent = L('load_title');
+  _setBtnText('#loadGameScreen', 0, L('btn_back'));
+
+  // Save dialog
+  const saveTitle = document.querySelector('#saveDialog .config-title');
+  if (saveTitle) saveTitle.textContent = L('save_title');
+  const saveLabel = document.querySelector('#saveDialog .cyber-label');
+  if (saveLabel) saveLabel.textContent = L('label_save_name');
+  const saveBtns = document.querySelectorAll('#saveDialog .cyber-btn-text');
+  if (saveBtns[0]) saveBtns[0].textContent = L('btn_save');
+  if (saveBtns[1]) saveBtns[1].textContent = L('btn_cancel');
+
+  // Confirm menu dialog
+  document.getElementById('confirmMenuTitle').textContent = L('confirm_menu_title');
+  document.getElementById('confirmMenuText').textContent = L('confirm_menu_text');
+  document.getElementById('confirmMenuYes').textContent = L('btn_confirm');
+  document.getElementById('confirmMenuNo').textContent = L('btn_cancel');
+
+  // Settings overlay
+  const settingsTitle = document.querySelector('#settingsOverlay .config-title');
+  if (settingsTitle) settingsTitle.textContent = L('settings_title');
+  _setLabelsInOverlay('#settingsOverlay', [
+    [0, 'label_ui_language'], [2, 'label_provider'], [3, 'label_model'],
+    [4, 'label_api_key'], [5, 'label_base_url'], [6, 'label_temperature'],
+  ]);
+  const providerTitle = document.querySelector('#settingsOverlay .config-subtitle');
+  if (providerTitle) providerTitle.textContent = L('settings_provider_title');
+  const settingsBtns = document.querySelectorAll('#settingsOverlay .cyber-btn-text');
+  if (settingsBtns[0]) settingsBtns[0].textContent = L('btn_save');
+  if (settingsBtns[1]) settingsBtns[1].textContent = L('btn_close');
+
+  // Game over
+  const reconnectBtn = document.querySelector('#gameOverOverlay .cyber-btn-text');
+  if (reconnectBtn) reconnectBtn.textContent = L('game_over_reconnect');
+
+  // Status bar button titles
+  const statusBtns = document.querySelectorAll('.status-btn');
+  const btnTitles = lang === 'zh' ? ['保存', '设置', '菜单'] : ['Save Game', 'Settings', 'Menu'];
+  statusBtns.forEach((btn, i) => { if (btnTitles[i]) btn.title = btnTitles[i]; });
+
   // Re-render all panels if we have cached session
   if (cachedSession) updateAllPanels(cachedSession);
+}
+
+/** Helper: set text inside a button's .cyber-btn-text by parent+index */
+function _setBtnText(containerSel, idx, text) {
+  const btns = document.querySelectorAll(containerSel + ' .form-actions .cyber-btn-text');
+  if (btns[idx]) btns[idx].textContent = text;
+}
+
+/** Helper: set cyber-label text by index within a container */
+function _setLabelsInForm(containerSel, pairs) {
+  const labels = document.querySelectorAll(containerSel + ' .cyber-label');
+  for (const [_origText, lkey] of pairs) {
+    for (const lbl of labels) {
+      // Match by the original English text or just set all matching ones
+      if (lbl.textContent.trim().toUpperCase() === _origText || lbl.dataset.lkey === lkey) {
+        lbl.textContent = L(lkey);
+        lbl.dataset.lkey = lkey; // mark for future updates
+      }
+    }
+  }
+}
+
+/** Helper: set labels by index in settings overlay */
+function _setLabelsInOverlay(containerSel, indexPairs) {
+  const labels = document.querySelectorAll(containerSel + ' .cyber-label');
+  for (const [idx, lkey] of indexPairs) {
+    if (labels[idx]) labels[idx].textContent = L(lkey);
+  }
 }
 
 let cachedSession = null; // Store last session for re-render on language change
@@ -321,28 +568,45 @@ function switchScreen(id) {
 // BOOT SEQUENCE
 // ================================================================
 
-const bootMessages = [
-  '[SYS] Initializing neural interface...',
-  '[SYS] Loading kernel modules: mem_cortex, sig_proc, net_bridge',
-  '[NET] Scanning local frequencies... 3 signals detected',
-  '[SEC] NEXUS monitoring layer: ACTIVE',
-  '[MEM] Memory fragments: 0 recovered',
-  '[SYS] Checking implant firmware: v3.7.1 — NOMINAL',
-  '[NET] Connecting to mesh network... ESTABLISHED',
-  '[SIG] Signal trace protocol initialized',
-  '[SYS] Loading world state from last checkpoint...',
-  '[SEC] Encryption layer: AES-4096 QUANTUM-RESISTANT',
-  '[SYS] Neural bridge calibration: 98.7%',
-  '[OK ] System ready. Awaiting operator input.',
-];
+const BOOT_MESSAGES = {
+  en: [
+    '[SYS] Initializing neural interface...',
+    '[SYS] Loading kernel modules: mem_cortex, sig_proc, net_bridge',
+    '[NET] Scanning local frequencies... 3 signals detected',
+    '[SEC] NEXUS monitoring layer: ACTIVE',
+    '[MEM] Memory fragments: 0 recovered',
+    '[SYS] Checking implant firmware: v3.7.1 — NOMINAL',
+    '[NET] Connecting to mesh network... ESTABLISHED',
+    '[SIG] Signal trace protocol initialized',
+    '[SYS] Loading world state from last checkpoint...',
+    '[SEC] Encryption layer: AES-4096 QUANTUM-RESISTANT',
+    '[SYS] Neural bridge calibration: 98.7%',
+    '[OK ] System ready. Awaiting operator input.',
+  ],
+  zh: [
+    '[系统] 正在初始化神经接口...',
+    '[系统] 加载内核模块：mem_cortex, sig_proc, net_bridge',
+    '[网络] 扫描本地频率... 检测到3个信号',
+    '[安全] NEXUS监控层：已激活',
+    '[记忆] 记忆碎片：已恢复0个',
+    '[系统] 检查植入体固件：v3.7.1 — 正常',
+    '[网络] 连接网格网络... 已建立',
+    '[信号] 信号追踪协议已初始化',
+    '[系统] 从上次检查点加载世界状态...',
+    '[安全] 加密层：AES-4096 量子抗性',
+    '[系统] 神经桥校准：98.7%',
+    '[完成] 系统就绪，等待操作员输入。',
+  ],
+};
 
 async function runBootSequence() {
   const log = document.getElementById('bootLog'), bar = document.getElementById('bootProgressBar');
-  for (let i = 0; i < bootMessages.length; i++) {
+  const msgs = BOOT_MESSAGES[currentLang] || BOOT_MESSAGES.en;
+  for (let i = 0; i < msgs.length; i++) {
     const line = document.createElement('div');
-    line.className = 'line'; line.textContent = bootMessages[i];
+    line.className = 'line'; line.textContent = msgs[i];
     log.appendChild(line); log.scrollTop = log.scrollHeight;
-    bar.style.width = ((i + 1) / bootMessages.length * 100) + '%';
+    bar.style.width = ((i + 1) / msgs.length * 100) + '%';
     playBeep(600 + i * 50, 0.03, 0.02);
     await sleep(200 + Math.random() * 300);
   }
@@ -371,7 +635,7 @@ function connectWebSocket() {
 
 function sendWS(data) {
   if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(data));
-  else notify('Connection lost. Reconnecting...', true);
+  else notify(L('connection_lost'), true);
 }
 
 // ================================================================
@@ -435,14 +699,14 @@ function handleServerMessage(msg) {
       break;
 
     case 'saved':
-      notify(`Saved: ${msg.save_name}`);
+      notify(`${L('saved')}: ${msg.save_name}`);
       closeSaveDialog();
       break;
 
     case 'provider_saved':
-      notify(currentLang === 'zh' ? '设置已保存' : 'Settings saved');
+      notify(L('settings_saved'));
       if (msg.provider) prefillProviderSettings(msg.provider);
-      document.getElementById('settingsStatus').textContent = currentLang === 'zh' ? '已保存' : 'Saved';
+      document.getElementById('settingsStatus').textContent = L('saved');
       setTimeout(() => { document.getElementById('settingsStatus').textContent = ''; }, 2000);
       break;
 
@@ -483,7 +747,7 @@ function saveSettings() {
   const lang = document.getElementById('selectUiLanguage').value;
   sendWS({ action: 'save_provider', provider: getProviderConfig(), language: lang });
   setLanguage(lang);
-  document.getElementById('settingsStatus').textContent = currentLang === 'zh' ? '保存中...' : 'Saving...';
+  document.getElementById('settingsStatus').textContent = L('saving');
 }
 
 function onProviderChange() {
@@ -520,10 +784,10 @@ function showMenu() {
 
 function requestReturnToMenu() {
   const d = document.getElementById('confirmMenuDialog');
-  document.getElementById('confirmMenuTitle').textContent = currentLang === 'zh' ? '// 返回主菜单？' : '// RETURN TO MENU?';
-  document.getElementById('confirmMenuText').textContent = currentLang === 'zh' ? '未保存的进度将会丢失。' : 'Any unsaved progress will be lost.';
-  document.getElementById('confirmMenuYes').textContent = currentLang === 'zh' ? '确认' : 'CONFIRM';
-  document.getElementById('confirmMenuNo').textContent = currentLang === 'zh' ? '取消' : 'CANCEL';
+  document.getElementById('confirmMenuTitle').textContent = L('confirm_menu_title');
+  document.getElementById('confirmMenuText').textContent = L('confirm_menu_text');
+  document.getElementById('confirmMenuYes').textContent = L('btn_confirm');
+  document.getElementById('confirmMenuNo').textContent = L('btn_cancel');
   d.style.display = 'flex';
   playBeep(600, 0.04);
 }
@@ -542,13 +806,14 @@ function showLoadGame() {
   const list = document.getElementById('savesList');
   list.innerHTML = '';
   if (cachedSaves.length === 0) {
-    list.innerHTML = '<div class="panel-empty">No saved games found.</div>';
+    list.innerHTML = `<div class="panel-empty">${L('no_saves')}</div>`;
   } else {
     cachedSaves.forEach(save => {
       const el = document.createElement('div');
       el.className = 'save-entry';
+      const turnLabel = L('turn');
       el.innerHTML = `<div><div class="save-name">${esc(save.name)}</div>
-        <div class="save-info">${esc(save.player_name)} — Turn ${save.turn}</div></div>
+        <div class="save-info">${esc(save.player_name)} — ${turnLabel} ${save.turn}</div></div>
         <div style="color:var(--cyan)">⟩</div>`;
       el.onclick = () => loadGame(save.name);
       list.appendChild(el);
@@ -595,11 +860,15 @@ function loadGame(saveName) {
 
 function clearChat() { document.getElementById('chatMessages').innerHTML = ''; }
 
+function _chatPrefixes() {
+  return { player: L('chat_player'), agent: L('chat_agent'), system: L('chat_system') };
+}
+
 function addChatMessage(text, role = 'agent') {
   const container = document.getElementById('chatMessages');
   const msg = document.createElement('div');
   msg.className = `chat-msg ${role}`;
-  const prefixes = { player: '\u25B6 PLAYER', agent: '\u25C0 SIGNAL LOST', system: '\u25CF SYSTEM' };
+  const prefixes = _chatPrefixes();
   msg.innerHTML = `<div class="msg-prefix">${prefixes[role] || role.toUpperCase()}</div>
     <div class="msg-content">${esc(text)}</div>`;
   container.appendChild(msg);
@@ -612,7 +881,7 @@ function addTypingMessage(text, role = 'agent') {
   const container = document.getElementById('chatMessages');
   const msg = document.createElement('div');
   msg.className = `chat-msg ${role}`;
-  const prefixes = { player: '\u25B6 PLAYER', agent: '\u25C0 SIGNAL LOST', system: '\u25CF SYSTEM' };
+  const prefixes = _chatPrefixes();
   const contentEl = document.createElement('div');
   contentEl.className = 'msg-content typing';
   msg.innerHTML = `<div class="msg-prefix">${prefixes[role] || role.toUpperCase()}</div>`;
@@ -668,7 +937,7 @@ function closeSaveDialog() { document.getElementById('saveDialog').style.display
 
 function showGameOver(ending, narrative) {
   triggerGlitch(); triggerGlitch();
-  document.getElementById('gameOverEnding').textContent = ending ? `// ${ending.toUpperCase()}` : '// CONNECTION TERMINATED';
+  document.getElementById('gameOverEnding').textContent = ending ? `// ${ending.toUpperCase()}` : L('game_over_fallback');
   document.getElementById('gameOverNarrative').textContent = narrative || '';
   document.getElementById('gameOverOverlay').style.display = 'flex';
   playBeep(200, 0.3, 0.05);
@@ -798,7 +1067,7 @@ function updateIdentityPanel(player) {
   const timeDisplay = localizeData('time', p.time);
   const bgDisplay = localizeData('background', p.background);
   const disguiseVal = p.current_disguise || L('none');
-  const disguiseIsNone = !p.current_disguise || p.current_disguise === 'None';
+  const disguiseIsNone = !p.current_disguise || p.current_disguise === 'None' || p.current_disguise === '无';
 
   let html = `
     <div class="panel-section">
@@ -892,7 +1161,7 @@ function updateTracesPanel(traces) {
       html += `<div class="trace-item discovered">
         <span class="dim" style="font-size:11px">${esc(trace.id)}</span>
         ${esc(trace.description)}
-        ${trace.turn ? `<span class="dim"> (Turn ${trace.turn})</span>` : ''}
+        ${trace.turn ? `<span class="dim"> (${L('turn')} ${trace.turn})</span>` : ''}
       </div>`;
     }
     html += `</div>`;
@@ -914,7 +1183,7 @@ function updateDistrictPanel(location) {
 
   // NEXUS patrol color
   const patrolStr = (l.nexus_patrol || 'None').toLowerCase();
-  const patrolColor = patrolStr === 'none' ? 'green' : (patrolStr.includes('light') ? 'yellow' : 'red');
+  const patrolColor = (patrolStr === 'none' || patrolStr === '无') ? 'green' : (patrolStr.includes('light') || patrolStr.includes('轻') ? 'yellow' : 'red');
 
   const dangerDisplay = localizeData('danger', l.danger_level);
 
@@ -936,7 +1205,8 @@ function updateDistrictPanel(location) {
   if (l.exits) {
     html += `<div class="panel-section"><div class="panel-section-title">${L('exits')}</div>`;
     for (const [dir, desc] of Object.entries(l.exits)) {
-      html += `<div class="panel-list-item">\u25B8 <span class="cyan" style="text-transform:uppercase">${esc(dir)}</span> — ${esc(desc)}</div>`;
+      const dirDisplay = currentLang === 'zh' ? (DIRECTION_ZH[dir.toLowerCase()] || dir) : dir;
+      html += `<div class="panel-list-item">\u25B8 <span class="cyan" style="text-transform:uppercase">${esc(dirDisplay)}</span> — ${esc(desc)}</div>`;
     }
     html += `</div>`;
   }
@@ -1087,8 +1357,11 @@ function updateWorldPanel(worldState) {
   if (districts.length > 0) {
     html += `<div class="panel-section"><div class="panel-section-title">${L('district_access')}</div>`;
     for (const d of districts) {
-      const icon = d.status === 'Open' ? '\u25C6' : (d.status === 'Restricted' ? '\u25D4' : '\u25CB');
-      const statusColor = d.status === 'Open' ? 'green' : (d.status === 'Restricted' ? 'yellow' : 'red');
+      const statusLower = (d.status || '').toLowerCase();
+      const isOpen = statusLower === 'open' || d.status === '开放';
+      const isRestricted = statusLower === 'restricted' || d.status === '限制出入';
+      const icon = isOpen ? '\u25C6' : (isRestricted ? '\u25D4' : '\u25CB');
+      const statusColor = isOpen ? 'green' : (isRestricted ? 'yellow' : 'red');
       const dName = currentLang === 'zh' && d.name_zh ? d.name_zh : d.name;
       const statusDisplay = localizeData('district_status', d.status);
       html += `<div class="panel-list-item"><div class="panel-row">
@@ -1195,27 +1468,32 @@ function localizeDecayStatus(status) {
   return L(key) || status || '';
 }
 
-function setText(id, text) { const el = document.getElementById(id); if (el) el.textContent = text || ''; }
+function setText(id, text, childSel) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  if (childSel) { const c = el.querySelector(childSel); if (c) c.textContent = text || ''; }
+  else el.textContent = text || '';
+}
 function esc(text) { return escapeHtml(text || ''); }
 function escapeHtml(text) { if (!text) return ''; const d = document.createElement('div'); d.textContent = String(text); return d.innerHTML; }
 
 function dangerColor(level) {
   const l = (level || '').toLowerCase();
-  if (l === 'safe') return 'green';
-  if (l === 'low') return 'yellow';
-  if (l === 'medium' || l === 'moderate') return 'orange';
-  if (l === 'high') return 'red';
-  if (l === 'critical' || l === 'extreme') return 'alert-critical';
+  if (l === 'safe' || l === '安全') return 'green';
+  if (l === 'low' || l === '低') return 'yellow';
+  if (l === 'medium' || l === 'moderate' || l === '中') return 'orange';
+  if (l === 'high' || l === '高') return 'red';
+  if (l === 'critical' || l === 'extreme' || l === '极端') return 'alert-critical';
   return 'cyan';
 }
 
 function alertColor(status) {
   const s = (status || '').toLowerCase();
-  if (s === 'calm') return 'alert-calm';
-  if (s === 'watchful' || s === 'low') return 'alert-low';
-  if (s === 'alert' || s === 'medium' || s === 'elevated') return 'alert-medium';
-  if (s === 'manhunt' || s === 'high') return 'alert-high';
-  if (s === 'lockdown' || s === 'critical') return 'alert-critical';
+  if (s === 'calm' || s === '平静') return 'alert-calm';
+  if (s === 'watchful' || s === 'low' || s === '警觉') return 'alert-low';
+  if (s === 'alert' || s === 'medium' || s === 'elevated' || s === '戒备') return 'alert-medium';
+  if (s === 'manhunt' || s === 'high' || s === '追捕') return 'alert-high';
+  if (s === 'lockdown' || s === 'critical' || s === '戒严') return 'alert-critical';
   return '';
 }
 

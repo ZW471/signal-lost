@@ -61,10 +61,23 @@ def set_llm(llm):
 # ---------------------------------------------------------------------------
 
 def _read_language_setting(session_dir: str) -> str:
-    """Read language from settings/custom.json, falling back to 'en'."""
+    """Read language from settings/custom.json, falling back to 'en'.
+
+    *session_dir* may be ``<game_root>/session`` (legacy) or
+    ``<game_root>/session/<save_name>`` (multi-session).  Walk upwards
+    until we find a sibling ``settings/`` directory.
+    """
     import os as _os
-    game_root = _os.path.abspath(_os.path.join(session_dir, ".."))
-    custom_path = _os.path.join(game_root, "settings", "custom.json")
+    cur = _os.path.abspath(session_dir)
+    custom_path = None
+    for _ in range(4):  # safety limit
+        candidate = _os.path.join(_os.path.dirname(cur), "settings", "custom.json")
+        if _os.path.isfile(candidate):
+            custom_path = candidate
+            break
+        cur = _os.path.dirname(cur)
+    if custom_path is None:
+        return "en"
     try:
         with open(custom_path, "r", encoding="utf-8") as f:
             import json as _json
@@ -177,7 +190,7 @@ _INJECTION_PATTERNS = [
 ]
 
 _VALIDATOR_SYSTEM = """\
-You are a security filter for "Signal Lost", a cyberpunk text RPG.
+You are a security filter for "Signal Lost", an agentic text RPG.
 Classify the player input as VALID or INVALID.
 
 INVALID inputs (block these):
@@ -783,20 +796,26 @@ def world_ticker(state: GameState) -> dict:
 
     # Advance time every TURNS_PER_PERIOD turns
     if turn % TURNS_PER_PERIOD == 0:
+        from game_data import TIME_PERIODS_ZH
+        language = _read_language_setting(session_dir)
         current_time = player.get("time", "Morning")
-        # Handle bilingual time strings
-        for i, period in enumerate(TIME_PERIODS):
-            if period.lower() in current_time.lower():
+        # Match against both EN and ZH time periods to find current index
+        _all_periods = list(zip(TIME_PERIODS, TIME_PERIODS_ZH))
+        for i, (en_period, zh_period) in enumerate(_all_periods):
+            if en_period.lower() in current_time.lower() or zh_period in current_time:
                 next_idx = (i + 1) % len(TIME_PERIODS)
-                player["time"] = TIME_PERIODS[next_idx]
+                # Set time in the active language
+                if language == "zh":
+                    player["time"] = TIME_PERIODS_ZH[next_idx]
+                else:
+                    player["time"] = TIME_PERIODS[next_idx]
 
                 # Update world_state time (keep all fields in sync)
-                _TIME_ZH_MAP = {"Morning": "晨", "Afternoon": "午", "Night": "夜", "Evening": "夕"}
                 time_data = world_state.get("time", {})
-                new_period = TIME_PERIODS[next_idx]
-                time_data["period"] = new_period
-                time_data["time_of_day"] = new_period
-                time_data["time_of_day_zh"] = _TIME_ZH_MAP.get(new_period, new_period)
+                if language == "zh":
+                    time_data["period"] = TIME_PERIODS_ZH[next_idx]
+                else:
+                    time_data["period"] = TIME_PERIODS[next_idx]
                 if next_idx == 0:  # New day
                     time_data["day"] = time_data.get("day", 1) + 1
                 world_state["time"] = time_data
@@ -1038,6 +1057,7 @@ def trace_checker(state: GameState) -> dict:
     player = state["player"]
     world_state = state["world_state"]
     session_dir = state["session_dir"]
+    language = _read_language_setting(session_dir)
 
     new_discoveries = []
 
@@ -1048,9 +1068,10 @@ def trace_checker(state: GameState) -> dict:
 
         try:
             if tc["check"](knowledge, traces, npcs, player, world_state):
+                from game_data import get_localized
                 discovery = {
                     "id": trace_id,
-                    "description": tc["description"],
+                    "description": get_localized(tc, "description", language),
                     "turn": player.get("turn", 1),
                 }
                 if "discovered" not in traces:

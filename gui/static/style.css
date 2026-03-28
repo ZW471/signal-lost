@@ -1237,8 +1237,19 @@ html, body {
   width: 420px;
   max-width: 90vw;
   max-height: 90vh;
-  overflow-y: auto;
+  overflow: hidden;
   box-sizing: border-box;
+}
+
+.save-dialog .form-actions {
+  flex-wrap: wrap;
+}
+
+.save-dialog .cyber-btn {
+  min-width: 140px;
+  flex: 1;
+  padding: 12px 20px;
+  font-size: 14px;
 }
 
 .confirm-text {
