@@ -1078,8 +1078,9 @@ function updateStatusBar(session) {
   }
   document.getElementById('statIntegrityPips').innerHTML = pips;
 
-  // Location
-  setText('statLocation', l.district || l.area || '—');
+  // Location (district + area)
+  setText('statLocation', l.district || '—');
+  setText('statArea', l.area || '—');
 
   // Time with icon + translation
   const timeRaw = p.time || 'Morning';
@@ -1092,6 +1093,7 @@ function updateStatusBar(session) {
   setText('statLabelAlias', L('alias').toUpperCase());
   setText('statLabelIntegrity', L('integrity').toUpperCase());
   setText('statLabelLocation', L('location').toUpperCase());
+  setText('statLabelArea', L('area').toUpperCase());
   setText('statLabelTime', L('time').toUpperCase());
 }
 
@@ -1232,27 +1234,35 @@ function updateDistrictPanel(location) {
   const l = location || {};
   const dangerCls = dangerColor(l.danger_level);
 
-  // Signal waveform
-  const sigStr = parseInt(l.signal_strength) || 0;
-  const sigBars = Math.round(sigStr / 10);
-  let sigWave = '';
-  for (let i = 0; i < 10; i++) sigWave += i < sigBars ? '\u2248' : '\u00B7';
-
-  // NEXUS patrol color
-  const patrolStr = (l.nexus_patrol || 'None').toLowerCase();
-  const patrolColor = (patrolStr === 'none' || patrolStr === '无') ? 'green' : (patrolStr.includes('light') || patrolStr.includes('轻') ? 'yellow' : 'red');
-
-  const dangerDisplay = localizeData('danger', l.danger_level);
-
   let html = `
     <div class="panel-section">
       <div class="panel-section-title">${L('current_location')}</div>
       <div class="panel-row"><span class="panel-key">${L('district')}</span><span class="panel-val ${dangerCls}">${esc(l.district)}</span></div>
-      <div class="panel-row"><span class="panel-key">${L('area')}</span><span class="panel-val">${esc(l.area)}</span></div>
-      <div class="panel-row"><span class="panel-key">${L('signal_strength')}</span><span class="panel-val magenta">${sigWave} ${esc(l.signal_strength)}</span></div>
-      <div class="panel-row"><span class="panel-key">${L('danger_level')}</span><span class="panel-val ${dangerCls}">${esc(dangerDisplay)}</span></div>
-      <div class="panel-row"><span class="panel-key">${L('nexus_patrol')}</span><span class="panel-val ${patrolColor}">${esc(l.nexus_patrol)}</span></div>
-    </div>`;
+      <div class="panel-row"><span class="panel-key">${L('area')}</span><span class="panel-val">${esc(l.area)}</span></div>`;
+
+  // Signal — only show if present
+  if (l.signal_strength != null && l.signal_strength !== '' && l.signal_strength !== 0) {
+    const sigStr = parseInt(l.signal_strength) || 0;
+    const sigBars = Math.round(sigStr / 10);
+    let sigWave = '';
+    for (let i = 0; i < 10; i++) sigWave += i < sigBars ? '\u2248' : '\u00B7';
+    html += `<div class="panel-row"><span class="panel-key">${L('signal_strength')}</span><span class="panel-val magenta">${sigWave} ${esc(l.signal_strength)}</span></div>`;
+  }
+
+  // Danger — only show if present
+  if (l.danger_level) {
+    const dangerDisplay = localizeData('danger', l.danger_level);
+    html += `<div class="panel-row"><span class="panel-key">${L('danger_level')}</span><span class="panel-val ${dangerCls}">${esc(dangerDisplay)}</span></div>`;
+  }
+
+  // NEXUS patrol — only show if present
+  if (l.nexus_patrol) {
+    const patrolStr = l.nexus_patrol.toLowerCase();
+    const patrolColor = (patrolStr === 'none' || patrolStr === '无') ? 'green' : (patrolStr.includes('light') || patrolStr.includes('轻') ? 'yellow' : 'red');
+    html += `<div class="panel-row"><span class="panel-key">${L('nexus_patrol')}</span><span class="panel-val ${patrolColor}">${esc(l.nexus_patrol)}</span></div>`;
+  }
+
+  html += `</div>`;
 
   if (l.description) {
     html += `<div class="panel-section"><div class="panel-section-title">${L('description')}</div>
@@ -1276,9 +1286,11 @@ function updateDistrictPanel(location) {
     html += `</div>`;
   }
 
-  if (l.npcs_present && l.npcs_present.length > 0) {
+  // Accept both npcs_present and npcs_here
+  const npcsHere = l.npcs_present || l.npcs_here || [];
+  if (npcsHere.length > 0) {
     html += `<div class="panel-section"><div class="panel-section-title">${L('npcs_present')}</div>`;
-    for (const npc of l.npcs_present) {
+    for (const npc of npcsHere) {
       html += `<div class="panel-list-item" style="color:var(--yellow)">\u25C8 ${esc(npc)}</div>`;
     }
     html += `</div>`;
