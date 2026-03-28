@@ -5,3 +5,6 @@
 /saves
 __pycache__
 .claude
+tests/reviews/*.json
+tests/reviews/*.md
+!tests/reviews/.gitkeep

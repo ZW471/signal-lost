@@ -18,38 +18,27 @@ This is not a story about saving the world. This is a story about understanding 
 
 ## How to Play
 
-### With the TUI (Recommended)
+### Browser GUI (Recommended)
 
-The TUI provides a split-screen experience: a live terminal on the left for interacting with your AI agent, and a tabbed dashboard on the right showing all game state.
+The GUI provides a real-time game interface in your browser with a chat panel and live game state dashboard.
 
 ```bash
-cd "Examples/Signal Lost/compiled"
-.venv/bin/python tui/tui_viewer.py .
+python gui/run_gui.py
+python gui/run_gui.py --port 8080
+python gui/run_gui.py --no-open   # don't auto-open browser
 ```
 
-Options:
-- `--terminal false` — Dashboard only (use a separate terminal for the agent)
-- `--refresh 10` — Auto-refresh every 10 seconds (default: 5)
-- `--refresh 0` — Disable auto-refresh (press `r` to refresh manually)
+The GUI supports: New Game, Resume, Load Game, Save Game, and provider configuration — all from the browser.
 
-TUI shortcuts: `r` refresh, `t` focus terminal, `1`-`9` switch tabs, `q` quit.
+### With an AI Agent (Headless Testing)
 
-### With an AI Agent
+For automated playthroughs or agentic testing:
 
-Tell your AI agent to read `compiled/NEW GAME.md` to start a new game. Compatible agents:
-- Claude Code
-- Any agentic coding assistant that can read/write files
+```bash
+python tests/scripts/play_headless.py
+```
 
----
-
-## Game Lifecycle
-
-| Command | What it does |
-|---------|-------------|
-| `NEW GAME.md` | Start a fresh playthrough — choose language, name, background, difficulty |
-| `RESUME.md` | Continue the current session in a new conversation |
-| `LOAD GAME.md` | Load a previously saved game |
-| `SAVE GAME.md` | Save the current session |
+The headless engine uses file-polling (`session/headless/player_action.json`) for communication, making it compatible with Claude Code and other AI agents.
 
 ---
 
@@ -64,9 +53,9 @@ Tell your AI agent to read `compiled/NEW GAME.md` to start a new game. Compatibl
 - **6 Districts** — From the neon slums of The Sprawl to the hidden depths of The Resonance. Access is gated by knowledge, disguises, and world state.
 - **The Theorize Mechanic** — Propose theories connecting your knowledge. Valid theories unlock new paths and dialogue.
 - **No Combat** — You are fragile. Violence is almost always fatal. Survive through knowledge, cunning, and the right words.
-- **Bilingual Support** — Play in English or 中文. Switch languages mid-game by saving and reloading.
+- **Bilingual Support** — Play in English or 中文. Switch languages mid-game via settings.
 - **6 Python Tools** — Dice roller, cipher decoder, Signal analyzer, district map, NPC generator, atmospheric glitch generator.
-- **Cyberpunk TUI** — Neon-themed terminal dashboard with real-time session state, knowledge tracker, trace progress, and integrated terminal.
+- **Multi-Provider** — Anthropic, OpenAI, LM Studio, or Claude Code CLI.
 
 ---
 
@@ -75,9 +64,23 @@ Tell your AI agent to read `compiled/NEW GAME.md` to start a new game. Compatibl
 Edit `settings/custom.json` to customize:
 
 - **Difficulty**: `paranoid` (forgiving) → `cautious` → `standard` → `reckless` (brutal)
-- **Language**: `display` for agent narration, `tui` for dashboard labels
+- **Language**: `display` for agent narration, `tui` for UI labels
 - **Narrative**: Verbosity (terse/standard/immersive), tone (noir/clinical/poetic), death description level
 - **Gameplay**: Auto-save frequency, Signal manifestation toggle, inventory slots
+
+Edit `settings/provider.json` to configure the LLM provider.
+
+---
+
+## Testing
+
+```bash
+python tests/scenarios/smoke_test.py       # Quick validation (no LLM)
+python tests/scenarios/regression.py       # Bug regression tests (no LLM)
+python tests/scenarios/full_playthrough.py # Automated playthrough (requires LLM)
+```
+
+See `tests/README.md` for details.
 
 ---
 

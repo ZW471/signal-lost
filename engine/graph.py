@@ -1,7 +1,7 @@
 """
 Signal Lost — LangGraph StateGraph
 
-The compiled game engine as a LangGraph graph.
+The game engine as a LangGraph state machine.
 
 Flow: input_gate → resolver (LLM + tools) → state_writer → world_ticker
       → trace_checker → consequence → [END or loop back]
@@ -18,9 +18,9 @@ from langchain_core.messages import AIMessage, HumanMessage, RemoveMessage, Syst
 from langgraph.graph import END, StateGraph
 from langgraph.prebuilt import ToolNode
 
-from state import GameState, append_conversation, empty_turn_delta, save_session_file
-from tools import ALL_TOOLS, set_session_dir
-from game_data import (
+from engine.state import GameState, append_conversation, empty_turn_delta, reset_turn_flags, save_session_file
+from engine.tools import ALL_TOOLS, set_session_dir
+from engine.game_data import (
     TRACE_CONDITIONS,
     ENDINGS,
     TIME_PERIODS,
@@ -28,8 +28,8 @@ from game_data import (
     _trace_discovered,
     _count_discovered_traces,
 )
-from prompts import build_static_prompt, build_dynamic_state_prompt, extract_deepest_layer
-from reducer import reduce_turn_messages, trim_to_window
+from engine.prompts import build_static_prompt, build_dynamic_state_prompt, extract_deepest_layer
+from engine.reducer import reduce_turn_messages, trim_to_window
 
 
 # ---------------------------------------------------------------------------
@@ -126,17 +126,21 @@ def input_gate(state: GameState) -> dict:
         if msg.id
     ]
 
+    # Reset per-turn flags. skip_validation, skip_conversation_log, and
+    # skip_turn_increment are set externally BEFORE graph.invoke() for special
+    # turns (resume, system events) — they survive because the caller sets them
+    # after input_gate returns. Each consuming node resets its own flag.
+    flags = reset_turn_flags()
+    # Preserve externally-set skip flags for this invocation
+    for key in ("skip_validation", "skip_conversation_log", "skip_turn_increment"):
+        if state.get(key):
+            flags[key] = state[key]
+
     return {
         "messages": old_sys_removals + old_conv_removals + [static_msg, dynamic_msg],
         "turn_delta": empty_turn_delta(),
         "narrative": "",
-        # Reset per-turn flags carried over from the previous turn
-        "input_blocked": False,
-        "blocking_reason": None,
-        # NOTE: skip_validation, skip_conversation_log, and skip_turn_increment are NOT
-        # reset here — they are set by the TUI BEFORE invoking the graph and must
-        # survive into their respective nodes (input_validator, state_writer, world_ticker).
-        # Each of those nodes resets the flag itself after consuming it.
+        **flags,
     }
 
 
@@ -277,9 +281,26 @@ def input_blocked_handler(state: GameState) -> dict:
     removals = [RemoveMessage(id=invalid_human_id)] if invalid_human_id else []
 
     reason = state.get("blocking_reason") or "That action is not valid in this game."
+
+    # Generate contextual suggestions based on current state
+    location = state.get("location", {})
+    npcs = state.get("npcs", {})
+    district = location.get("district", "the district")
+    area = location.get("area", "your current location")
+    present_npcs = [
+        name for name, info in npcs.items()
+        if isinstance(info, dict) and info.get("location", {}).get("district") == district
+        and not info.get("hidden")
+    ]
+
+    suggestions = [f"Explore {area}", f"Look around {district}"]
+    if present_npcs:
+        suggestions.insert(0, f"Talk to {present_npcs[0]}")
+    suggestions.append("Check your knowledge")
+
     warning = (
         f"[System Warning] {reason}\n\n"
-        "Please describe an action within the game world."
+        f"Try instead: {', '.join(suggestions[:3])}"
     )
 
     return {

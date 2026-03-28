@@ -2,76 +2,43 @@
 """
 Signal Lost — Headless Play Script
 
-Plays the game using the compiled LangGraph engine without the TUI.
-Sends predefined actions and logs all responses.
+Plays the game using the LangGraph engine without a GUI.
+Sends predefined actions via file-polling and logs all responses.
+Used for agentic testing (e.g. Claude Code as player).
 """
 
 from __future__ import annotations
 
+import json
 import os
 import sys
-import json
 import time
 
-# Add compiled dir to path
-sys.path.insert(0, os.path.dirname(__file__))
-
-# Add game root's tui dir for panel imports needed by some modules
-_GAME_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-_PARENT_TUI = os.path.join(_GAME_ROOT, "tui")
-if _PARENT_TUI not in sys.path:
-    sys.path.insert(0, _PARENT_TUI)
+# Ensure game root is on sys.path
+_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+_GAME_ROOT = os.path.abspath(os.path.join(_SCRIPT_DIR, "..", ".."))
+if _GAME_ROOT not in sys.path:
+    sys.path.insert(0, _GAME_ROOT)
 
 from langchain_core.messages import HumanMessage
-from graph import compile_graph, set_llm
-from state import create_new_session, initial_state
 
-# Load .env file
-env_path = os.path.join(_GAME_ROOT, ".env")
-if os.path.exists(env_path):
-    with open(env_path, "r") as f:
-        for line in f:
-            line = line.strip()
-            if line and not line.startswith("#") and "=" in line:
-                key, _, val = line.partition("=")
-                key, val = key.strip(), val.strip()
-                if val.startswith('"') and val.endswith('"'):
-                    val = val[1:-1]
-                if key not in os.environ:
-                    os.environ[key] = val
+from engine.graph import compile_graph, set_llm
+from engine.state import create_new_session, initial_state
+from engine.llm_factory import create_llm, load_env, load_provider_config, SETTINGS_DIR
 
-# --- Config ---
+# --- Bootstrap ---
+load_env()
+
 SESSIONS_ROOT = os.path.join(_GAME_ROOT, "session")
 HEADLESS_SESSION_NAME = "headless"
 SESSION_DIR = os.path.join(SESSIONS_ROOT, HEADLESS_SESSION_NAME)
-SETTINGS_DIR = os.path.join(_GAME_ROOT, "settings")
-LOG_FILE = os.path.join(_GAME_ROOT, "game_playthrough_log.md")
+LOG_FILE = os.path.join(_GAME_ROOT, "logs", "headless_playthrough.md")
 
 # Load provider config
-with open(os.path.join(SETTINGS_DIR, "provider.json"), "r") as f:
-    provider_cfg = json.load(f)
-
+provider_cfg = load_provider_config()
 PROVIDER = provider_cfg.get("provider", "openai")
 MODEL = provider_cfg.get("model", "gpt-5.4")
 TEMPERATURE = provider_cfg.get("temperature", 0.7)
-
-
-def create_llm(provider: str, model: str, **kwargs):
-    if provider == "claude-code":
-        from claude_llm import ClaudeCodeLLM
-        return ClaudeCodeLLM(model_name=model)
-    elif provider == "anthropic":
-        from langchain_anthropic import ChatAnthropic
-        return ChatAnthropic(model=model, **kwargs)
-    elif provider == "openai":
-        from langchain_openai import ChatOpenAI
-        return ChatOpenAI(model=model, **kwargs)
-    elif provider == "lmstudio":
-        from langchain_openai import ChatOpenAI
-        base_url = kwargs.pop("base_url", "http://localhost:1234/v1")
-        return ChatOpenAI(model=model, base_url=base_url, api_key="lm-studio", **kwargs)
-    else:
-        raise ValueError(f"Unknown provider: {provider}")
 
 
 # --- Communication protocol files ---
@@ -122,7 +89,7 @@ def poll_for_action(expected_turn: int) -> str | None:
 
 
 def main():
-    print(f"=== Signal Lost — Game Engine (Background) ===")
+    print(f"=== Signal Lost — Game Engine (Headless) ===")
     print(f"Provider: {PROVIDER} | Model: {MODEL}")
     print()
 
@@ -153,8 +120,9 @@ def main():
     state = initial_state(SESSION_DIR)
 
     # Open log file
+    os.makedirs(os.path.dirname(LOG_FILE), exist_ok=True)
     with open(LOG_FILE, "w", encoding="utf-8") as log:
-        log.write("# Signal Lost — Playthrough Log\n\n")
+        log.write("# Signal Lost — Headless Playthrough Log\n\n")
         log.write(f"**Date**: {time.strftime('%Y-%m-%d %H:%M')}\n")
         log.write(f"**Character**: Kael (alias: Ghost) — Netrunner\n")
         log.write(f"**Provider**: {PROVIDER} / {MODEL}\n")
@@ -175,7 +143,6 @@ def main():
             print(f"TURN {turn}: {action}")
             print(f"{'='*60}")
 
-            # Send action
             state["messages"].append(HumanMessage(content=action))
 
             try:
@@ -188,11 +155,9 @@ def main():
 
                 print(f"\nNARRATIVE:\n{narrative}")
 
-                # Write response for the player session
                 write_response(narrative, turn, game_over, state)
                 write_status("done", turn)
 
-                # Log to file
                 log.write(f"## Turn {turn}\n\n")
                 log.write(f"**Player**: {action}\n\n")
                 log.write(f"**Response**:\n{narrative}\n\n")
