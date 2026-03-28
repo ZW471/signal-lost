@@ -819,7 +819,7 @@ def world_ticker(state: GameState) -> dict:
 
     # Advance time every TURNS_PER_PERIOD turns
     if turn % TURNS_PER_PERIOD == 0:
-        from game_data import TIME_PERIODS_ZH
+        from engine.game_data import TIME_PERIODS_ZH
         language = _read_language_setting(session_dir)
         current_time = player.get("time", "Morning")
         # Match against both EN and ZH time periods to find current index
@@ -1091,7 +1091,7 @@ def trace_checker(state: GameState) -> dict:
 
         try:
             if tc["check"](knowledge, traces, npcs, player, world_state):
-                from game_data import get_localized
+                from engine.game_data import get_localized
                 discovery = {
                     "id": trace_id,
                     "description": get_localized(tc, "description", language),
