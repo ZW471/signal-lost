@@ -45,22 +45,29 @@ class GameState(TypedDict):
     # --- Session directory path ---
     session_dir: str      # Path to session/ folder
 
-    # --- Flags ---
+    # --- Turn flags (reset at start of each turn via reset_turn_flags) ---
     skip_conversation_log: bool  # If True, state_writer skips logging to conversation.jsonl
     skip_turn_increment: bool    # If True, world_ticker skips incrementing the turn counter
-
-    # --- Input validation ---
     input_blocked: bool          # Set True by input_validator when a player message is rejected
     blocking_reason: str | None  # Human-readable reason for rejection
+    skip_validation: bool        # If True, this turn is a system-injected event (resume/info)
+    language_retry_count: int    # How many times output_language_checker has retried (cap: 1)
 
-    # --- System event flag ---
-    skip_validation: bool        # If True, this turn is a system-injected event (resume/info),
-                                 # not player input — bypasses input_validator entirely and
-                                 # makes the turn ephemeral (messages removed from history)
 
-    # --- Output language validation ---
-    language_retry_count: int    # How many times output_language_checker has retried this turn
-                                 # (capped at 1 to prevent infinite loops)
+def reset_turn_flags() -> dict:
+    """Return a dict of all turn flags set to their clean defaults.
+
+    Call at the start of each turn (in input_gate) to prevent flag bleed
+    between turns.
+    """
+    return {
+        "skip_conversation_log": False,
+        "skip_turn_increment": False,
+        "input_blocked": False,
+        "blocking_reason": None,
+        "skip_validation": False,
+        "language_retry_count": 0,
+    }
 
 
 # ---------------------------------------------------------------------------
