@@ -241,10 +241,19 @@ def update_npc(name: str, changes: str) -> str:
 
 @tool
 def update_location(location_data: str) -> str:
-    """Update the player's current location. Rewrite the full location data.
+    """Update the player's current location. Must include ALL fields.
 
     Args:
-        location_data: JSON string of the complete new location state.
+        location_data: JSON string with ALL of these fields:
+            - district: district name (e.g. "The Sprawl", "Neon Row")
+            - area: specific place within the district
+            - description: 2-3 sentence atmospheric description of what the player sees/hears/smells RIGHT NOW
+            - signal_strength: e.g. "10%", "50%"
+            - danger_level: one of "Safe", "Low", "Moderate", "High", "Extreme"
+            - nexus_patrol: patrol presence description or "None"
+            - exits: object mapping directions to short descriptions, e.g. {"north": "A busy main street...", "south": "Dark alley..."}
+            - points_of_interest: list of notable things the player can interact with, e.g. ["Mira's Noodle Shop — steaming bowls..."]
+            - npcs_present: list of characters visible here, e.g. ["Mira — behind the counter, watching you"]
     """
     try:
         parsed = json.loads(location_data)
