@@ -22,6 +22,7 @@ DISTRICTS = {
     "The Sprawl":      {"pos": (1, 1), "zh": "蔓城",   "icon": "◆"},
     "The Undercroft":  {"pos": (2, 1), "zh": "底渊",   "icon": "▼"},
     "The Resonance":   {"pos": (1, 2), "zh": "共鸣所", "icon": "✦"},
+    "The Spire":       {"pos": (0, 0), "zh": "尖塔",   "icon": "▲"},
 }
 
 # Access status display
@@ -101,6 +102,18 @@ def generate_map(current: str, alert: int, decay: int, access: dict) -> str:
 
     # Map grid
     lines.append("║                                                  ║")
+
+    # Row -1: The Spire (above everything)
+    ts_mark = ">>>" if current == "The Spire" else "   "
+    ts_acc = ACCESS_STYLES.get(access.get("The Spire", "Hidden"), ("???", "?"))[0]
+
+    lines.append(f"║          {ts_mark}┌──────────┐                  ║")
+    lines.append(f"║             │▲ THE     │                  ║")
+    lines.append(f"║             │  SPIRE   │                  ║")
+    lines.append(f"║             │  尖塔     │                  ║")
+    lines.append(f"║             │  [{ts_acc:^6s}]│                  ║")
+    lines.append(f"║             └────┬─────┘                  ║")
+    lines.append(f"║                  │                         ║")
 
     # Row 0: Chrome Heights, Sector 7
     ch_mark = ">>>" if current == "Chrome Heights" else "   "

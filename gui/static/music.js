@@ -97,7 +97,17 @@ const MusicEngine = (() => {
   function switchTo(trackName) {
     const resolved = resolveTrack(trackName);
     if (!resolved) return;
-    if (resolved === currentName && currentAudio) return;
+    if (resolved === currentName && currentAudio) {
+      // If audio was blocked by autoplay and is still paused, retry
+      if (currentAudio.paused) {
+        currentAudio.play().then(() => {
+          _fadeInTimer = fade(currentAudio, effectiveVolume(), FADE_MS, () => {
+            _fadeInTimer = null;
+          });
+        }).catch(() => {});
+      }
+      return;
+    }
 
     const newAudio = getAudio(resolved);
     if (!newAudio) return;

@@ -498,6 +498,17 @@ async def _run_turn(ws: WebSocket, player_input: str | None = None, mode: str = 
             "role": "system" if mode == "resume" else "agent",
         })
 
+        # Send discovery notifications (ephemeral trace alerts)
+        discoveries = result.get("discovery_notifications", [])
+        if discoveries:
+            for d in discoveries:
+                await ws.send_json({
+                    "type": "discovery",
+                    "trace_id": d["trace_id"],
+                    "layer": d["layer"],
+                    "description": d["description"],
+                })
+
         await ws.send_json({
             "type": "session_update",
             "session": _get_session_data(),

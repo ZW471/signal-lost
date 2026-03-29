@@ -1589,6 +1589,30 @@ html, body {
 }
 
 /* ================================================================
+   DISCOVERY NOTIFICATIONS
+   ================================================================ */
+
+.discovery-notification {
+  background: rgba(0, 255, 136, 0.08);
+  border-left: 3px solid #00ff88;
+  padding: 8px 12px;
+  margin: 8px 0;
+  font-size: 0.9em;
+  animation: discovery-pulse 0.5s ease-out;
+}
+.discovery-badge {
+  font-weight: bold;
+  color: #00ff88;
+  margin-bottom: 4px;
+}
+.discovery-icon { margin-right: 6px; }
+.discovery-text { color: #ccc; font-style: italic; }
+@keyframes discovery-pulse {
+  0% { opacity: 0; transform: translateY(10px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+/* ================================================================
    RESPONSIVE
    ================================================================ */
 

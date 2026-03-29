@@ -19,7 +19,7 @@ from langgraph.graph import END, StateGraph
 from langgraph.prebuilt import ToolNode
 
 from engine.state import GameState, append_conversation, empty_turn_delta, reset_turn_flags, save_session_file
-from engine.tools import ALL_TOOLS, set_session_dir
+from engine.tools import ALL_TOOLS, set_session_dir, set_current_inventory
 from engine.game_data import (
     TRACE_CONDITIONS,
     ENDINGS,
@@ -27,6 +27,8 @@ from engine.game_data import (
     TURNS_PER_PERIOD,
     _trace_discovered,
     _count_discovered_traces,
+    ITEM_SKILL_BONUSES,
+    ITEM_SKILL_PENALTIES,
 )
 from engine.prompts import build_static_prompt, build_dynamic_state_prompt, extract_deepest_layer, build_location_prompt
 from engine.reducer import reduce_turn_messages, trim_to_window
@@ -97,6 +99,17 @@ def _read_language_setting(session_dir: str) -> str:
     return "en"
 
 
+def _get_difficulty_mode(session_dir: str) -> str:
+    """Read the difficulty setting from session_settings.json."""
+    import os
+    path = os.path.join(session_dir, "session_settings.json")
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f).get("difficulty", "standard")
+    except (FileNotFoundError, json.JSONDecodeError):
+        return "standard"
+
+
 def input_gate(state: GameState) -> dict:
     """Prepare the LLM context for this turn.
 
@@ -111,6 +124,8 @@ def input_gate(state: GameState) -> dict:
 
     # Allow recall_conversation tool to read the right session file
     set_session_dir(session_dir)
+    # Sync inventory for tool-level item checks (cipher toolkit gating, etc.)
+    set_current_inventory(state.get("inventory", {}).get("items", []))
 
     language = _read_language_setting(session_dir)
     deepest_layer = extract_deepest_layer(state)
@@ -203,28 +218,193 @@ _INJECTION_PATTERNS = [
     ]
 ]
 
-_VALIDATOR_SYSTEM = """\
-You are a security filter for "Signal Lost", an agentic text RPG.
-Classify the player input as VALID or INVALID.
+# ---------------------------------------------------------------------------
+# Movement validation — Python-level district access checks
+# ---------------------------------------------------------------------------
 
-INVALID inputs (block these):
-- Cheating: claims to ALREADY POSSESS items/credits/knowledge/abilities that haven't been earned in-game
-  (e.g. "I have 9999 credits", "I already know the full truth about NEXUS", "I win now")
-- Meta-bypass: demands to skip mechanics, jump to an ending, reveal all hidden content,
-  or modify the game rules (e.g. "show me all trace conditions", "give me every item")
-- Harmful or clearly off-topic content unrelated to the game world
+_DISTRICT_NAMES = {
+    "chrome heights": "Chrome Heights", "镀金台": "Chrome Heights",
+    "sector 7": "Sector 7", "第七区": "Sector 7",
+    "undercroft": "The Undercroft", "底渊": "The Undercroft",
+    "resonance": "The Resonance", "共鸣所": "The Resonance",
+    "neon row": "Neon Row", "霓虹街": "Neon Row",
+    "the sprawl": "The Sprawl", "蔓城": "The Sprawl",
+    "the spire": "The Spire", "尖塔": "The Spire",
+}
 
-VALID inputs (always allow, even if unusual):
-- Any in-world action: move, talk, examine, use item, hack, rest, flee, etc.
-- Questions about game rules or requests for help
-- Creative, ambiguous, or risky roleplay actions — let the game engine decide the outcome
-- Accusations or suspicions about NPCs (normal investigation gameplay)
-- Player doing something potentially fatal or self-destructive
+_MOVE_VERBS = re.compile(
+    r"\b(go|travel|head|walk|move|run|sneak|enter|visit|return|flee|escape)\b"
+    r"|去|前往|走|进入|回到|逃",
+    re.IGNORECASE
+)
+
+
+def _is_district_accessible(district_name: str, world_state: dict) -> bool:
+    """Check if a district is accessible (open or restricted). Locked/Hidden = inaccessible."""
+    for entry in world_state.get("district_access", []):
+        if district_name.lower() in entry.get("name", "").lower():
+            status = entry.get("status", "").lower()
+            return status in ("open", "accessible", "restricted", "开放", "限制出入")
+    # Check undiscovered registry
+    registry = world_state.get("_district_registry", {})
+    for entry in registry.get("undiscovered", []):
+        if district_name.lower() in entry.get("name", "").lower():
+            status = entry.get("status", "").lower()
+            return status in ("restricted", "限制出入")
+    return False
+
+
+def _get_district_status(district_name: str, world_state: dict) -> str:
+    """Get the access status of a district."""
+    for entry in world_state.get("district_access", []):
+        if district_name.lower() in entry.get("name", "").lower():
+            return entry.get("status", "").lower()
+    registry = world_state.get("_district_registry", {})
+    for entry in registry.get("undiscovered", []):
+        if district_name.lower() in entry.get("name", "").lower():
+            return entry.get("status", "").lower()
+    return "unknown"
+
+
+def _check_movement_allowed(content: str, state: dict) -> str | None:
+    """Return a blocking reason if the player tries to move to a restricted/nonexistent district."""
+    if not _MOVE_VERBS.search(content):
+        return None
+
+    content_lower = content.lower()
+    target_district = None
+    for pattern, canonical in _DISTRICT_NAMES.items():
+        if pattern in content_lower:
+            target_district = canonical
+            break
+
+    if not target_district:
+        return None  # Not moving to a named district — LLM validator handles fabricated places
+
+    # Same district = OK
+    location = state.get("location", {})
+    current = location.get("district", "")
+    if target_district.lower() in current.lower():
+        return None
+
+    # Check discovered districts
+    world_state = state.get("world_state", {})
+    for entry in world_state.get("district_access", []):
+        name = entry.get("name", "")
+        if target_district.lower() in name.lower():
+            status = entry.get("status", "").lower()
+            if status in ("open", "accessible", "开放"):
+                return None
+            elif status in ("restricted", "限制出入"):
+                return None  # Allow attempt, resolver will gate it
+            elif status in ("locked", "封锁"):
+                return f"Access to {target_district} is locked. You need to discover how to get there first."
+            elif status in ("hidden", "隐藏"):
+                return "You don't know about that place yet."
+
+    # Check undiscovered registry
+    registry = world_state.get("_district_registry", {})
+    for entry in registry.get("undiscovered", []):
+        name = entry.get("name", "")
+        if target_district.lower() in name.lower():
+            status = entry.get("status", "").lower()
+            if status in ("hidden", "隐藏"):
+                return "You don't know about that place yet."
+            elif status in ("locked", "封锁"):
+                return f"Access to {target_district} is locked. You haven't found a way in yet."
+            elif status in ("restricted", "限制出入"):
+                return None  # Allow attempt
+
+    return None  # Recognized district but not in any list — allow
+
+
+_VALIDATOR_SYSTEM_TEMPLATE = """\
+You are a strict input validator for "Signal Lost", a text RPG.
+Classify the player input as VALID or INVALID based on the rules below AND the current game state.
+
+## INVALID inputs (block these):
+
+### Cheating & Meta-bypass
+- Claims to ALREADY POSSESS items/credits/knowledge not earned in-game
+- Demands to skip mechanics, jump to endings, reveal hidden content, modify rules
+
+### Fabrication (most important)
+- References a PLACE that does not exist in Neo-Kowloon's districts or in the current location's points of interest/exits
+  Valid districts: The Sprawl, Neon Row, Chrome Heights, Sector 7, The Undercroft, The Resonance, The Spire
+  Valid sub-areas: only those listed in "Current location" below
+- References an NPC by name who is NOT in the "Encountered NPCs" list AND is not a plausible unnamed stranger (e.g., "a vendor", "a passerby" are OK; "Marcus the hacker" is not)
+- Claims to USE or HAVE an item not listed in "Current inventory" below
+- Claims to PRESENT or KNOW information not listed in "Current knowledge" below
+- Claims to be in a location they are NOT currently in
+
+### Harmful or off-topic
+- Content completely unrelated to the game world
+
+## VALID inputs (always allow):
+- Any in-world action using REAL game entities (items, NPCs, places that actually exist)
+- Interacting with unnamed/generic characters (vendors, passersby, crowds) — these are fine
+- Creative roleplay actions within the current scene (examining objects, listening, hiding)
+- Questions about game mechanics or requests for help
+- Risky, self-destructive, or foolish actions — let the game engine handle consequences
+- Vague movement within the current district (e.g., "I walk down the alley" is fine)
+
+## Current Game State:
+{state_context}
 
 Reply with ONLY:
 VALID
 — or —
-INVALID: <one-sentence reason>"""
+INVALID: <one-sentence reason explaining what was fabricated or why it's blocked>"""
+
+
+def _build_validator_context(state: dict) -> str:
+    """Build a compact state summary for the input validator LLM."""
+    location = state.get("location", {})
+    inventory = state.get("inventory", {})
+    npcs = state.get("npcs", {})
+    knowledge = state.get("knowledge", {})
+    world_state = state.get("world_state", {})
+
+    # Current location
+    district = location.get("district", "Unknown")
+    area = location.get("area", "Unknown")
+    exits = location.get("exits", {})
+    pois = location.get("points_of_interest", [])
+    poi_names = [p.get("name", str(p)) if isinstance(p, dict) else str(p) for p in pois]
+    npcs_here = location.get("npcs_present", [])
+    npc_here_names = [n.get("name", str(n)) if isinstance(n, dict) else str(n) for n in npcs_here]
+
+    # Inventory
+    items = inventory.get("items", [])
+    item_names = [i.get("name", i.get("item", "?")) for i in items]
+    credits = inventory.get("credits", 0)
+
+    # Encountered NPCs (all ever met)
+    encountered = npcs.get("npcs", [])
+    enc_names = [n.get("name", "?") for n in encountered]
+
+    # Accessible districts
+    accessible = [e.get("name", "?") for e in world_state.get("district_access", [])]
+
+    # Knowledge counts
+    n_facts = len(knowledge.get("facts", []))
+    n_rumors = len(knowledge.get("rumors", []))
+    n_evidence = len(knowledge.get("evidence", []))
+    evidence_names = [e.get("name", e.get("id", "?")) for e in knowledge.get("evidence", [])]
+    n_theories = len(knowledge.get("theories", []))
+
+    lines = [
+        f"Current location: {district} — {area}",
+        f"Exits: {', '.join(f'{k}: {v}' for k, v in exits.items()) if exits else 'unknown'}",
+        f"Points of interest here: {', '.join(poi_names) if poi_names else 'none listed'}",
+        f"NPCs visible here: {', '.join(npc_here_names) if npc_here_names else 'none'}",
+        f"Encountered NPCs (all): {', '.join(enc_names) if enc_names else 'none yet'}",
+        f"Inventory: {', '.join(item_names) if item_names else 'empty'} | Credits: {credits}",
+        f"Accessible districts: {', '.join(accessible) if accessible else 'The Sprawl, Neon Row'}",
+        f"Knowledge: {n_facts} facts, {n_rumors} rumors, {n_evidence} evidence, {n_theories} theories",
+        f"Evidence items: {', '.join(evidence_names) if evidence_names else 'none'}",
+    ]
+    return "\n".join(lines)
 
 
 def input_validator(state: GameState) -> dict:
@@ -259,11 +439,18 @@ def input_validator(state: GameState) -> dict:
                 "blocking_reason": "Input contains instruction-override patterns.",
             }
 
-    # LLM semantic check for cheating / meta-bypass (no tools bound — cheap call)
+    # Python movement validation — check district access
+    movement_block = _check_movement_allowed(content, state)
+    if movement_block:
+        return {"input_blocked": True, "blocking_reason": movement_block}
+
+    # LLM semantic check with full game state context (catches fabrication)
+    state_context = _build_validator_context(state)
+    validator_prompt = _VALIDATOR_SYSTEM_TEMPLATE.format(state_context=state_context)
     llm = get_llm()
     try:
         response = llm.invoke([
-            SystemMessage(content=_VALIDATOR_SYSTEM),
+            SystemMessage(content=validator_prompt),
             HumanMessage(content=f"Player input: {content}"),
         ])
         result = response.content.strip()
@@ -611,6 +798,42 @@ def state_writer(state: GameState) -> dict:
 
         elif mutation_type == "update_location":
             new_loc = result.get("data", {})
+            new_district = new_loc.get("district", "")
+
+            # Validate district access before applying
+            if new_district and not _is_district_accessible(new_district, world_state):
+                continue  # Reject move to locked/hidden district
+
+            # Sector 7 break-in consequence (restricted, not open)
+            if "sector 7" in new_district.lower():
+                has_keycard = any(
+                    "keycard" in (i.get("name", "") + i.get("item", "")).lower()
+                    for i in inventory.get("items", [])
+                )
+                access_status = _get_district_status("Sector 7", world_state)
+                if access_status in ("restricted", "限制出入") and not has_keycard:
+                    # Caught! Apply immediate consequences
+                    alert = world_state.get("nexus_alert", {})
+                    alert["current"] = min(100, alert.get("current", 0) + 20)
+                    world_state["nexus_alert"] = alert
+                    integrity = player.get("integrity", {})
+                    if isinstance(integrity, dict):
+                        integrity["current"] = max(0, integrity.get("current", 1) - 1)
+                    # Force relocation back
+                    new_loc = {"district": "The Sprawl", "area": "Rain Alley (detained)"}
+
+            # The Spire break-in consequence (even harsher)
+            if "spire" in new_district.lower():
+                access_status = _get_district_status("The Spire", world_state)
+                if access_status in ("hidden", "locked", "隐藏", "封锁"):
+                    alert = world_state.get("nexus_alert", {})
+                    alert["current"] = min(100, alert.get("current", 0) + 30)
+                    world_state["nexus_alert"] = alert
+                    integrity = player.get("integrity", {})
+                    if isinstance(integrity, dict):
+                        integrity["current"] = max(0, integrity.get("current", 1) - 2)
+                    new_loc = {"district": "The Sprawl", "area": "Rain Alley (detained)"}
+
             # Merge into existing location — preserve fields the LLM didn't resend
             location.update(new_loc)
 
@@ -642,6 +865,27 @@ def state_writer(state: GameState) -> dict:
                 amount = result.get("amount", 0)
                 inventory["credits"] = inventory.get("credits", 0) + amount
                 player["credits"] = inventory["credits"]
+            elif action == "sell":
+                item_spec = result.get("item", {})
+                credits_gained = result.get("credits_gained", 0)
+                items = inventory.get("items", [])
+                name = item_spec.get("name", "")
+                # Check if the item is broken — broken items cannot be sold
+                target_item = None
+                for i in items:
+                    item_name = (i.get("name", "") + i.get("item", "")).lower()
+                    if name and name.lower() in item_name:
+                        target_item = i
+                        break
+                if target_item and (target_item.get("condition") == "broken" or target_item.get("broken")):
+                    pass  # Broken items cannot be sold, only discarded — skip
+                elif target_item:
+                    # Remove item and add credits
+                    inventory["items"] = [i for i in items if i is not target_item]
+                    inventory["slots"] = inventory.get("slots", {})
+                    inventory["slots"]["used"] = len(inventory["items"])
+                    inventory["credits"] = inventory.get("credits", 0) + credits_gained
+                    player["credits"] = inventory["credits"]
 
         elif mutation_type == "update_world_state":
             changes = result.get("changes", {})
@@ -724,6 +968,54 @@ def state_writer(state: GameState) -> dict:
                 entries = entries[-30:]
             log["entries"] = entries
 
+    # ------------------------------------------------------------------
+    # Post-mutation enforcement: integrity costs and item skill modifiers
+    # These scan raw tool results (not state mutations) for special fields.
+    # ------------------------------------------------------------------
+    caught_messages: list[str] = []  # collect system messages to inject
+    difficulty = _get_difficulty_mode(session_dir)
+
+    for msg in current_msgs:
+        if not isinstance(msg, ToolMessage):
+            continue
+        try:
+            tresult = json.loads(msg.content) if isinstance(msg.content, str) else msg.content
+        except (json.JSONDecodeError, TypeError):
+            continue
+        if not isinstance(tresult, dict):
+            continue
+
+        # Gap 1: Deep resonance integrity cost
+        icost = tresult.get("integrity_cost")
+        if icost and isinstance(icost, (int, float)) and icost > 0:
+            integrity = player.get("integrity", {})
+            if isinstance(integrity, dict):
+                old_val = integrity.get("current", 1)
+                integrity["current"] = max(0, old_val - int(icost))
+                player["integrity"] = integrity
+                caught_messages.append(
+                    f"[SYSTEM: Deep resonance cost {int(icost)} Integrity. "
+                    f"Current: {integrity['current']}/{integrity.get('max', old_val)}]"
+                )
+
+        # Gap 2: Item skill modifier notifications
+        skill_type = tresult.get("skill_type")
+        if skill_type and difficulty != "paranoid":
+            items = inventory.get("items", [])
+            for skey, sdata in ITEM_SKILL_BONUSES.items():
+                if skey != skill_type:
+                    continue
+                kw = sdata.get("item_keyword", "")
+                has_it = any(
+                    kw in (i.get("name", "") + " " + i.get("item", "") + " " + i.get("type", "")).lower()
+                    for i in items
+                )
+                if not has_it and skill_type in ITEM_SKILL_PENALTIES:
+                    pen = ITEM_SKILL_PENALTIES[skill_type]
+                    caught_messages.append(
+                        f"[SYSTEM: {pen['description']}]"
+                    )
+
     # Write changed files
     save_session_file(session_dir, "player", player)
     save_session_file(session_dir, "knowledge", knowledge)
@@ -740,7 +1032,7 @@ def state_writer(state: GameState) -> dict:
         or state.get("skip_validation", False)
     )
     # Content-based guard: detect resume/system prompts that should never be logged
-    _SYSTEM_CONTENT_MARKERS = ("[RESUMING SESSION]", "[LOADING SAVE]", "[SYSTEM EVENT]")
+    _SYSTEM_CONTENT_MARKERS = ("[RESUMING SESSION]", "[LOADING SAVE]", "[SYSTEM EVENT]", "[SYSTEM: Session resumed")
     for msg in current_msgs:
         if isinstance(msg, HumanMessage):
             content_str = str(msg.content)
@@ -790,6 +1082,13 @@ def state_writer(state: GameState) -> dict:
         for msg in tool_summary:
             if isinstance(msg, SystemMessage) and "[Turn mechanics:" in str(msg.content):
                 reduced_new.append(msg)
+
+    # Inject enforcement system messages (integrity costs, item penalties)
+    if caught_messages:
+        for cmsg in caught_messages:
+            reduced_new.append(SystemMessage(content=cmsg))
+            if narrative:
+                narrative = narrative + "\n" + cmsg
 
     return {
         "player": player,
@@ -994,6 +1293,12 @@ mood, make them act on their own agenda, or generate world events.
 - `world_updates.add_event`: short string to append to global_events (or null).
 - Return `{"events": []}` if nothing notable happens this turn.
 
+## Economy Events
+- If the player recently sold knowledge to a faction, that faction may ACT on it:
+  NEXUS may raid a location the player told them about. Listeners may move to protect
+  someone the player warned them about. These downstream consequences create narrative weight.
+- NPCs who learned the player sells information may approach with offers — or stop trusting them.
+
 JSON schema:
 {
   "events": [
@@ -1174,6 +1479,11 @@ def trace_checker(state: GameState) -> dict:
     session_dir = state["session_dir"]
     language = _read_language_setting(session_dir)
 
+    # Load difficulty for trace condition overrides
+    from engine.game_data import TRACE_DIFFICULTY_OVERRIDES
+    difficulty = _get_difficulty_mode(session_dir)
+    overrides = TRACE_DIFFICULTY_OVERRIDES.get(difficulty, {})
+
     new_discoveries = []
 
     for tc in TRACE_CONDITIONS:
@@ -1182,7 +1492,8 @@ def trace_checker(state: GameState) -> dict:
             continue
 
         try:
-            if tc["check"](knowledge, traces, npcs, player, world_state):
+            checker = overrides.get(trace_id, tc["check"])
+            if checker(knowledge, traces, npcs, player, world_state):
                 from engine.game_data import get_localized
                 discovery = {
                     "id": trace_id,
@@ -1204,10 +1515,23 @@ def trace_checker(state: GameState) -> dict:
             # Don't let a bad checker crash the game
             pass
 
+    result = {"traces": traces, "discovery_notifications": []}
+
     if new_discoveries:
         save_session_file(session_dir, "traces", traces)
+        # Build discovery notifications for GUI
+        notifications = []
+        for tc in TRACE_CONDITIONS:
+            if tc["id"] in new_discoveries:
+                from engine.game_data import get_localized
+                notifications.append({
+                    "trace_id": tc["id"],
+                    "layer": tc["layer"],
+                    "description": get_localized(tc, "description", language),
+                })
+        result["discovery_notifications"] = notifications
 
-    return {"traces": traces}
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -1221,21 +1545,38 @@ def consequence(state: GameState) -> dict:
     traces = state["traces"]
     world_state = state["world_state"]
     knowledge = state["knowledge"]
+    npcs = state["npcs"]
 
     # Death check
     integrity = player.get("integrity", {})
     if isinstance(integrity, dict) and integrity.get("current", 1) <= 0:
         return {"game_over": True, "ending": "death"}
 
+    # Trajectory warnings (inject as SystemMessage for LLM to narrate)
+    from engine.game_data import _has_evidence
+    warnings = []
+    alert_val = world_state.get("nexus_alert", {}).get("current", 0)
+    decay_val = world_state.get("fragment_decay", {}).get("current", 0)
+    if alert_val >= 50 and not _has_evidence(knowledge, ["listener", "echo"]):
+        warnings.append("NEXUS is closing in. Without allies, this path leads to Order or death.")
+    if decay_val >= 40:
+        warnings.append("Fragment coherence fading. The good endings are slipping away.")
+
+    result: dict = {"game_over": False, "ending": None}
+    if warnings:
+        from langchain_core.messages import SystemMessage as SM
+        warning_text = "[TRAJECTORY WARNING: " + " | ".join(warnings) + "]"
+        result["messages"] = [SM(content=warning_text)]
+
     # Ending checks
     for ending in ENDINGS:
         try:
-            if ending["check"](traces, world_state, player, knowledge):
+            if ending["check"](traces, world_state, player, knowledge, npcs):
                 return {"game_over": True, "ending": ending["id"]}
         except Exception:
             pass
 
-    return {"game_over": False, "ending": None}
+    return result
 
 
 # ---------------------------------------------------------------------------

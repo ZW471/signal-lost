@@ -41,6 +41,7 @@ class GameState(TypedDict):
     game_over: bool       # Whether the game has ended
     ending: str | None    # Which ending triggered, if any
     narrative: str        # The narrative text to display to the player
+    discovery_notifications: list  # Populated by trace_checker, consumed by server
 
     # --- Session directory path ---
     session_dir: str      # Path to session/ folder
@@ -318,12 +319,15 @@ _LOCALE: dict[str, dict[str, Any]] = {
         "district_sector7": "Sector 7",
         "district_chrome": "Chrome Heights",
         "district_resonance": "The Resonance",
+        "district_spire": "The Spire",
         "notes_starting": "Starting area",
         "notes_entertainment": "Entertainment and intel",
         "notes_undercroft": "Underground Listener territory",
         "notes_sector7": "Corporate zone",
         "notes_chrome": "Elite residential area",
         "notes_resonance": "Ancient pre-Severance facility",
+        "notes_spire": "NEXUS HQ — endgame content",
+        "unlock_layer4": "Requires Layer 4 completion",
         "unlock_trace": "Requires TRACE-L1-03",
         "unlock_keycard": "Requires keycard or disguise",
         "unlock_invitation": "Requires invitation or disguise",
@@ -375,12 +379,15 @@ _LOCALE: dict[str, dict[str, Any]] = {
         "district_sector7": "第七区",
         "district_chrome": "镀金台",
         "district_resonance": "共鸣所",
+        "district_spire": "尖塔",
         "notes_starting": "起始区域",
         "notes_entertainment": "娱乐与情报",
         "notes_undercroft": "地下聆听者领地",
         "notes_sector7": "企业区",
         "notes_chrome": "精英住宅区",
         "notes_resonance": "断离前的古老设施",
+        "notes_spire": "NEXUS总部——终局内容",
+        "unlock_layer4": "需要完成第四层",
         "unlock_trace": "需要TRACE-L1-03",
         "unlock_keycard": "需要门禁卡或伪装",
         "unlock_invitation": "需要邀请函或伪装",
@@ -543,6 +550,7 @@ def create_new_session(
                 {"name": L["district_sector7"], "name_zh": "第七区", "status": L["restricted"], "unlock": L["unlock_keycard"], "notes": L["notes_sector7"]},
                 {"name": L["district_chrome"], "name_zh": "镀金台", "status": L["restricted"], "unlock": L["unlock_invitation"], "notes": L["notes_chrome"]},
                 {"name": L["district_resonance"], "name_zh": "共鸣所", "status": L["hidden"], "unlock": L["unlock_layer3"], "notes": L["notes_resonance"]},
+                {"name": L["district_spire"], "name_zh": "尖塔", "status": L["hidden"], "unlock": L["unlock_layer4"], "notes": L["notes_spire"]},
             ],
         },
         "time": {"day": 1, "period": L["time_morning"]},

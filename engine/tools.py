@@ -30,6 +30,24 @@ def set_session_dir(session_dir: str) -> None:
     _current_session_dir = session_dir
 
 
+_current_inventory: list[dict] = []
+
+
+def set_current_inventory(items: list[dict]) -> None:
+    """Set the current inventory for tool-level item checks."""
+    global _current_inventory
+    _current_inventory = items
+
+
+def _has_item(keyword: str) -> bool:
+    """Check if the current inventory contains an item matching the keyword."""
+    for item in _current_inventory:
+        name = (item.get("name", "") + " " + item.get("item", "")).lower()
+        if keyword.lower() in name:
+            return True
+    return False
+
+
 # Add the game's tools/ directory to path so we can import directly
 _GAME_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 _TOOLS_DIR = os.path.join(_GAME_ROOT, "tools")
@@ -75,7 +93,8 @@ generate_npc = _profile.generate_npc
 
 
 @tool
-def roll_dice(expression: str, target: int | None = None, modifier: int = 0) -> dict:
+def roll_dice(expression: str, target: int | None = None, modifier: int = 0,
+              skill_type: str | None = None) -> dict:
     """Roll dice for probability checks.
 
     Use d100 for skill checks (success if roll <= target).
@@ -86,11 +105,14 @@ def roll_dice(expression: str, target: int | None = None, modifier: int = 0) -> 
         expression: Dice expression like 'd100', '2d6+3', 'd20'
         target: Target number for success check (roll <= target = success). None for plain roll.
         modifier: Additional modifier to add to the roll
+        skill_type: Type of skill check (e.g. 'lockpick', 'hack', 'stealth', 'persuasion') for item bonus tracking
     """
     count, sides, mod = parse_dice(expression)
     result = roll(count, sides, mod + modifier)
     if target is not None:
         result.update(check(result["total"], target))
+    if skill_type:
+        result["skill_type"] = skill_type
     return result
 
 
@@ -103,6 +125,11 @@ def decrypt_cipher(method: str, text: str, key: str | None = None) -> dict:
         text: The encrypted text to decrypt
         key: Decryption key (number for caesar/xor, 26-char alphabet for substitute)
     """
+    # Advanced methods require cipher toolkit
+    if method in ("caesar", "xor", "substitute") and not _has_item("cipher"):
+        return {"error": "Advanced decryption requires a Cipher Toolkit.",
+                "hint": "Basic methods (reverse, base64, analyze) work without tools."}
+
     if method == "analyze":
         freq = frequency_analysis(text)
         return {"mode": "frequency_analysis", "frequencies": freq}
@@ -144,7 +171,9 @@ def analyze_signal(evidence_id: str | None = None, description: str | None = Non
     elif scan:
         return signal_scan(strength)
     elif resonate:
-        return deep_resonance()
+        result = deep_resonance()
+        result["integrity_cost"] = 1  # Enforced by state_writer
+        return result
     else:
         return {"error": "Specify evidence_id, scan=True, or resonate=True"}
 
@@ -267,16 +296,25 @@ def update_inventory(action: str, item: str | None = None) -> str:
     """Modify the player's inventory.
 
     Args:
-        action: One of 'add', 'remove', 'update_credits'
-        item: JSON string of the item for add/remove, or credits amount for update_credits.
+        action: One of 'add', 'remove', 'sell', 'update_credits'
+        item: JSON string of the item for add/remove/sell, or credits amount for update_credits.
             Add: {"slot": N, "name": "...", "type": "...", "description": "..."}
             Remove: {"slot": N} or {"name": "..."}
+            Sell: {"name": "...", "credits_gained": N} — removes item AND adds credits in one call.
+                  Broken items cannot be sold, only discarded (use remove instead).
             Credits: just a number as string, e.g. "50" or "-10"
     """
     try:
         if action == "update_credits":
             return json.dumps({"type": "update_inventory", "action": action, "amount": int(item or 0)})
         parsed = json.loads(item or "{}")
+        if action == "sell":
+            return json.dumps({
+                "type": "update_inventory",
+                "action": "sell",
+                "item": parsed,
+                "credits_gained": parsed.get("credits_gained", 0),
+            })
         return json.dumps({"type": "update_inventory", "action": action, "item": parsed})
     except (json.JSONDecodeError, ValueError):
         return json.dumps({"error": "Invalid item data"})

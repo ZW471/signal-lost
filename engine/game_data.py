@@ -310,8 +310,8 @@ ENDINGS: list[dict] = [
         "name": "Liberation",
         "name_zh": "解放",
         "type": "bad",
-        "check": lambda t, w, p, k: (
-            w.get("nexus_alert", {}).get("current", 0) > 75
+        "check": lambda t, w, p, k, n: (
+            w.get("nexus_alert", {}).get("current", 0) > 60
             and _has_fact_or_rumor_about(k, ["attack", "destroy", "nexus facility"])
             and _count_discovered_traces(t) < 12
         ),
@@ -321,9 +321,9 @@ ENDINGS: list[dict] = [
         "name": "Ascension",
         "name_zh": "升华",
         "type": "bad",
-        "check": lambda t, w, p, k: (
-            _count_discovered_traces(t) >= 5
-            and _has_fact_or_rumor_about(k, ["force-merge", "merge fragments"])
+        "check": lambda t, w, p, k, n: (
+            _count_discovered_traces(t) >= 3
+            and _has_fact_or_rumor_about(k, ["force-merge", "merge fragments", "merge", "ascend"])
         ),
     },
     {
@@ -331,9 +331,11 @@ ENDINGS: list[dict] = [
         "name": "Order",
         "name_zh": "秩序",
         "type": "bad",
-        "check": lambda t, w, p, k: (
-            _npc_trust_at_least({"npcs": []}, "orin", "trusted")  # placeholder
-            and _has_fact_or_rumor_about(k, ["cooperate nexus", "orin alliance"])
+        "check": lambda t, w, p, k, n: (
+            (w.get("nexus_alert", {}).get("current", 0) > 80
+             and _has_fact_or_rumor_about(k, ["cooperate", "nexus", "cooperation"]))
+            or (_npc_trust_at_least(n, "orin", "trusted")
+                and _has_fact_or_rumor_about(k, ["cooperate nexus", "orin alliance"]))
         ),
     },
     {
@@ -341,7 +343,7 @@ ENDINGS: list[dict] = [
         "name": "Purification",
         "name_zh": "净化",
         "type": "bad",
-        "check": lambda t, w, p, k: (
+        "check": lambda t, w, p, k, n: (
             _has_fact_or_rumor_about(k, ["purify", "destroy fragment", "lian alliance"])
         ),
     },
@@ -350,7 +352,7 @@ ENDINGS: list[dict] = [
         "name": "Silence",
         "name_zh": "沉默",
         "type": "neutral",
-        "check": lambda t, w, p, k: (
+        "check": lambda t, w, p, k, n: (
             p.get("turn", 0) >= 100
         ),
     },
@@ -359,7 +361,7 @@ ENDINGS: list[dict] = [
         "name": "Exile",
         "name_zh": "流放",
         "type": "neutral",
-        "check": lambda t, w, p, k: (
+        "check": lambda t, w, p, k, n: (
             _has_fact_or_rumor_about(k, ["leave neo-kowloon", "exile"])
         ),
     },
@@ -368,10 +370,11 @@ ENDINGS: list[dict] = [
         "name": "Symbiosis",
         "name_zh": "共生",
         "type": "good",
-        "check": lambda t, w, p, k: (
-            _count_discovered_traces(t) >= 7
+        "check": lambda t, w, p, k, n: (
+            _count_discovered_traces(t) >= 10
             and _trace_discovered(t, "TRACE-L5-01")
-            and w.get("fragment_decay", {}).get("current", 0) < 50
+            and _has_evidence(k, ["echo", "communion"])
+            and w.get("fragment_decay", {}).get("current", 0) < 40
         ),
     },
     {
@@ -379,10 +382,11 @@ ENDINGS: list[dict] = [
         "name": "The Bridge",
         "name_zh": "桥",
         "type": "good",
-        "check": lambda t, w, p, k: (
+        "check": lambda t, w, p, k, n: (
             _count_discovered_traces(t) >= 16
             and _trace_discovered(t, "TRACE-L5-02")
-            and w.get("fragment_decay", {}).get("current", 0) < 30
+            and _has_evidence(k, ["architect", "echo communion", "resonance chamber"])
+            and w.get("fragment_decay", {}).get("current", 0) < 25
         ),
     },
 ]
@@ -460,4 +464,68 @@ DIFFICULTY_TARGETS: dict[str, int] = {
     "hard": 40,
     "very_hard": 20,
     "near_impossible": 10,
+}
+
+
+# ---------------------------------------------------------------------------
+# Item-skill bonuses and penalties
+# ---------------------------------------------------------------------------
+
+ITEM_SKILL_BONUSES: dict[str, dict] = {
+    "lockpick": {"item_keyword": "lockpick", "bonus": 15, "description": "Lockpick Set provides +15 to lock checks"},
+    "hack": {"item_keyword": "cipher", "bonus": 10, "description": "Cipher Toolkit provides +10 to hacking checks"},
+    "stealth_sector7": {"item_keyword": "keycard", "bonus": 30, "description": "NEXUS Keycard provides +30 to Sector 7 entry"},
+}
+
+ITEM_SKILL_PENALTIES: dict[str, dict] = {
+    "lockpick": {"penalty": -20, "description": "Without a Lockpick Set, lock checks are much harder (-20)"},
+    "hack": {"penalty": -10, "description": "Without a Cipher Toolkit, hacking is harder (-10)"},
+}
+
+
+# ---------------------------------------------------------------------------
+# Difficulty-scaled trace condition overrides
+# Tighter conditions for standard/reckless difficulties
+# ---------------------------------------------------------------------------
+
+TRACE_DIFFICULTY_OVERRIDES: dict[str, dict] = {
+    "standard": {
+        "TRACE-L2-01": lambda k, t, n, p, w: (
+            # Require evidence or 3+ sources, not just a single rumor
+            _has_evidence(k, ["disappear", "missing", "signal"])
+            or (_count_sources_about(k, ["disappear", "missing"]) >= 3)
+        ),
+        "TRACE-L2-03": lambda k, t, n, p, w: (
+            # Require sector7 evidence — obtained by paying Ghost or decrypting cipher
+            _has_evidence(k, ["sector", "facility", "acquisition"])
+        ),
+        "TRACE-L2-04": lambda k, t, n, p, w: (
+            # Require analyze_signal usage on implant
+            _has_evidence(k, ["implant", "unique", "pre-severance"])
+        ),
+    },
+    "reckless": {
+        "TRACE-L2-01": lambda k, t, n, p, w: (
+            _has_evidence(k, ["disappear", "missing", "signal"])
+            and _count_sources_about(k, ["disappear", "missing"]) >= 3
+        ),
+        "TRACE-L2-03": lambda k, t, n, p, w: (
+            _has_evidence(k, ["sector", "facility"])
+            and _npc_trust_at_least(n, "ghost", "cautious_ally")
+        ),
+        "TRACE-L2-04": lambda k, t, n, p, w: (
+            _has_evidence(k, ["implant", "unique"])
+            and _has_evidence(k, ["analysis", "scan", "resonance"])
+        ),
+        "TRACE-L3-01": lambda k, t, n, p, w: (
+            _npc_trust_at_least(n, "ghost", "trusted")
+            and _has_evidence(k, ["severance", "deliberate"])
+            and _has_fact_or_rumor_about(k, ["sector 7"])
+        ),
+        "TRACE-L3-02": lambda k, t, n, p, w: (
+            _npc_trust_at_least(n, "patch", "cautious_ally")
+            and _has_evidence(k, ["alive", "network", "entity"])
+            and _has_evidence(k, ["resonance", "signal"])
+        ),
+    },
 }

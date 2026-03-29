@@ -663,6 +663,7 @@ let cachedSessions = [];
 let selectedBackground = 'street_runner';
 let isFirstInput = true; // Track if first input after resume (to remove system message)
 let resumeMessageEl = null; // Reference to the resume system message element
+let discoveryEls = []; // Track discovery notification elements (ephemeral)
 
 // ================================================================
 // SERVER MESSAGE HANDLER
@@ -713,6 +714,10 @@ function handleServerMessage(msg) {
 
     case 'session_update':
       if (msg.session) updateAllPanels(msg.session);
+      break;
+
+    case 'discovery':
+      showDiscoveryNotification(msg);
       break;
 
     case 'game_over':
@@ -927,7 +932,23 @@ function loadGame(saveName) {
 // CHAT FUNCTIONS
 // ================================================================
 
-function clearChat() { document.getElementById('chatMessages').innerHTML = ''; }
+function clearChat() { document.getElementById('chatMessages').innerHTML = ''; discoveryEls = []; }
+
+function showDiscoveryNotification(msg) {
+  const container = document.getElementById('chatMessages');
+  const el = document.createElement('div');
+  el.className = 'chat-msg discovery-notification';
+  el.innerHTML = `
+    <div class="discovery-badge">
+      <span class="discovery-icon">◈</span>
+      <span class="discovery-label">TRACE DISCOVERED — Layer ${msg.layer}</span>
+    </div>
+    <div class="discovery-text">${esc(msg.description)}</div>
+  `;
+  container.appendChild(el);
+  container.scrollTop = container.scrollHeight;
+  discoveryEls.push(el);
+}
 
 function _chatPrefixes() {
   return { player: L('chat_player'), agent: L('chat_agent'), system: L('chat_system') };
@@ -981,6 +1002,13 @@ function sendMessage() {
     setTimeout(() => { if (resumeMessageEl && resumeMessageEl.parentNode) resumeMessageEl.parentNode.removeChild(resumeMessageEl); resumeMessageEl = null; }, 500);
     isFirstInput = false;
   }
+
+  // Remove ephemeral discovery notifications
+  discoveryEls.forEach(el => {
+    el.classList.add('fade-out');
+    setTimeout(() => { if (el.parentNode) el.parentNode.removeChild(el); }, 500);
+  });
+  discoveryEls = [];
 
   addChatMessage(text, 'player');
   input.value = '';
@@ -1613,7 +1641,16 @@ window.addEventListener('load', () => { runBootSequence(); });
 
 // Start music on first user interaction (browsers require gesture for AudioContext)
 document.addEventListener('click', function _initMusic() {
+  // Resume AudioContext if suspended (required by some browsers)
+  if (audioCtx.state === 'suspended') audioCtx.resume();
   MusicEngine.playMenu();
   MusicEngine.preloadAll();
   document.removeEventListener('click', _initMusic);
+}, { once: true });
+// Also listen for keydown as a user gesture
+document.addEventListener('keydown', function _initMusicKey() {
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  MusicEngine.playMenu();
+  MusicEngine.preloadAll();
+  document.removeEventListener('keydown', _initMusicKey);
 }, { once: true });
