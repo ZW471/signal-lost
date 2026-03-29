@@ -784,20 +784,9 @@ function _showTokens() {
   return localStorage.getItem('signal_lost_show_tokens') === '1';
 }
 
-// Estimate cost from token counts (rough pricing per 1M tokens)
-// Uses model from settings; defaults to a mid-range estimate
-function _estimateCost(inputTokens, outputTokens) {
-  // Rough $/1M token rates for common models
-  const model = (document.getElementById('inputModel')?.value || '').toLowerCase();
-  let inRate = 3, outRate = 15; // default mid-range $/1M
-  if (model.includes('gpt-4o-mini') || model.includes('haiku')) { inRate = 0.25; outRate = 1.25; }
-  else if (model.includes('gpt-4o') || model.includes('gpt-4.1')) { inRate = 2.5; outRate = 10; }
-  else if (model.includes('sonnet')) { inRate = 3; outRate = 15; }
-  else if (model.includes('opus')) { inRate = 15; outRate = 75; }
-  else if (model.includes('o1') || model.includes('o3')) { inRate = 10; outRate = 40; }
-  else if (model.includes('gpt-3.5') || model.includes('gpt-4.1-nano')) { inRate = 0.1; outRate = 0.4; }
-  const cost = (inputTokens * inRate + outputTokens * outRate) / 1_000_000;
-  return cost;
+// Format cost calculated by the backend from actual LangGraph API usage metadata
+function _getCost(usage) {
+  return (usage && typeof usage.cost === 'number') ? usage.cost : 0;
 }
 
 function _formatCost(cost) {
@@ -860,17 +849,18 @@ function _updateUsageStats() {
     el.innerHTML = '<span class="dim" style="font-size:11px">No usage data yet</span>';
     return;
   }
+  const costStr = typeof u.cost === 'number' ? ` &nbsp;|&nbsp; Cost: <span class="cyan">${_formatCost(u.cost)}</span>` : '';
   el.innerHTML = `<div style="font-size:11px;color:var(--text-dim);line-height:1.6">
     LLM calls: <span class="cyan">${u.total_calls}</span> &nbsp;|&nbsp;
     Input: <span class="cyan">${(u.input_tokens || 0).toLocaleString()}</span> &nbsp;|&nbsp;
     Output: <span class="cyan">${(u.output_tokens || 0).toLocaleString()}</span> &nbsp;|&nbsp;
-    Total: <span class="cyan">${(u.total_tokens || 0).toLocaleString()}</span> tokens
+    Total: <span class="cyan">${(u.total_tokens || 0).toLocaleString()}</span> tokens${costStr}
   </div>`;
 }
 
 function onProviderChange() {
   const p = document.getElementById('selectProvider').value;
-  document.getElementById('apiKeyGroup').style.display = p === 'local' ? 'none' : '';
+  document.getElementById('apiKeyGroup').style.display = (p === 'local' || p === 'claude-code') ? 'none' : '';
   document.getElementById('baseUrlGroup').style.display = p === 'local' ? '' : 'none';
 }
 
@@ -1063,7 +1053,7 @@ function addTypingMessage(text, role = 'agent', usage = null) {
       contentEl.classList.remove('typing');
       // Show token/cost subtly if enabled
       if (usage && usage.total && _showTokens()) {
-        const cost = _estimateCost(usage.input || 0, usage.output || 0);
+        const cost = _getCost(usage);
         const tokenEl = document.createElement('div');
         tokenEl.className = 'msg-tokens';
         tokenEl.textContent = `${usage.total.toLocaleString()} tokens · ${_formatCost(cost)}`;
@@ -1655,7 +1645,7 @@ function updateConversationPanel(conversation) {
       let tokenHtml = '';
       if (entry.tokens && _showTokens()) {
         const t = entry.tokens;
-        const cost = _estimateCost(t.input || 0, t.output || 0);
+        const cost = typeof t.cost === 'number' ? t.cost : 0;
         tokenHtml = `<span class="conv-tokens">${(t.total || 0).toLocaleString()} tok · ${_formatCost(cost)}</span>`;
       }
       html += `<div class="conv-entry">

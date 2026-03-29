@@ -1,5 +1,5 @@
 {
-  "provider": "openai",
-  "model": "gpt-5.4-mini",
+  "provider": "claude-code",
+  "model": "opus",
   "temperature": 0.7
 }

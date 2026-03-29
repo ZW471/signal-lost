@@ -95,7 +95,7 @@ def main():
 
     # Set up LLM
     llm = create_llm(PROVIDER, MODEL, temperature=TEMPERATURE)
-    set_llm(llm)
+    set_llm(llm, zero_cost=PROVIDER in ("claude-code", "local", "lmstudio"))
 
     # Create new session
     create_new_session(

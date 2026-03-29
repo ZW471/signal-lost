@@ -12,6 +12,7 @@ from __future__ import annotations
 import copy
 import json
 import re
+from pathlib import Path
 from typing import Literal
 
 from langchain_core.messages import AIMessage, HumanMessage, RemoveMessage, SystemMessage, ToolMessage
@@ -39,6 +40,7 @@ from engine.reducer import reduce_turn_messages, trim_to_window
 # ---------------------------------------------------------------------------
 
 _llm_instance = None
+_zero_cost: bool = False
 
 
 def get_llm():
@@ -51,22 +53,108 @@ def get_llm():
     return _llm_instance
 
 
-def set_llm(llm):
-    """Set the LLM instance to use. Called by run.py."""
-    global _llm_instance
+def set_llm(llm, *, zero_cost: bool = False):
+    """Set the LLM instance to use. Called by run.py.
+
+    Set zero_cost=True for providers that should not incur token costs
+    (e.g. claude-code CLI, local LM Studio/Ollama).
+    """
+    global _llm_instance, _zero_cost
     _llm_instance = llm
+    _zero_cost = zero_cost
 
 
 def _extract_usage(response) -> dict:
-    """Extract token usage from an LLM response (AIMessage)."""
+    """Extract token usage from an LLM response (AIMessage).
+
+    Uses usage_metadata from the LangGraph/LangChain API which contains
+    actual token counts reported by the provider. Also extracts the model
+    name from response_metadata for accurate cost calculation.
+    """
     meta = getattr(response, "usage_metadata", None)
-    if meta and isinstance(meta, dict):
-        return {
-            "input_tokens": meta.get("input_tokens", 0),
-            "output_tokens": meta.get("output_tokens", 0),
-            "total_tokens": meta.get("total_tokens", 0),
-        }
-    return {}
+    if not meta or not isinstance(meta, dict):
+        return {}
+    usage: dict = {
+        "input_tokens": meta.get("input_tokens", 0),
+        "output_tokens": meta.get("output_tokens", 0),
+        "total_tokens": meta.get("total_tokens", 0),
+    }
+    # Extract cache token details (Anthropic prompt caching)
+    details = meta.get("input_token_details") or {}
+    if isinstance(details, dict):
+        cache_create = details.get("cache_creation", 0)
+        cache_read = details.get("cache_read", 0)
+        if cache_create or cache_read:
+            usage["cache_creation_tokens"] = cache_create
+            usage["cache_read_tokens"] = cache_read
+    # Extract actual model name from response metadata
+    resp_meta = getattr(response, "response_metadata", None)
+    if resp_meta and isinstance(resp_meta, dict):
+        model = resp_meta.get("model") or resp_meta.get("model_name") or ""
+        if model:
+            usage["model"] = model
+    return usage
+
+
+_pricing_cache: dict | None = None
+
+
+def _load_pricing() -> dict:
+    """Load model pricing from settings/pricing.json (cached after first load)."""
+    global _pricing_cache
+    if _pricing_cache is not None:
+        return _pricing_cache
+    pricing_path = Path(__file__).resolve().parent.parent / "settings" / "pricing.json"
+    try:
+        with open(pricing_path) as f:
+            _pricing_cache = json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        _pricing_cache = {"models": {}, "default": [3, 15, 0, 0]}
+    return _pricing_cache
+
+
+def _calculate_cost(usage: dict) -> float:
+    """Calculate USD cost from token usage using the model reported by the API.
+
+    Pricing loaded from settings/pricing.json. Matches by longest matching
+    key (substring) so 'gpt-5.4-mini' beats 'gpt-5.4' for model 'gpt-5.4-mini-2026-03-17'.
+    Returns 0 when zero_cost mode is active (claude-code, local providers).
+    """
+    if _zero_cost:
+        return 0.0
+    model = (usage.get("model") or "").lower()
+    input_tokens = usage.get("input_tokens", 0)
+    output_tokens = usage.get("output_tokens", 0)
+    cache_create = usage.get("cache_creation_tokens", 0)
+    cache_read = usage.get("cache_read_tokens", 0)
+
+    pricing = _load_pricing()
+    models = pricing.get("models", {})
+    default = pricing.get("default", [3, 15, 0, 0])
+
+    # Find the longest matching key in the model name
+    best_key, best_len = None, 0
+    for key in models:
+        if key in model and len(key) > best_len:
+            best_key, best_len = key, len(key)
+
+    rates = models[best_key] if best_key else default
+    in_rate, out_rate = rates[0], rates[1]
+    cw_rate = rates[2] if len(rates) > 2 else 0
+    cr_rate = rates[3] if len(rates) > 3 else 0
+
+    # For Anthropic cache pricing, regular input tokens exclude cached tokens
+    regular_input = input_tokens - cache_create - cache_read
+    if regular_input < 0:
+        regular_input = 0
+
+    cost = (
+        regular_input * in_rate
+        + output_tokens * out_rate
+        + cache_create * cw_rate
+        + cache_read * cr_rate
+    ) / 1_000_000
+    return cost
 
 
 def _accumulate_usage(state: dict, node_name: str, usage: dict) -> dict:
@@ -80,6 +168,14 @@ def _accumulate_usage(state: dict, node_name: str, usage: dict) -> dict:
     tu["output_tokens"] = tu.get("output_tokens", 0) + usage.get("output_tokens", 0)
     tu["total_tokens"] = tu.get("total_tokens", 0) + usage.get("total_tokens", 0)
     tu["calls"] = tu.get("calls", 0) + 1
+    # Accumulate cache tokens
+    tu["cache_creation_tokens"] = tu.get("cache_creation_tokens", 0) + usage.get("cache_creation_tokens", 0)
+    tu["cache_read_tokens"] = tu.get("cache_read_tokens", 0) + usage.get("cache_read_tokens", 0)
+    # Track model from latest call for cost calculation
+    if usage.get("model"):
+        tu["model"] = usage["model"]
+    # Calculate cost from actual API-reported usage
+    tu["cost"] = tu.get("cost", 0) + _calculate_cost(usage)
     return tu
 
 
@@ -1105,6 +1201,9 @@ def state_writer(state: GameState) -> dict:
         cumulative["input_tokens"] = cumulative.get("input_tokens", 0) + turn_usage.get("input_tokens", 0)
         cumulative["output_tokens"] = cumulative.get("output_tokens", 0) + turn_usage.get("output_tokens", 0)
         cumulative["total_tokens"] = cumulative.get("total_tokens", 0) + turn_usage.get("total_tokens", 0)
+        cumulative["cost"] = cumulative.get("cost", 0) + turn_usage.get("cost", 0)
+        if turn_usage.get("model"):
+            cumulative["model"] = turn_usage["model"]
         save_usage(session_dir, cumulative)
 
     if not is_system_turn:
@@ -1116,6 +1215,7 @@ def state_writer(state: GameState) -> dict:
                 "input": turn_usage.get("input_tokens", 0),
                 "output": turn_usage.get("output_tokens", 0),
                 "total": turn_usage.get("total_tokens", 0),
+                "cost": round(turn_usage.get("cost", 0), 6),
             }
         for msg in current_msgs:
             if isinstance(msg, HumanMessage):

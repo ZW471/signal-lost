@@ -236,7 +236,7 @@ async def websocket_endpoint(ws: WebSocket):
                 temperature = provider_cfg.get("temperature", 0.7)
 
                 api_key = provider_cfg.get("api_key")
-                if api_key:
+                if api_key and provider not in ("claude-code", "local", "lmstudio"):
                     if provider == "anthropic":
                         os.environ["ANTHROPIC_API_KEY"] = api_key
                     elif provider == "openai":
@@ -245,10 +245,12 @@ async def websocket_endpoint(ws: WebSocket):
                 extra = {}
                 if provider in ("lmstudio", "local"):
                     extra["base_url"] = provider_cfg.get("base_url", "http://localhost:1234/v1")
+                if provider != "claude-code":
+                    extra["temperature"] = temperature
 
                 try:
-                    llm = create_llm(provider, model, temperature=temperature, **extra)
-                    set_llm(llm)
+                    llm = create_llm(provider, model, **extra)
+                    set_llm(llm, zero_cost=provider in ("claude-code", "local", "lmstudio"))
                 except Exception as e:
                     await ws.send_json({"type": "error", "message": f"Failed to create LLM: {e}"})
                     continue
@@ -305,7 +307,7 @@ async def websocket_endpoint(ws: WebSocket):
                 temperature = provider_cfg.get("temperature", 0.7)
 
                 api_key = provider_cfg.get("api_key")
-                if api_key:
+                if api_key and provider not in ("claude-code", "local", "lmstudio"):
                     if provider == "anthropic":
                         os.environ["ANTHROPIC_API_KEY"] = api_key
                     elif provider == "openai":
@@ -314,10 +316,12 @@ async def websocket_endpoint(ws: WebSocket):
                 extra = {}
                 if provider in ("lmstudio", "local"):
                     extra["base_url"] = provider_cfg.get("base_url", "http://localhost:1234/v1")
+                if provider != "claude-code":
+                    extra["temperature"] = temperature
 
                 try:
-                    llm = create_llm(provider, model, temperature=temperature, **extra)
-                    set_llm(llm)
+                    llm = create_llm(provider, model, **extra)
+                    set_llm(llm, zero_cost=provider in ("claude-code", "local", "lmstudio"))
                 except Exception as e:
                     await ws.send_json({"type": "error", "message": f"Failed to create LLM: {e}"})
                     continue
@@ -346,7 +350,7 @@ async def websocket_endpoint(ws: WebSocket):
                 temperature = provider_cfg.get("temperature", 0.7)
 
                 api_key = provider_cfg.get("api_key")
-                if api_key:
+                if api_key and provider not in ("claude-code", "local", "lmstudio"):
                     if provider == "anthropic":
                         os.environ["ANTHROPIC_API_KEY"] = api_key
                     elif provider == "openai":
@@ -355,10 +359,12 @@ async def websocket_endpoint(ws: WebSocket):
                 extra = {}
                 if provider in ("lmstudio", "local"):
                     extra["base_url"] = provider_cfg.get("base_url", "http://localhost:1234/v1")
+                if provider != "claude-code":
+                    extra["temperature"] = temperature
 
                 try:
-                    llm = create_llm(provider, model, temperature=temperature, **extra)
-                    set_llm(llm)
+                    llm = create_llm(provider, model, **extra)
+                    set_llm(llm, zero_cost=provider in ("claude-code", "local", "lmstudio"))
                 except Exception as e:
                     await ws.send_json({"type": "error", "message": f"Failed to create LLM: {e}"})
                     continue
@@ -435,8 +441,8 @@ async def websocket_endpoint(ws: WebSocket):
                         json.dump(custom, f, ensure_ascii=False, indent=2)
 
                 api_key = provider_cfg.get("api_key")
-                if api_key:
-                    prov = provider_cfg.get("provider", "openai")
+                prov = provider_cfg.get("provider", "openai")
+                if api_key and prov not in ("claude-code", "local", "lmstudio"):
                     env_var = "ANTHROPIC_API_KEY" if prov == "anthropic" else "OPENAI_API_KEY"
                     os.environ[env_var] = api_key
                     save_env_key(env_var, api_key)
@@ -517,6 +523,7 @@ async def _run_turn(ws: WebSocket, player_input: str | None = None, mode: str = 
                 "input": turn_usage.get("input_tokens", 0),
                 "output": turn_usage.get("output_tokens", 0),
                 "total": turn_usage.get("total_tokens", 0),
+                "cost": round(turn_usage.get("cost", 0), 6),
             } if turn_usage.get("total_tokens") else None,
         })
 

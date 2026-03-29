@@ -332,17 +332,24 @@ html, body {
   text-align: center;
 }
 .menu-lang-select {
+  display: inline-block;
   width: auto;
-  min-width: 50px;
-  padding: 2px 6px;
-  font-size: 11px;
+  min-width: 60px;
+  padding: 6px 12px;
+  font-size: 12px;
   text-align: center;
-  background: transparent;
+  background: var(--bg-input);
   border: 1px solid var(--border);
   color: var(--text-dim);
   cursor: pointer;
   font-family: var(--font-mono);
   letter-spacing: 1px;
+  outline: none;
+  transition: border-color 0.2s, color 0.2s;
+}
+.menu-lang-select option {
+  background: var(--bg-dark);
+  color: var(--text);
 }
 .menu-lang-select:hover { border-color: var(--cyan); color: var(--cyan); }
 
