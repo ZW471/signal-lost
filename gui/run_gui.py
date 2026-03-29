@@ -11,11 +11,38 @@ Usage:
 """
 
 import argparse
+import os
+import subprocess
+import sys
 import threading
 import time
 import webbrowser
 
 import uvicorn
+
+
+def _ensure_music_assets():
+    """Check if music files exist; download from Google Drive if missing."""
+    gui_dir = os.path.dirname(os.path.abspath(__file__))
+    project_root = os.path.abspath(os.path.join(gui_dir, ".."))
+    music_dir = os.path.join(project_root, "assets", "music")
+    script_path = os.path.join(project_root, "scripts", "download_music.py")
+
+    if not os.path.isfile(script_path):
+        return  # No download script available
+
+    # Check if any music files are missing
+    expected = [
+        "Menu.mp3", "The Sprawl.mp3", "Neon Row.mp3", "The Undercroft.mp3",
+        "Sector7.mp3", "The Resonance .mp3", "Chrome Heights.mp3", "The Spire.mp3",
+    ]
+    missing = [f for f in expected if not os.path.isfile(os.path.join(music_dir, f))]
+
+    if not missing:
+        return  # All files present
+
+    print(f"\n  Music assets missing ({len(missing)} files). Downloading...")
+    subprocess.run([sys.executable, script_path], check=False)
 
 
 def main():
@@ -24,6 +51,8 @@ def main():
     parser.add_argument("--port", type=int, default=8765, help="Port to bind to (default: 8765)")
     parser.add_argument("--no-open", action="store_true", help="Don't auto-open browser")
     args = parser.parse_args()
+
+    _ensure_music_assets()
 
     url = f"http://{args.host}:{args.port}"
 
