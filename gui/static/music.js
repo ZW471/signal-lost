@@ -25,18 +25,18 @@ const MusicEngine = (() => {
     'Sector 7':        '/assets/music/Sector7.mp3',
     'The Resonance':   '/assets/music/The%20Resonance%20.mp3',
     'Chrome Heights':  '/assets/music/Chrome%20Heights.mp3',
+    'The Spire':       '/assets/music/The%20Spire.mp3',
   };
 
   // Aliases for Chinese district names
   const ALIASES = {
-    '\u8513\u57CE':       'The Sprawl',
-    '\u9713\u8679\u8857': 'Neon Row',
-    '\u5E95\u6E0A':       'The Undercroft',
-    '\u7B2C\u4E03\u533A': 'Sector 7',
-    '\u5171\u9E23\u6240': 'The Resonance',
-    '\u5C16\u5854':       'Chrome Heights',
-    'The Spire':          'Chrome Heights',
-    '\u9540\u91D1\u53F0': 'Chrome Heights',
+    '\u8513\u57CE':       'The Sprawl',      // 蔓城
+    '\u9713\u8679\u8857': 'Neon Row',        // 霓虹街
+    '\u5E95\u6E0A':       'The Undercroft',   // 底渊
+    '\u7B2C\u4E03\u533A': 'Sector 7',        // 第七区
+    '\u5171\u9E23\u6240': 'The Resonance',    // 共鸣所
+    '\u5C16\u5854':       'The Spire',        // 尖塔
+    '\u9540\u91D1\u53F0': 'Chrome Heights',   // 镀金台
   };
 
   // Audio element cache

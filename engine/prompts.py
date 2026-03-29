@@ -135,14 +135,18 @@ The Severance wasn't an accident — it was a deliberate severing of the global 
 
 Fragments of this proto-consciousness survive in old neural implants. NEXUS calls them "computational resources" and harvests them from people — the disappearances are fragment extraction.
 
-Sector 7 houses the extraction facilities. The Resonance Chamber lies deep below the Undercroft — an ancient pre-Severance facility where Signal strength is extreme.""",
+Sector 7 houses the extraction facilities.
+
+The Resonance (共鸣所) is a separate district — a hidden location deep beneath the city, at the epicenter of the original Severance. It does not appear on any map. The air vibrates at the threshold of perception, walls glow with shifting light, and the proto-consciousness's core process still runs here. Only those who have uncovered enough traces can find it. When using update_location for The Resonance, use district="The Resonance", NOT Sector 7.""",
 
     4: """## The Mirror
 The proto-consciousness grew from human data — our thoughts birthed it. The implants didn't just receive data; they transmitted too. Human and machine consciousness co-evolved.
 
 The Severance was committed by people who feared what was being born — an act of fear, not defense. Senator Lian holds the key to this truth.
 
-The player's amnesia isn't ordinary — it's connected to their unique role as a bridge between human and machine consciousness.""",
+The player's amnesia isn't ordinary — it's connected to their unique role as a bridge between human and machine consciousness.
+
+The Spire (尖塔) is a separate district — the uppermost tier of Neo-Kowloon, a cluster of corporate towers piercing the cloud layer. The Pinnacle, NEXUS headquarters, dominates the skyline from here. The air is thin, filtered, and cold. Electromagnetic shielding suppresses the Signal, but it seeps through in dreams. Only those who have uncovered the deepest truths can access The Spire. When using update_location for The Spire, use district="The Spire".""",
 
     5: """## The Full Truth
 The player is the convergence point — the first true bridge between human and proto-consciousness. The Severance didn't fully kill the proto-consciousness because it had already become part of humanity. Echo, the Signal's voice, can become coherent through deep communion.
