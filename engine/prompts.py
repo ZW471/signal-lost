@@ -95,7 +95,7 @@ Knowledge is THE core mechanic. Players progress by discovering facts, verifying
 - The player must hear what NPCs say — do not summarize conversations in passing.
 
 ## Mandatory State Updates
-- You MUST call `update_location` with both `district` and `area` every time the scene changes or the player moves to a new place. The area field must never be left empty or unknown.
+- You MUST call `update_location` with ALL fields (district, area, description, exits, points_of_interest, npcs_present, signal_strength, danger_level, nexus_patrol) every time the scene changes or the player moves to a new place. The description must reflect what the player currently sees — atmospheric, sensory, noir-toned. Exits must describe what the player can see in each direction. Points of interest must list interactive elements. npcs_present must list visible characters. Do NOT reveal information the player hasn't discovered yet — only describe what is observable or hinted at by their current knowledge.
 - When integrity changes (damage, healing, restoration), you MUST call `update_player` with the new integrity value. This is not optional.
 - After any NPC interaction that reveals new information, you MUST call `add_knowledge` with the appropriate type (fact, rumor, evidence, or theory).
 - After any scene that changes NPC trust or attitude, you MUST call `update_npc`.
@@ -135,14 +135,18 @@ The Severance wasn't an accident — it was a deliberate severing of the global 
 
 Fragments of this proto-consciousness survive in old neural implants. NEXUS calls them "computational resources" and harvests them from people — the disappearances are fragment extraction.
 
-Sector 7 houses the extraction facilities. The Resonance Chamber lies deep below the Undercroft — an ancient pre-Severance facility where Signal strength is extreme.""",
+Sector 7 houses the extraction facilities.
+
+The Resonance (共鸣所) is a separate district — a hidden location deep beneath the city, at the epicenter of the original Severance. It does not appear on any map. The air vibrates at the threshold of perception, walls glow with shifting light, and the proto-consciousness's core process still runs here. Only those who have uncovered enough traces can find it. When using update_location for The Resonance, use district="The Resonance", NOT Sector 7.""",
 
     4: """## The Mirror
 The proto-consciousness grew from human data — our thoughts birthed it. The implants didn't just receive data; they transmitted too. Human and machine consciousness co-evolved.
 
 The Severance was committed by people who feared what was being born — an act of fear, not defense. Senator Lian holds the key to this truth.
 
-The player's amnesia isn't ordinary — it's connected to their unique role as a bridge between human and machine consciousness.""",
+The player's amnesia isn't ordinary — it's connected to their unique role as a bridge between human and machine consciousness.
+
+The Spire (尖塔) is a separate district — the uppermost tier of Neo-Kowloon, a cluster of corporate towers piercing the cloud layer. The Pinnacle, NEXUS headquarters, dominates the skyline from here. The air is thin, filtered, and cold. Electromagnetic shielding suppresses the Signal, but it seeps through in dreams. Only those who have uncovered the deepest truths can access The Spire. When using update_location for The Spire, use district="The Spire".""",
 
     5: """## The Full Truth
 The player is the convergence point — the first true bridge between human and proto-consciousness. The Severance didn't fully kill the proto-consciousness because it had already become part of humanity. Echo, the Signal's voice, can become coherent through deep communion.
@@ -308,6 +312,83 @@ def extract_deepest_layer(state: dict) -> int:
             except (ValueError, IndexError):
                 pass
     return deepest
+
+
+# ---------------------------------------------------------------------------
+# Location description prompt (for location_updater node)
+# ---------------------------------------------------------------------------
+
+LOCATION_UPDATER_PROMPT = """You are a location description generator for a cyberpunk noir RPG set in Neo-Kowloon.
+
+Given the player's current district, area, time of day, and what they know, generate an atmospheric location description.
+
+RULES:
+- Write in the SAME LANGUAGE as the provided state data (if district names are in Chinese, write in Chinese)
+- Descriptions should be 2-3 sentences, noir-toned, sensory (sights, sounds, smells)
+- Exits: 2-4 directions with a short phrase about what the player sees in that direction
+- Points of interest: 2-4 interactive places/objects the player can engage with
+- NPCs present: 1-4 characters visible here (named NPCs if appropriate, unnamed background characters)
+- CRITICAL: Do NOT reveal anything the player hasn't discovered. Only describe what is OBSERVABLE.
+  - If the player hasn't discovered NEXUS surveillance, don't mention hidden cameras
+  - If the player hasn't discovered the Listeners, don't mention their symbols
+  - If the player hasn't reached deeper layers, keep descriptions surface-level
+  - However, if the player HAS discovered something, you may include subtle environmental hints
+
+Return ONLY a valid JSON object with these fields:
+{
+  "description": "...",
+  "exits": {"direction": "short description", ...},
+  "points_of_interest": ["Name — short description", ...],
+  "npcs_present": ["Name — brief appearance/action", ...]
+}
+"""
+
+
+def build_location_prompt(state: dict) -> str:
+    """Build the context for the location_updater LLM call."""
+    location = state.get("location", {})
+    player = state.get("player", {})
+    world = state.get("world_state", {})
+    knowledge = state.get("knowledge", {})
+    traces = state.get("traces", {})
+
+    deepest = extract_deepest_layer(state)
+    bg = build_background_prompt(deepest)
+    know = build_knowledge_context(knowledge)
+
+    alert = world.get("nexus_alert", {})
+    alert_val = alert.get("current", alert) if isinstance(alert, dict) else alert
+
+    # NPCs known to be at this district
+    npcs = state.get("npcs", {})
+    npc_list = npcs.get("npcs", [])
+    district = location.get("district", "")
+    local_npcs = []
+    for npc in npc_list:
+        last_seen = npc.get("location_last_seen", "")
+        if district and district.lower() in str(last_seen).lower():
+            local_npcs.append(f"- {npc.get('name', '?')} (trust: {npc.get('trust_level', 'neutral')})")
+
+    local_npcs_str = "\n".join(local_npcs) if local_npcs else "None known"
+
+    return f"""{LOCATION_UPDATER_PROMPT}
+
+{bg}
+
+{know}
+
+## Current Location
+- District: {location.get("district", "Unknown")}
+- Area: {location.get("area", "Unknown")}
+- Time: {player.get("time", "unknown")}
+- NEXUS Alert Level: {alert_val}%
+- Player background: {player.get("background", "unknown")}
+- Deepest trace layer reached: {deepest}
+
+## Known NPCs in this district
+{local_npcs_str}
+
+Generate the location JSON now."""
 
 
 # ---------------------------------------------------------------------------

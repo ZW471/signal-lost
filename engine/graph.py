@@ -3,8 +3,8 @@ Signal Lost — LangGraph StateGraph
 
 The game engine as a LangGraph state machine.
 
-Flow: input_gate → resolver (LLM + tools) → state_writer → world_ticker
-      → trace_checker → consequence → [END or loop back]
+Flow: input_gate → resolver (LLM + tools) → state_writer → location_updater
+      → world_ticker → trace_checker → consequence → [END or loop back]
 """
 
 from __future__ import annotations
@@ -28,7 +28,7 @@ from engine.game_data import (
     _trace_discovered,
     _count_discovered_traces,
 )
-from engine.prompts import build_static_prompt, build_dynamic_state_prompt, extract_deepest_layer
+from engine.prompts import build_static_prompt, build_dynamic_state_prompt, extract_deepest_layer, build_location_prompt
 from engine.reducer import reduce_turn_messages, trim_to_window
 
 
@@ -807,6 +807,88 @@ def state_writer(state: GameState) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Node: location_updater
+# LLM node. Regenerates location description/exits/POIs/NPCs when the
+# player moves. Conditioned on player knowledge and trace depth.
+# Non-fatal — if this fails the game continues with stale descriptions.
+# ---------------------------------------------------------------------------
+
+def _location_changed_this_turn(state: GameState) -> bool:
+    """Check if the resolver called update_location this turn."""
+    current_msgs = _current_turn_messages(state["messages"])
+    for msg in current_msgs:
+        if not isinstance(msg, ToolMessage):
+            continue
+        try:
+            result = json.loads(msg.content) if isinstance(msg.content, str) else msg.content
+        except (json.JSONDecodeError, TypeError):
+            continue
+        if isinstance(result, dict) and result.get("type") == "update_location":
+            return True
+    return False
+
+
+def location_updater(state: GameState) -> dict:
+    """Regenerate location descriptions when the player moves.
+
+    Calls the LLM with a focused prompt to generate description, exits,
+    points_of_interest, and npcs_present based on the player's current
+    knowledge and trace depth. Only runs when update_location was called
+    this turn.
+    """
+    # Only regenerate if location actually changed this turn
+    if not _location_changed_this_turn(state):
+        return {}
+
+    location = copy.deepcopy(state["location"])
+    session_dir = state["session_dir"]
+
+    # Build the prompt with knowledge context
+    prompt_text = build_location_prompt(state)
+
+    language = _read_language_setting(session_dir)
+    if language == "zh":
+        prompt_text += (
+            "\n\n## LANGUAGE\n所有输出必须使用简体中文。"
+            "地区名可用英文或中文均可，但description、exits、"
+            "points_of_interest、npcs_present内容必须是中文。"
+        )
+
+    llm = get_llm()
+    try:
+        response = llm.invoke([
+            SystemMessage(content=prompt_text),
+            HumanMessage(content=f"Generate location details for: "
+                         f"{location.get('district', '?')} — {location.get('area', '?')}"),
+        ])
+        raw = response.content.strip()
+
+        # Strip thinking tags from local models
+        if "<think>" in raw:
+            raw = _strip_thinking(raw)
+
+        # Strip markdown fences
+        if "```" in raw:
+            raw = re.sub(r"```(?:json)?\s*", "", raw).replace("```", "").strip()
+
+        data = json.loads(raw)
+
+        # Merge only the descriptive fields — don't overwrite district/area
+        for key in ("description", "exits", "points_of_interest", "npcs_present"):
+            if key in data:
+                location[key] = data[key]
+
+        # Persist to disk
+        save_session_file(session_dir, "location.json", location)
+
+        return {"location": location}
+
+    except Exception:
+        # Non-fatal — game continues with existing descriptions
+        return {}
+
+
+# ---------------------------------------------------------------------------
 # Node: world_ticker
 # Pure Python. Advances turn, time, alert decay, fragment decay.
 # ---------------------------------------------------------------------------
@@ -1183,6 +1265,7 @@ def build_graph() -> StateGraph:
     graph.add_node("tool_executor", tool_executor)
     graph.add_node("output_language_checker", output_language_checker)
     graph.add_node("state_writer", state_writer)
+    graph.add_node("location_updater", location_updater)
     graph.add_node("world_ticker", world_ticker)
     graph.add_node("world_simulator", world_simulator)
     graph.add_node("trace_checker", trace_checker)
@@ -1221,8 +1304,9 @@ def build_graph() -> StateGraph:
         {"resolver": "resolver", "state_writer": "state_writer"},
     )
 
-    # state_writer → world_ticker → world_simulator → trace_checker → consequence
-    graph.add_edge("state_writer", "world_ticker")
+    # state_writer → location_updater → world_ticker → world_simulator → trace_checker → consequence
+    graph.add_edge("state_writer", "location_updater")
+    graph.add_edge("location_updater", "world_ticker")
     graph.add_edge("world_ticker", "world_simulator")
     graph.add_edge("world_simulator", "trace_checker")
     graph.add_edge("trace_checker", "consequence")
