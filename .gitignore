@@ -5,6 +5,7 @@
 /saves
 __pycache__
 .claude
+/assets/music/*.mp3
 tests/reviews/*.json
 tests/reviews/*.md
 !tests/reviews/.gitkeep
