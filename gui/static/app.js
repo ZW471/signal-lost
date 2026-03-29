@@ -1192,8 +1192,10 @@ function updateAllPanels(session) {
   updateConversationPanel(session.conversation);
   // Cache usage data for settings display
   if (session.usage) _cachedUsage = session.usage;
-  // Update background music based on current district
-  MusicEngine.updateFromSession(session);
+  // Update background music based on current district (only while in-game)
+  if (document.getElementById('gameScreen').classList.contains('active')) {
+    MusicEngine.updateFromSession(session);
+  }
 }
 
 // ---------- STATUS BAR (matches TUI StatusBar) ----------
