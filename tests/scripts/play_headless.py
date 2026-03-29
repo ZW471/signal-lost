@@ -24,7 +24,7 @@ from langchain_core.messages import HumanMessage
 
 from engine.graph import compile_graph, set_llm
 from engine.state import create_new_session, initial_state
-from engine.llm_factory import create_llm, load_env, load_provider_config, SETTINGS_DIR
+from engine.llm_factory import create_llm, default_model_for, load_env, load_provider_config, SETTINGS_DIR
 
 # --- Bootstrap ---
 load_env()
@@ -37,7 +37,7 @@ LOG_FILE = os.path.join(_GAME_ROOT, "logs", "headless_playthrough.md")
 # Load provider config
 provider_cfg = load_provider_config()
 PROVIDER = provider_cfg.get("provider", "openai")
-MODEL = provider_cfg.get("model", "gpt-5.4")
+MODEL = provider_cfg.get("model", default_model_for(PROVIDER))
 TEMPERATURE = provider_cfg.get("temperature", 0.7)
 
 

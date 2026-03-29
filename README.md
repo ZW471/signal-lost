@@ -92,6 +92,24 @@ This project uses [uv](https://docs.astral.sh/uv/) as its package manager. Insta
 uv sync
 ```
 
+**LLM Provider** — You need at least one of the following:
+
+- **Anthropic** — Get an API key at https://console.anthropic.com and set `ANTHROPIC_API_KEY` in `.env`.
+- **OpenAI** — Get an API key at https://platform.openai.com/api-keys and set `OPENAI_API_KEY` in `.env`.
+- **Local LLM** — Run a local model via LM Studio, Ollama, or vLLM to avoid API costs entirely. Set `"provider": "local"` in `settings/provider.json`.
+- **Claude Code** — Use the Claude Code CLI as the LLM backend (no API key needed). Set `"provider": "claude-code"` in `settings/provider.json`. Great for saving cost!
+
+Configure your chosen provider in `settings/provider.json`:
+```json
+{
+  "provider": "anthropic",
+  "model": "claude-sonnet-4-6-20250514",
+  "temperature": 0.7
+}
+```
+
+**Optional: LangSmith** — To track token usage, cost, and detailed agentic workflow traces, set `LANGCHAIN_API_KEY` in `.env`. Entirely optional but useful for debugging and monitoring. Sign up at https://smith.langchain.com.
+
 ---
 
 ## The Signal is waiting. Will you listen?

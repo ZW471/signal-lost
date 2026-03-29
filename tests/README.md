@@ -2,6 +2,26 @@
 
 Agentic testing framework for the Signal Lost game engine.
 
+## Prerequisites
+
+**LLM provider** — You need at least one of the following to run LLM-powered tests:
+
+- **Anthropic** — Obtain an API key at https://console.anthropic.com and set it in `.env` as `ANTHROPIC_API_KEY`.
+- **OpenAI** — Obtain an API key at https://platform.openai.com/api-keys and set it in `.env` as `OPENAI_API_KEY`.
+- **Local LLM** — Run a local model via LM Studio, Ollama, or vLLM to avoid API costs entirely. Set `"provider": "local"` in `settings/provider.json`.
+- **Claude Code** — Use the Claude Code CLI as the LLM backend (no API key needed, uses your Claude Code session). Set `"provider": "claude-code"` in `settings/provider.json`. Great for saving cost!
+
+Configure your chosen provider in `settings/provider.json`:
+```json
+{
+  "provider": "anthropic",
+  "model": "claude-sonnet-4-6-20250514",
+  "temperature": 0.7
+}
+```
+
+**Optional: LangSmith** — To track token usage, cost, and detailed agentic workflow traces, set a LangSmith API key in `.env` as `LANGCHAIN_API_KEY`. This is entirely optional but useful for debugging and monitoring. Sign up at https://smith.langchain.com.
+
 ## Directory Structure
 
 ```

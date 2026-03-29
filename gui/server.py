@@ -40,6 +40,7 @@ from engine.state import (
 )
 from engine.llm_factory import (
     create_llm,
+    default_model_for,
     load_env,
     load_settings,
     load_provider_config,
@@ -232,7 +233,7 @@ async def websocket_endpoint(ws: WebSocket):
                 provider_cfg = msg.get("provider", {})
 
                 provider = provider_cfg.get("provider", "openai")
-                model = provider_cfg.get("model", "gpt-4o")
+                model = provider_cfg.get("model", default_model_for(provider))
                 temperature = provider_cfg.get("temperature", 0.7)
 
                 api_key = provider_cfg.get("api_key")
@@ -303,7 +304,7 @@ async def websocket_endpoint(ws: WebSocket):
 
                 provider_cfg = msg.get("provider", load_provider_config())
                 provider = provider_cfg.get("provider", "openai")
-                model = provider_cfg.get("model", "gpt-4o")
+                model = provider_cfg.get("model", default_model_for(provider))
                 temperature = provider_cfg.get("temperature", 0.7)
 
                 api_key = provider_cfg.get("api_key")
@@ -346,7 +347,7 @@ async def websocket_endpoint(ws: WebSocket):
 
                 provider_cfg = msg.get("provider", load_provider_config())
                 provider = provider_cfg.get("provider", "openai")
-                model = provider_cfg.get("model", "gpt-4o")
+                model = provider_cfg.get("model", default_model_for(provider))
                 temperature = provider_cfg.get("temperature", 0.7)
 
                 api_key = provider_cfg.get("api_key")
@@ -414,7 +415,7 @@ async def websocket_endpoint(ws: WebSocket):
                 os.makedirs(SETTINGS_DIR, exist_ok=True)
                 cfg_to_save = {
                     "provider": provider_cfg.get("provider", "openai"),
-                    "model": provider_cfg.get("model", "gpt-4o"),
+                    "model": provider_cfg.get("model", default_model_for(provider_cfg.get("provider", "openai"))),
                     "temperature": provider_cfg.get("temperature", 0.7),
                 }
                 if provider_cfg.get("base_url"):

@@ -22,7 +22,7 @@ if _GAME_ROOT not in sys.path:
 from langchain_core.messages import HumanMessage
 from engine.graph import compile_graph, set_llm
 from engine.state import create_new_session, initial_state
-from engine.llm_factory import create_llm, load_env, load_provider_config
+from engine.llm_factory import create_llm, default_model_for, load_env, load_provider_config
 
 load_env()
 
@@ -236,7 +236,7 @@ def run_session(session_idx: int, session_cfg: dict, provider: str, model: str, 
 def main():
     provider_cfg = load_provider_config()
     provider = provider_cfg.get("provider", "openai")
-    model = provider_cfg.get("model", "gpt-5.4")
+    model = provider_cfg.get("model", default_model_for(provider))
     temperature = provider_cfg.get("temperature", 0.7)
 
     print(f"=== Signal Lost — 12 Session Runner ===")

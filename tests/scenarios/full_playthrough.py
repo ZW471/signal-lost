@@ -26,7 +26,7 @@ from langchain_core.messages import HumanMessage
 
 from engine.graph import compile_graph, set_llm
 from engine.state import create_new_session, initial_state
-from engine.llm_factory import create_llm, load_env, load_provider_config, SETTINGS_DIR
+from engine.llm_factory import create_llm, default_model_for, load_env, load_provider_config, SETTINGS_DIR
 
 # Default action sequence for reproducible testing
 DEFAULT_ACTIONS = [
@@ -58,7 +58,7 @@ def run_playthrough(max_turns: int, actions: list[str]) -> dict:
     load_env()
     provider_cfg = load_provider_config()
     provider = provider_cfg.get("provider", "openai")
-    model = provider_cfg.get("model", "gpt-4o")
+    model = provider_cfg.get("model", default_model_for(provider))
     temperature = provider_cfg.get("temperature", 0.7)
 
     llm = create_llm(provider, model, temperature=temperature)

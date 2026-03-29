@@ -858,10 +858,25 @@ function _updateUsageStats() {
   </div>`;
 }
 
+const DEFAULT_MODELS = {
+  anthropic: 'claude-sonnet-4-6-20250514',
+  'claude-code': 'sonnet',
+  openai: 'gpt-5.4',
+  local: '[model]',
+  lmstudio: '[model]',
+};
+
 function onProviderChange() {
   const p = document.getElementById('selectProvider').value;
   document.getElementById('apiKeyGroup').style.display = (p === 'local' || p === 'claude-code') ? 'none' : '';
   document.getElementById('baseUrlGroup').style.display = p === 'local' ? '' : 'none';
+  // Update model field to the provider's default
+  const modelInput = document.getElementById('inputModel');
+  const current = modelInput.value.trim();
+  const allDefaults = Object.values(DEFAULT_MODELS);
+  if (!current || allDefaults.includes(current)) {
+    modelInput.value = DEFAULT_MODELS[p] || '';
+  }
 }
 
 document.getElementById('inputTemp').addEventListener('input', function() {
@@ -870,7 +885,7 @@ document.getElementById('inputTemp').addEventListener('input', function() {
 
 function getProviderConfig() {
   const provider = document.getElementById('selectProvider').value;
-  const config = { provider, model: document.getElementById('inputModel').value || 'gpt-4o',
+  const config = { provider, model: document.getElementById('inputModel').value || DEFAULT_MODELS[provider] || 'gpt-5.4',
     temperature: parseFloat(document.getElementById('inputTemp').value) };
   if (provider === 'local') config.base_url = document.getElementById('inputBaseUrl').value;
   else { const k = document.getElementById('inputApiKey').value; if (k) config.api_key = k; }

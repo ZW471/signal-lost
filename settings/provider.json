@@ -1,5 +1,5 @@
 {
   "provider": "claude-code",
-  "model": "opus",
+  "model": "sonnet",
   "temperature": 0.7
 }

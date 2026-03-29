@@ -95,6 +95,21 @@ def load_provider_config(settings_dir: str | None = None) -> dict:
     return _read_json(os.path.join(sd, "provider.json"))
 
 
+# Default model per provider — used when provider.json omits "model".
+DEFAULT_MODELS: dict[str, str] = {
+    "anthropic": "claude-sonnet-4-6-20250514",
+    "claude-code": "sonnet",
+    "openai": "gpt-5.4",
+    "local": "[model]",
+    "lmstudio": "[model]",
+}
+
+
+def default_model_for(provider: str) -> str:
+    """Return the default model name for *provider*."""
+    return DEFAULT_MODELS.get(provider, "gpt-5.4")
+
+
 # ---------------------------------------------------------------------------
 # LLM creation
 # ---------------------------------------------------------------------------
