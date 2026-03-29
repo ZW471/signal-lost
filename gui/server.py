@@ -58,6 +58,7 @@ load_env()
 SESSION_DIR = os.path.join(GAME_ROOT, "session")
 SAVES_DIR = os.path.join(GAME_ROOT, "saves")
 STATIC_DIR = os.path.join(_GUI_DIR, "static")
+ASSETS_DIR = os.path.join(GAME_ROOT, "assets")
 
 
 def _get_langsmith_status() -> dict:
@@ -92,6 +93,8 @@ def _apply_langsmith(cfg: dict):
 
 app = FastAPI(title="Signal Lost")
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+if os.path.isdir(ASSETS_DIR):
+    app.mount("/assets", StaticFiles(directory=ASSETS_DIR), name="assets")
 
 # ---------------------------------------------------------------------------
 # Game engine state (per-server singleton for now)

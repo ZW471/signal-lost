@@ -1614,5 +1614,6 @@ window.addEventListener('load', () => { runBootSequence(); });
 // Start music on first user interaction (browsers require gesture for AudioContext)
 document.addEventListener('click', function _initMusic() {
   MusicEngine.playMenu();
+  MusicEngine.preloadAll();
   document.removeEventListener('click', _initMusic);
 }, { once: true });
