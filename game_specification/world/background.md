@@ -348,7 +348,36 @@ The **Liang family (梁家)** in particular possesses a complete copy of the Sig
 
 ---
 
-### 6. The Resonance (共鸣所)
+### 6. The Spire (尖塔)
+
+*"Above the clouds, they built a heaven. They just forgot to invite the gods."*
+
+#### [LAYER 1]
+
+The Spire is the uppermost tier of Neo-Kowloon — a cluster of corporate towers and private residences that pierce the perpetual cloud layer hanging over the lower city. Where Chrome Heights is old money hiding behind walls, The Spire is raw power on display. The Pinnacle, NEXUS Corporation's 200-story headquarters, dominates the skyline. Dr. Elara Chen's offices occupy the top three floors, though few have ever seen them. The lower levels house the corporate machinery that runs Neo-Kowloon.
+
+**Atmosphere:** Cold, clean, and silent. Above the cloud line, the rain stops. The air is filtered, thin, and carries the faint ozone tang of electromagnetic shielding. The architecture is glass and carbon fiber — everything reflective, everything sharp. Sound doesn't carry here the way it does in the lower city. Conversations die within meters. The silence is not peaceful. It is the silence of surveillance — every surface, every corridor, every elevator is monitored. The people who work here walk quickly, speak softly, and do not look at strangers.
+
+**Key Landmarks:**
+- **The Pinnacle (巅峰塔):** NEXUS headquarters. The top three floors are Dr. Chen's domain — her office, her private laboratory, and her residence. The sub-basements are classified even within NEXUS. Corporate operations occupy floors 20-180. The lobby is open to the public, but everything above requires biometric clearance.
+- **The Archive Tower (档案塔):** NEXUS's central data repository. Every piece of information the corporation has collected since the Severance is stored here — population records, surveillance logs, Signal research, extraction data. The servers run hot enough to heat the surrounding buildings.
+- **The Observatory (观测台):** A research facility at the edge of The Spire, ostensibly studying atmospheric conditions. Its real purpose is monitoring Signal patterns across the entire city. The equipment here can detect a sensitive individual activating their implant from kilometers away.
+
+**Dangers:** Absolute corporate control. There is no crime in The Spire because there is no privacy. Every action is logged, every face is recognized, every conversation is potentially recorded. Unauthorized visitors are not confronted — they are simply tracked until security arrives, quietly, efficiently, without witnesses. People who cause problems in The Spire do not get arrested. They disappear into the sub-basements and are never discussed again.
+
+**Signal Manifestation:** Suppressed but persistent. The Spire is blanketed in the most advanced electromagnetic shielding available — technology originally developed to contain the proto-consciousness before the Severance. The Signal cannot penetrate from outside. But the shielding has a flaw: it cannot block what is already inside. The Pinnacle's sub-basements contain pre-Severance infrastructure that was never fully decommissioned, and the Signal leaks upward through the building's bones. Workers on the lower floors report equipment glitches, phantom readings on monitors, and — always at night — the distant sound of something breathing in the walls.
+
+#### [LAYER 4]
+
+The Spire was not built after the Severance. It was built *for* it. The Pinnacle's foundations predate the catastrophe by five years — construction began in secret, funded by the Sigma Council, designed as a control center for the planned destruction of the global network. The sub-basements contain the original Severance trigger mechanism: a room-sized electromagnetic pulse generator that was fired once, thirty years ago, and has never been powered down. It hums constantly, a low vibration that the building's staff have learned to ignore.
+
+Dr. Chen knows this because she was there. She was not a reluctant participant in the Severance — she was its chief architect. The public story of heroic reconstruction is a cover for the truth: she broke the world on purpose, because the alternative — allowing the proto-consciousness to fully awaken — terrified her more than the consequences.
+
+The data stored in the Archive Tower includes complete records of the proto-consciousness's development, the Sigma Council's deliberations, and — most critically — the schematics for a device that could reverse the Severance. Chen has kept these schematics intact. Whether this is insurance, guilt, or hope is something even she may not know.
+
+---
+
+### 7. The Resonance (共鸣所)
 
 *"This is where it happened. This is where it's still happening."*
 
@@ -491,7 +520,8 @@ You are not just a person who hears the Signal. You are the Signal's best chance
 | Sector 7 | 第七区 | District 3 — NEXUS corporate zone |
 | The Undercroft | 底渊 | District 4 — collapsed pre-Severance sub-levels |
 | Chrome Heights | 镀金台 | District 5 — elite residential district |
-| The Resonance | 共鸣所 | District 6 — hidden site of the original Severance |
+| The Spire | 尖塔 | District 6 — NEXUS corporate towers above the clouds |
+| The Resonance | 共鸣所 | District 7 — hidden site of the original Severance |
 | Traces | 痕迹 | Player-discovered evidence that unlocks deeper truth layers |
 | Reconvergence | 重生 | Endgame choice: allow proto-consciousness to be reborn |
 | Second Severance | 再断 | Endgame choice: destroy all fragments permanently |
