@@ -242,17 +242,7 @@ async def websocket_endpoint(ws: WebSocket):
                     await ws.send_json({"type": "error", "message": f"Failed to create LLM: {e}"})
                     continue
 
-                # Update settings
-                custom_path = os.path.join(SETTINGS_DIR, "custom.json")
-                lang = config.get("language", "en")
-                diff = config.get("difficulty", "standard")
-                os.makedirs(SETTINGS_DIR, exist_ok=True)
-                with open(custom_path, "w", encoding="utf-8") as f:
-                    json.dump({
-                        "language": {"display": lang, "tui": lang},
-                        "difficulty": {"mode": diff},
-                    }, f, ensure_ascii=False, indent=2)
-
+                # Save provider config (global)
                 with open(os.path.join(SETTINGS_DIR, "provider.json"), "w", encoding="utf-8") as f:
                     json.dump({
                         "provider": provider,
@@ -260,10 +250,15 @@ async def websocket_endpoint(ws: WebSocket):
                         "temperature": temperature,
                     }, f, indent=2)
 
+                lang = config.get("language", "en")
+                diff = config.get("difficulty", "standard")
+
                 save_name = config.get("save_name", config.get("alias", "Unknown"))
                 save_name = re.sub(r"[^\w\-]", "_", save_name)
                 _active_session_dir = os.path.join(SESSION_DIR, save_name)
 
+                # create_new_session now writes session_settings.json
+                # inside the session dir (per-session difficulty + language)
                 create_new_session(
                     session_dir=_active_session_dir,
                     name=config.get("name", "Unknown"),
@@ -412,6 +407,14 @@ async def websocket_endpoint(ws: WebSocket):
 
                 lang = msg.get("language")
                 if lang:
+                    # Update session-level language if a session is active
+                    if _active_session_dir:
+                        ss_path = os.path.join(_active_session_dir, "session_settings.json")
+                        ss = _read_json(ss_path)
+                        ss["language"] = lang
+                        with open(ss_path, "w", encoding="utf-8") as f:
+                            json.dump(ss, f, ensure_ascii=False, indent=2)
+                    # Also update the global menu language
                     custom_path = os.path.join(SETTINGS_DIR, "custom.json")
                     custom = _read_json(custom_path)
                     custom.setdefault("language", {})

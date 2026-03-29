@@ -563,6 +563,12 @@ def create_new_session(
         ],
     })
 
+    # session_settings.json — per-session difficulty + language
+    _write_json(os.path.join(session_dir, "session_settings.json"), {
+        "difficulty": difficulty,
+        "language": language,
+    })
+
     # conversation.jsonl (empty)
     open(os.path.join(session_dir, "conversation.jsonl"), "w").close()
 

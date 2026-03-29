@@ -107,13 +107,8 @@ def main():
         language="en",
     )
 
-    # Update language setting
-    custom_path = os.path.join(SETTINGS_DIR, "custom.json")
-    with open(custom_path, "w", encoding="utf-8") as f:
-        json.dump({
-            "language": {"display": "en", "tui": "en"},
-            "difficulty": {"mode": "standard"}
-        }, f, ensure_ascii=False, indent=2)
+    # Session settings are now written by create_new_session into the session dir
+    # No need to update global custom.json for per-session settings
 
     # Compile graph and load state
     graph = compile_graph()

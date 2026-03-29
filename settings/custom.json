@@ -2,8 +2,5 @@
   "language": {
     "display": "zh",
     "tui": "zh"
-  },
-  "difficulty": {
-    "mode": "standard"
   }
 }

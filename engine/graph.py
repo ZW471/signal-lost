@@ -61,30 +61,40 @@ def set_llm(llm):
 # ---------------------------------------------------------------------------
 
 def _read_language_setting(session_dir: str) -> str:
-    """Read language from settings/custom.json, falling back to 'en'.
+    """Read language from the session's own session_settings.json.
 
-    *session_dir* may be ``<game_root>/session`` (legacy) or
-    ``<game_root>/session/<save_name>`` (multi-session).  Walk upwards
-    until we find a sibling ``settings/`` directory.
+    Falls back to the global settings/custom.json (menu language), then 'en'.
     """
     import os as _os
+    import json as _json
+
+    # 1) Per-session setting (preferred)
+    session_settings_path = _os.path.join(session_dir, "session_settings.json")
+    if _os.path.isfile(session_settings_path):
+        try:
+            with open(session_settings_path, "r", encoding="utf-8") as f:
+                data = _json.load(f)
+            lang = data.get("language")
+            if lang:
+                return lang
+        except (FileNotFoundError, _json.JSONDecodeError, OSError):
+            pass
+
+    # 2) Fallback: global custom.json (for legacy sessions)
     cur = _os.path.abspath(session_dir)
-    custom_path = None
-    for _ in range(4):  # safety limit
+    for _ in range(4):
         candidate = _os.path.join(_os.path.dirname(cur), "settings", "custom.json")
         if _os.path.isfile(candidate):
-            custom_path = candidate
+            try:
+                with open(candidate, "r", encoding="utf-8") as f:
+                    settings = _json.load(f)
+                return settings.get("language", {}).get("display", "en")
+            except (FileNotFoundError, _json.JSONDecodeError, OSError):
+                pass
             break
         cur = _os.path.dirname(cur)
-    if custom_path is None:
-        return "en"
-    try:
-        with open(custom_path, "r", encoding="utf-8") as f:
-            import json as _json
-            settings = _json.load(f)
-        return settings.get("language", {}).get("display", "en")
-    except (FileNotFoundError, json.JSONDecodeError, OSError):
-        return "en"
+
+    return "en"
 
 
 def input_gate(state: GameState) -> dict:
@@ -819,7 +829,7 @@ def world_ticker(state: GameState) -> dict:
 
     # Advance time every TURNS_PER_PERIOD turns
     if turn % TURNS_PER_PERIOD == 0:
-        from game_data import TIME_PERIODS_ZH
+        from engine.game_data import TIME_PERIODS_ZH
         language = _read_language_setting(session_dir)
         current_time = player.get("time", "Morning")
         # Match against both EN and ZH time periods to find current index
@@ -1091,7 +1101,7 @@ def trace_checker(state: GameState) -> dict:
 
         try:
             if tc["check"](knowledge, traces, npcs, player, world_state):
-                from game_data import get_localized
+                from engine.game_data import get_localized
                 discovery = {
                     "id": trace_id,
                     "description": get_localized(tc, "description", language),

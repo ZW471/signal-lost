@@ -8,3 +8,4 @@ __pycache__
 tests/reviews/*.json
 tests/reviews/*.md
 !tests/reviews/.gitkeep
+/logs
