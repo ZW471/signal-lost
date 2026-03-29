@@ -1,23 +1,46 @@
 /* ================================================================
-   SIGNAL LOST — Procedural Ambient Music Engine
+   SIGNAL LOST — Background Music Engine
 
-   Uses Web Audio API to generate cyberpunk ambient soundscapes.
-   Each district has a unique generative composition.
-   Crossfades between tracks over 5 seconds.
+   Plays looping MP3 tracks for each district and the menu.
+   Crossfades between tracks over 5 seconds using Web Audio API.
    ================================================================ */
 
 const MusicEngine = (() => {
-  let ctx = null;         // AudioContext (lazy-init on user gesture)
-  let masterGain = null;  // Master volume node
-  let currentTrack = null;
-  let currentTrackName = null;
-  let _pendingTrack = null; // Track requested while ctx was suspended
-  let fadeDuration = 5;   // seconds
-  let volume = 0.35;      // default volume
+  let ctx = null;
+  let masterGain = null;
+  let currentTrack = null;   // { source, gain, name }
+  let fadeDuration = 5;      // seconds
+  let volume = 0.35;
   let muted = false;
+  let _pendingTrack = null;  // track requested before ctx is ready
+  const _bufferCache = {};   // name → AudioBuffer
+
+  // MP3 file mapping: track name → URL path
+  // Note: "The Resonance .mp3" has a trailing space in the filename
+  const TRACK_FILES = {
+    'menu':            '/assets/music/Menu.mp3',
+    'The Sprawl':      '/assets/music/The Sprawl.mp3',
+    'Neon Row':        '/assets/music/Neon Row.mp3',
+    'The Undercroft':  '/assets/music/The Undercroft.mp3',
+    'Sector 7':        '/assets/music/Sector7.mp3',
+    'The Resonance':   '/assets/music/The Resonance .mp3',
+    'Chrome Heights':  '/assets/music/Chrome Heights.mp3',
+  };
+
+  // District name aliases (Chinese names, etc.)
+  const ALIASES = {
+    '\u8513\u57CE':       'The Sprawl',      // 蔓城
+    '\u9713\u8679\u8857': 'Neon Row',        // 霓虹街
+    '\u5E95\u6E0A':       'The Undercroft',   // 底渊
+    '\u7B2C\u4E03\u533A': 'Sector 7',        // 第七区
+    '\u5171\u9E23\u6240': 'The Resonance',    // 共鸣所
+    '\u5C16\u5854':       'Chrome Heights',   // 尖塔 — The Spire maps to Chrome Heights music
+    'The Spire':          'Chrome Heights',
+    '\u9540\u91D1\u53F0': 'Chrome Heights',   // 镀金台
+  };
 
   // ---------------------------------------------------------------
-  // Lazy AudioContext init (browsers require user gesture)
+  // AudioContext (lazy init on user gesture)
   // ---------------------------------------------------------------
   function ensureContext() {
     if (!ctx) {
@@ -26,533 +49,44 @@ const MusicEngine = (() => {
       masterGain.gain.value = muted ? 0 : volume;
       masterGain.connect(ctx.destination);
     }
-    if (ctx.state === 'suspended') {
-      ctx.resume();
-    }
+    if (ctx.state === 'suspended') ctx.resume();
     return ctx;
   }
 
-  /** True if audio is actually able to play right now */
-  function isReady() {
-    return ctx && ctx.state === 'running';
+  // ---------------------------------------------------------------
+  // Load and cache an MP3 as AudioBuffer
+  // ---------------------------------------------------------------
+  async function loadBuffer(name) {
+    if (_bufferCache[name]) return _bufferCache[name];
+    const url = TRACK_FILES[name];
+    if (!url) return null;
+    try {
+      const resp = await fetch(url);
+      if (!resp.ok) { console.warn('MusicEngine: failed to fetch', url); return null; }
+      const arrayBuf = await resp.arrayBuffer();
+      const audioBuf = await ctx.decodeAudioData(arrayBuf);
+      _bufferCache[name] = audioBuf;
+      return audioBuf;
+    } catch (e) {
+      console.warn('MusicEngine: error loading', url, e);
+      return null;
+    }
   }
 
   // ---------------------------------------------------------------
-  // Utility helpers
+  // Resolve district name → canonical track name
   // ---------------------------------------------------------------
-
-  /** Create an oscillator → gain → destination */
-  function osc(type, freq, gainVal, dest) {
-    const ac = ctx;
-    const o = ac.createOscillator();
-    const g = ac.createGain();
-    o.type = type;
-    o.frequency.value = freq;
-    g.gain.value = gainVal;
-    o.connect(g);
-    g.connect(dest);
-    return { osc: o, gain: g };
-  }
-
-  /** Create filtered noise: noise → filter → gain → destination.
-   *  Everything stays internal — nothing leaks to masterGain. */
-  function filteredNoise(gainVal, filterType, filterFreq, Q, dest) {
-    const ac = ctx;
-    // Create a short looping noise buffer
-    const bufLen = ac.sampleRate * 2;
-    const buf = ac.createBuffer(1, bufLen, ac.sampleRate);
-    const data = buf.getChannelData(0);
-    for (let i = 0; i < bufLen; i++) data[i] = Math.random() * 2 - 1;
-    const src = ac.createBufferSource();
-    src.buffer = buf;
-    src.loop = true;
-
-    // Route: src → filter → outputGain → dest (no intermediate masterGain leak)
-    const filter = ac.createBiquadFilter();
-    filter.type = filterType;
-    filter.frequency.value = filterFreq;
-    filter.Q.value = Q || 1;
-
-    const g = ac.createGain();
-    g.gain.value = gainVal;
-
-    src.connect(filter);
-    filter.connect(g);
-    g.connect(dest);
-    return { src, gain: g, filter };
-  }
-
-  /** Safely stop an oscillator or buffer source */
-  function safeStop(node) {
-    try { node.stop(); } catch (e) { /* already stopped */ }
-  }
-
-  // ---------------------------------------------------------------
-  // Track factory — each returns { start(), stop(fadeSec), gain }
-  // ---------------------------------------------------------------
-
-  // --- MENU: Ethereal, mysterious, slow-breathing pad ---
-  function trackMenu() {
-    const ac = ctx;
-    const nodes = [];
-    const extras = []; // LFOs and noise sources to stop
-    const tg = ac.createGain();
-    tg.gain.value = 0;
-    tg.connect(masterGain);
-
-    // Deep warm drone (sine only — clean)
-    nodes.push(osc('sine', 55, 0.10, tg));
-    nodes.push(osc('sine', 82.5, 0.06, tg));
-
-    // Soft filtered pad — triangle through heavy lowpass
-    const pad = osc('triangle', 110, 0.03, null);
-    const padF = ac.createBiquadFilter();
-    padF.type = 'lowpass'; padF.frequency.value = 300; padF.Q.value = 1;
-    pad.gain.connect(padF); padF.connect(tg);
-    nodes.push(pad);
-
-    // Slow LFO sweeps the pad filter
-    const lfo = ac.createOscillator();
-    lfo.type = 'sine'; lfo.frequency.value = 0.04;
-    const lfoG = ac.createGain(); lfoG.gain.value = 150;
-    lfo.connect(lfoG); lfoG.connect(padF.frequency);
-    extras.push(lfo);
-
-    // Gentle high shimmer
-    nodes.push(osc('sine', 880, 0.008, tg));
-    nodes.push(osc('sine', 1320, 0.005, tg));
-
-    // Very quiet filtered wind
-    const wind = filteredNoise(0.006, 'bandpass', 600, 3, tg);
-    extras.push(wind.src);
-
-    return {
-      start() {
-        nodes.forEach(n => n.osc.start());
-        extras.forEach(e => e.start());
-      },
-      stop(fade) {
-        const t = ac.currentTime;
-        tg.gain.setValueAtTime(tg.gain.value, t);
-        tg.gain.linearRampToValueAtTime(0, t + fade);
-        setTimeout(() => {
-          nodes.forEach(n => safeStop(n.osc));
-          extras.forEach(e => safeStop(e));
-          tg.disconnect();
-        }, fade * 1000 + 200);
-      },
-      gain: tg,
-    };
-  }
-
-  // --- THE SPRAWL: Gritty urban hum, distant city ---
-  function trackSprawl() {
-    const ac = ctx;
-    const nodes = [];
-    const extras = [];
-    const tg = ac.createGain();
-    tg.gain.value = 0;
-    tg.connect(masterGain);
-
-    // Low city drone — filtered triangle
-    const d1 = osc('triangle', 45, 0.06, null);
-    const dF = ac.createBiquadFilter();
-    dF.type = 'lowpass'; dF.frequency.value = 120; dF.Q.value = 1;
-    d1.gain.connect(dF); dF.connect(tg);
-    nodes.push(d1);
-
-    // Mid warmth
-    nodes.push(osc('sine', 65, 0.04, tg));
-    nodes.push(osc('sine', 98, 0.025, tg));
-
-    // Quiet rain/static — heavily filtered
-    const rain = filteredNoise(0.005, 'bandpass', 4000, 8, tg);
-    extras.push(rain.src);
-
-    // Distant metallic ping (periodic)
-    let pingTimer;
-
-    return {
-      start() {
-        nodes.forEach(n => n.osc.start());
-        extras.forEach(e => e.start());
-        const schedulePing = () => {
-          if (!ctx || muted) { pingTimer = setTimeout(schedulePing, 5000); return; }
-          const p = osc('sine', 1200 + Math.random() * 600, 0, tg);
-          p.osc.start();
-          const t = ac.currentTime;
-          p.gain.gain.setValueAtTime(0.012, t);
-          p.gain.gain.exponentialRampToValueAtTime(0.0001, t + 2);
-          setTimeout(() => safeStop(p.osc), 2500);
-          pingTimer = setTimeout(schedulePing, 5000 + Math.random() * 7000);
-        };
-        pingTimer = setTimeout(schedulePing, 3000);
-      },
-      stop(fade) {
-        clearTimeout(pingTimer);
-        const t = ac.currentTime;
-        tg.gain.setValueAtTime(tg.gain.value, t);
-        tg.gain.linearRampToValueAtTime(0, t + fade);
-        setTimeout(() => {
-          nodes.forEach(n => safeStop(n.osc));
-          extras.forEach(e => safeStop(e));
-          tg.disconnect();
-        }, fade * 1000 + 200);
-      },
-      gain: tg,
-    };
-  }
-
-  // --- NEON ROW: Warm synth pad, vibrant ---
-  function trackNeonRow() {
-    const ac = ctx;
-    const nodes = [];
-    const extras = [];
-    const tg = ac.createGain();
-    tg.gain.value = 0;
-    tg.connect(masterGain);
-
-    // Warm bass
-    nodes.push(osc('sine', 73.4, 0.07, tg));
-    nodes.push(osc('sine', 146.8, 0.025, tg));
-
-    // Filtered synth chord (Dm7) — triangle through lowpass for warmth
-    [293.66, 349.23, 440, 523.25].forEach(freq => {
-      const o = osc('triangle', freq, 0.01, null);
-      const f = ac.createBiquadFilter();
-      f.type = 'lowpass'; f.frequency.value = 500; f.Q.value = 1;
-      o.gain.connect(f); f.connect(tg);
-      o.osc.detune.value = (Math.random() - 0.5) * 8;
-      nodes.push(o);
-    });
-
-    // Very subtle crowd ambience
-    const crowd = filteredNoise(0.004, 'bandpass', 1200, 6, tg);
-    extras.push(crowd.src);
-
-    // Occasional soft neon hum
-    let buzzTimer;
-
-    return {
-      start() {
-        nodes.forEach(n => n.osc.start());
-        extras.forEach(e => e.start());
-        const scheduleBuzz = () => {
-          if (!ctx || muted) { buzzTimer = setTimeout(scheduleBuzz, 6000); return; }
-          const b = osc('sine', 120, 0, tg);
-          b.osc.start();
-          const t = ac.currentTime;
-          b.gain.gain.setValueAtTime(0.015, t);
-          b.gain.gain.exponentialRampToValueAtTime(0.0001, t + 1.2);
-          setTimeout(() => safeStop(b.osc), 1500);
-          buzzTimer = setTimeout(scheduleBuzz, 6000 + Math.random() * 8000);
-        };
-        buzzTimer = setTimeout(scheduleBuzz, 4000);
-      },
-      stop(fade) {
-        clearTimeout(buzzTimer);
-        const t = ac.currentTime;
-        tg.gain.setValueAtTime(tg.gain.value, t);
-        tg.gain.linearRampToValueAtTime(0, t + fade);
-        setTimeout(() => {
-          nodes.forEach(n => safeStop(n.osc));
-          extras.forEach(e => safeStop(e));
-          tg.disconnect();
-        }, fade * 1000 + 200);
-      },
-      gain: tg,
-    };
-  }
-
-  // --- THE UNDERCROFT: Deep, ominous, cavernous ---
-  function trackUndercroft() {
-    const ac = ctx;
-    const nodes = [];
-    const extras = [];
-    const tg = ac.createGain();
-    tg.gain.value = 0;
-    tg.connect(masterGain);
-
-    // Deep sub-bass
-    nodes.push(osc('sine', 35, 0.10, tg));
-    nodes.push(osc('sine', 52, 0.05, tg));
-
-    // Eerie wobbling tone
-    const eerie = osc('sine', 330, 0.012, tg);
-    nodes.push(eerie);
-    const lfo = ac.createOscillator();
-    lfo.type = 'sine'; lfo.frequency.value = 0.12;
-    const lfoG = ac.createGain(); lfoG.gain.value = 6;
-    lfo.connect(lfoG); lfoG.connect(eerie.osc.frequency);
-    extras.push(lfo);
-
-    // Dark low rumble noise
-    const dark = filteredNoise(0.006, 'lowpass', 200, 2, tg);
-    extras.push(dark.src);
-
-    // Water drip sounds
-    let dripTimer;
-
-    return {
-      start() {
-        nodes.forEach(n => n.osc.start());
-        extras.forEach(e => e.start());
-        const scheduleDrip = () => {
-          if (!ctx || muted) { dripTimer = setTimeout(scheduleDrip, 3000); return; }
-          const freq = 1800 + Math.random() * 1500;
-          const d = osc('sine', freq, 0, tg);
-          d.osc.start();
-          const t = ac.currentTime;
-          d.gain.gain.setValueAtTime(0.02, t);
-          d.gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.4);
-          d.osc.frequency.exponentialRampToValueAtTime(freq * 0.6, t + 0.4);
-          setTimeout(() => safeStop(d.osc), 600);
-          dripTimer = setTimeout(scheduleDrip, 2500 + Math.random() * 5000);
-        };
-        dripTimer = setTimeout(scheduleDrip, 2000);
-      },
-      stop(fade) {
-        clearTimeout(dripTimer);
-        const t = ac.currentTime;
-        tg.gain.setValueAtTime(tg.gain.value, t);
-        tg.gain.linearRampToValueAtTime(0, t + fade);
-        setTimeout(() => {
-          nodes.forEach(n => safeStop(n.osc));
-          extras.forEach(e => safeStop(e));
-          tg.disconnect();
-        }, fade * 1000 + 200);
-      },
-      gain: tg,
-    };
-  }
-
-  // --- SECTOR 7: Tense, restricted, military ---
-  function trackSector7() {
-    const ac = ctx;
-    const nodes = [];
-    const extras = [];
-    const tg = ac.createGain();
-    tg.gain.value = 0;
-    tg.connect(masterGain);
-
-    // Tense filtered drone
-    const d1 = osc('triangle', 55, 0.05, null);
-    const dF = ac.createBiquadFilter();
-    dF.type = 'lowpass'; dF.frequency.value = 100; dF.Q.value = 1;
-    d1.gain.connect(dF); dF.connect(tg);
-    nodes.push(d1);
-
-    // Dissonant interval — close frequencies for unease
-    nodes.push(osc('sine', 82.4, 0.04, tg));
-    nodes.push(osc('sine', 87.3, 0.025, tg));
-
-    // Slow heartbeat-like pulse via amplitude modulation
-    const pulse = osc('sine', 40, 0, tg);
-    nodes.push(pulse);
-    const pulseLfo = ac.createOscillator();
-    pulseLfo.type = 'sine'; pulseLfo.frequency.value = 0.8;
-    const pulseLfoG = ac.createGain(); pulseLfoG.gain.value = 0.03;
-    pulseLfo.connect(pulseLfoG); pulseLfoG.connect(pulse.gain.gain);
-    extras.push(pulseLfo);
-
-    // Very quiet high static
-    const staticN = filteredNoise(0.003, 'bandpass', 6000, 12, tg);
-    extras.push(staticN.src);
-
-    // Distant alarm ping
-    let alarmTimer;
-
-    return {
-      start() {
-        nodes.forEach(n => n.osc.start());
-        extras.forEach(e => e.start());
-        const scheduleAlarm = () => {
-          if (!ctx || muted) { alarmTimer = setTimeout(scheduleAlarm, 8000); return; }
-          const a = osc('sine', 1500, 0, tg);
-          a.osc.start();
-          const t = ac.currentTime;
-          a.gain.gain.setValueAtTime(0.015, t);
-          a.gain.gain.linearRampToValueAtTime(0.0001, t + 0.12);
-          setTimeout(() => safeStop(a.osc), 400);
-          alarmTimer = setTimeout(scheduleAlarm, 8000 + Math.random() * 6000);
-        };
-        alarmTimer = setTimeout(scheduleAlarm, 5000);
-      },
-      stop(fade) {
-        clearTimeout(alarmTimer);
-        const t = ac.currentTime;
-        tg.gain.setValueAtTime(tg.gain.value, t);
-        tg.gain.linearRampToValueAtTime(0, t + fade);
-        setTimeout(() => {
-          nodes.forEach(n => safeStop(n.osc));
-          extras.forEach(e => safeStop(e));
-          tg.disconnect();
-        }, fade * 1000 + 200);
-      },
-      gain: tg,
-    };
-  }
-
-  // --- THE RESONANCE: Mystical, harmonic, otherworldly ---
-  function trackResonance() {
-    const ac = ctx;
-    const nodes = [];
-    const extras = [];
-    const tg = ac.createGain();
-    tg.gain.value = 0;
-    tg.connect(masterGain);
-
-    // Pure harmonic series on A — with gentle beating
-    [110, 220, 330, 440, 550].forEach((freq, i) => {
-      const vol = 0.04 / (i + 1);
-      nodes.push(osc('sine', freq, vol, tg));
-      if (i > 0) {
-        nodes.push(osc('sine', freq + 0.4 * (i + 1), vol * 0.5, tg));
-      }
-    });
-
-    // Slow shimmer modulation
-    const shimmer = osc('sine', 1760, 0.005, tg);
-    nodes.push(shimmer);
-    const shimLfo = ac.createOscillator();
-    shimLfo.type = 'sine'; shimLfo.frequency.value = 0.2;
-    const shimLfoG = ac.createGain(); shimLfoG.gain.value = 0.005;
-    shimLfo.connect(shimLfoG); shimLfoG.connect(shimmer.gain.gain);
-    extras.push(shimLfo);
-
-    // Quiet breath noise
-    const breath = filteredNoise(0.003, 'bandpass', 1500, 8, tg);
-    extras.push(breath.src);
-
-    // Crystal chime
-    let chimeTimer;
-
-    return {
-      start() {
-        nodes.forEach(n => n.osc.start());
-        extras.forEach(e => e.start());
-        const scheduleChime = () => {
-          if (!ctx || muted) { chimeTimer = setTimeout(scheduleChime, 4000); return; }
-          const freqs = [523.25, 659.25, 783.99, 1046.5];
-          const f = freqs[Math.floor(Math.random() * freqs.length)];
-          const c = osc('sine', f, 0, tg);
-          c.osc.start();
-          const t = ac.currentTime;
-          c.gain.gain.setValueAtTime(0.02, t);
-          c.gain.gain.exponentialRampToValueAtTime(0.0001, t + 3);
-          setTimeout(() => safeStop(c.osc), 3500);
-          chimeTimer = setTimeout(scheduleChime, 4000 + Math.random() * 6000);
-        };
-        chimeTimer = setTimeout(scheduleChime, 3000);
-      },
-      stop(fade) {
-        clearTimeout(chimeTimer);
-        const t = ac.currentTime;
-        tg.gain.setValueAtTime(tg.gain.value, t);
-        tg.gain.linearRampToValueAtTime(0, t + fade);
-        setTimeout(() => {
-          nodes.forEach(n => safeStop(n.osc));
-          extras.forEach(e => safeStop(e));
-          tg.disconnect();
-        }, fade * 1000 + 200);
-      },
-      gain: tg,
-    };
-  }
-
-  // --- THE SPIRE: Corporate, cold, digital ---
-  function trackSpire() {
-    const ac = ctx;
-    const nodes = [];
-    const extras = [];
-    const tg = ac.createGain();
-    tg.gain.value = 0;
-    tg.connect(masterGain);
-
-    // Clean bass
-    nodes.push(osc('sine', 65.4, 0.07, tg));
-
-    // Cold chord (Cm add9) — sine for clarity
-    [130.8, 155.6, 196, 293.66].forEach(freq => {
-      nodes.push(osc('sine', freq, 0.018, tg));
-    });
-
-    // Slow filtered high tone sweep
-    const hi = osc('sine', 2000, 0.004, null);
-    const hiF = ac.createBiquadFilter();
-    hiF.type = 'bandpass'; hiF.frequency.value = 2000; hiF.Q.value = 15;
-    hi.gain.connect(hiF); hiF.connect(tg);
-    nodes.push(hi);
-
-    const hiLfo = ac.createOscillator();
-    hiLfo.type = 'sine'; hiLfo.frequency.value = 0.06;
-    const hiLfoG = ac.createGain(); hiLfoG.gain.value = 800;
-    hiLfo.connect(hiLfoG); hiLfoG.connect(hiF.frequency);
-    extras.push(hiLfo);
-
-    // Very faint clinical hum
-    const hum = filteredNoise(0.002, 'bandpass', 400, 10, tg);
-    extras.push(hum.src);
-
-    // Digital blip
-    let blipTimer;
-
-    return {
-      start() {
-        nodes.forEach(n => n.osc.start());
-        extras.forEach(e => e.start());
-        const scheduleBlip = () => {
-          if (!ctx || muted) { blipTimer = setTimeout(scheduleBlip, 4000); return; }
-          const b = osc('sine', 2200 + Math.random() * 800, 0, tg);
-          b.osc.start();
-          const t = ac.currentTime;
-          b.gain.gain.setValueAtTime(0.01, t);
-          b.gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.1);
-          setTimeout(() => safeStop(b.osc), 300);
-          blipTimer = setTimeout(scheduleBlip, 3500 + Math.random() * 5000);
-        };
-        blipTimer = setTimeout(scheduleBlip, 3000);
-      },
-      stop(fade) {
-        clearTimeout(blipTimer);
-        const t = ac.currentTime;
-        tg.gain.setValueAtTime(tg.gain.value, t);
-        tg.gain.linearRampToValueAtTime(0, t + fade);
-        setTimeout(() => {
-          nodes.forEach(n => safeStop(n.osc));
-          extras.forEach(e => safeStop(e));
-          tg.disconnect();
-        }, fade * 1000 + 200);
-      },
-      gain: tg,
-    };
-  }
-
-  // ---------------------------------------------------------------
-  // Track registry
-  // ---------------------------------------------------------------
-  const TRACKS = {
-    'menu':            trackMenu,
-    'The Sprawl':      trackSprawl,
-    '\u8513\u57CE':    trackSprawl,
-    'Neon Row':        trackNeonRow,
-    '\u9713\u8679\u8857': trackNeonRow,
-    'The Undercroft':  trackUndercroft,
-    '\u5E95\u6E0A':    trackUndercroft,
-    'Sector 7':        trackSector7,
-    '\u7B2C\u4E03\u533A': trackSector7,
-    'The Resonance':   trackResonance,
-    '\u5171\u9E23\u6240': trackResonance,
-    'The Spire':       trackSpire,
-    '\u5C16\u5854':    trackSpire,
-  };
-
   function resolveTrack(name) {
     if (!name) return null;
-    if (TRACKS[name]) return name;
+    if (TRACK_FILES[name]) return name;
+    if (ALIASES[name]) return ALIASES[name];
+    // Case-insensitive fallback
     const lower = name.toLowerCase();
-    for (const key of Object.keys(TRACKS)) {
+    for (const key of Object.keys(TRACK_FILES)) {
       if (key.toLowerCase() === lower) return key;
+    }
+    for (const [alias, canonical] of Object.entries(ALIASES)) {
+      if (alias.toLowerCase() === lower) return canonical;
     }
     return null;
   }
@@ -560,17 +94,15 @@ const MusicEngine = (() => {
   // ---------------------------------------------------------------
   // Core: switch track with crossfade
   // ---------------------------------------------------------------
-  function switchTo(trackName) {
+  async function switchTo(trackName) {
     const resolved = resolveTrack(trackName);
     if (!resolved) return;
 
     ensureContext();
 
-    // If AudioContext is still suspended (no user gesture yet),
-    // remember the request and retry when context becomes active.
+    // If AudioContext is still suspended, defer until running
     if (ctx.state !== 'running') {
       _pendingTrack = resolved;
-      // Listen for context state change
       ctx.onstatechange = () => {
         if (ctx.state === 'running' && _pendingTrack) {
           const pending = _pendingTrack;
@@ -582,27 +114,41 @@ const MusicEngine = (() => {
       return;
     }
 
-    // Already playing this track — skip
-    if (resolved === currentTrackName && currentTrack) return;
+    // Already playing this track
+    if (currentTrack && currentTrack.name === resolved) return;
 
-    // Fade out current
+    // Load the audio buffer
+    const buffer = await loadBuffer(resolved);
+    if (!buffer) return;
+
+    // Fade out current track
     if (currentTrack) {
-      currentTrack.stop(fadeDuration);
+      const old = currentTrack;
+      const t = ctx.currentTime;
+      old.gain.gain.setValueAtTime(old.gain.gain.value, t);
+      old.gain.gain.linearRampToValueAtTime(0, t + fadeDuration);
+      setTimeout(() => {
+        try { old.source.stop(); } catch (e) { /* already stopped */ }
+        old.gain.disconnect();
+      }, fadeDuration * 1000 + 200);
       currentTrack = null;
     }
 
-    // Start new track with fade in
-    const factory = TRACKS[resolved];
-    if (!factory) return;
+    // Create new source → gain → master
+    const source = ctx.createBufferSource();
+    source.buffer = buffer;
+    source.loop = true;
 
-    const track = factory();
+    const gain = ctx.createGain();
     const t = ctx.currentTime;
-    track.gain.gain.setValueAtTime(0, t);
-    track.gain.gain.linearRampToValueAtTime(1.0, t + fadeDuration);
-    track.start();
+    gain.gain.setValueAtTime(0, t);
+    gain.gain.linearRampToValueAtTime(1.0, t + fadeDuration);
 
-    currentTrack = track;
-    currentTrackName = resolved;
+    source.connect(gain);
+    gain.connect(masterGain);
+    source.start(0);
+
+    currentTrack = { source, gain, name: resolved };
   }
 
   // ---------------------------------------------------------------
@@ -619,9 +165,15 @@ const MusicEngine = (() => {
 
   function stopAll() {
     if (currentTrack) {
-      currentTrack.stop(fadeDuration);
+      const old = currentTrack;
+      const t = ctx.currentTime;
+      old.gain.gain.setValueAtTime(old.gain.gain.value, t);
+      old.gain.gain.linearRampToValueAtTime(0, t + fadeDuration);
+      setTimeout(() => {
+        try { old.source.stop(); } catch (e) {}
+        old.gain.disconnect();
+      }, fadeDuration * 1000 + 200);
       currentTrack = null;
-      currentTrackName = null;
     }
   }
 
@@ -639,6 +191,16 @@ const MusicEngine = (() => {
   function isMuted() { return muted; }
   function getVolume() { return volume; }
 
+  // Preload all tracks in background after first user gesture
+  function preloadAll() {
+    ensureContext();
+    if (ctx.state === 'running') {
+      for (const name of Object.keys(TRACK_FILES)) {
+        loadBuffer(name); // fire-and-forget
+      }
+    }
+  }
+
   return {
     switchTo,
     updateFromSession,
@@ -648,5 +210,6 @@ const MusicEngine = (() => {
     getVolume,
     toggleMute,
     isMuted,
+    preloadAll,
   };
 })();
