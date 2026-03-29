@@ -130,6 +130,7 @@ const LABELS = {
     label_api_key: 'API KEY', label_base_url: 'BASE URL', label_temperature: 'TEMPERATURE',
     settings_langsmith_title: '// LANGSMITH TRACING',
     label_langsmith_key: 'API KEY', label_langsmith_project: 'PROJECT NAME',
+    settings_usage_title: '// USAGE TRACKING', label_show_tokens: 'Show token usage in conversation',
     settings_audio_title: '// AUDIO', label_music_volume: 'MUSIC VOLUME',
     btn_close: 'CLOSE',
     settings_saved: 'Settings saved', saving: 'Saving...', saved: 'Saved',
@@ -211,6 +212,7 @@ const LABELS = {
     label_api_key: 'API密钥', label_base_url: '地址', label_temperature: '温度',
     settings_langsmith_title: '// LangSmith 记录',
     label_langsmith_key: 'API密钥', label_langsmith_project: '项目名称',
+    settings_usage_title: '// 用量追踪', label_show_tokens: '在对话中显示令牌用量',
     settings_audio_title: '// 音频', label_music_volume: '音乐音量',
     btn_close: '关闭',
     settings_saved: '设置已保存', saving: '保存中...', saved: '已保存',
@@ -286,6 +288,9 @@ function localizeData(category, value) {
 /** Set the UI language and refresh everything */
 function setLanguage(lang) {
   currentLang = lang;
+  localStorage.setItem('signal_lost_ui_lang', lang);
+  const menuLangSel = document.getElementById('selectMenuLanguage');
+  if (menuLangSel) menuLangSel.value = lang;
   // Update tab labels
   const tabKeys = ['identity','knowledge','traces','district','inventory','network','world','log','conversation'];
   const tabs = document.querySelectorAll('.panel-tab');
@@ -314,7 +319,6 @@ function setLanguage(lang) {
 
   // Menu screen
   setText('btnNewGame', L('menu_new_game'), '.cyber-btn-text');
-  setText('btnResume', L('menu_resume'), '.cyber-btn-text');
   setText('btnLoadGame', L('menu_load_game'), '.cyber-btn-text');
   setText('btnSettings', L('menu_settings'), '.cyber-btn-text');
   const menuFooter = document.querySelector('.menu-footer');
@@ -405,15 +409,23 @@ function setLanguage(lang) {
   const settingsTitle = document.querySelector('#settingsOverlay .config-title');
   if (settingsTitle) settingsTitle.textContent = L('settings_title');
   _setLabelsInOverlay('#settingsOverlay', [
-    [0, 'label_ui_language'], [1, 'label_provider'], [2, 'label_model'],
-    [3, 'label_api_key'], [4, 'label_base_url'], [5, 'label_temperature'],
-    [6, 'label_langsmith_key'], [7, 'label_langsmith_project'],
+    [0, 'label_provider'], [1, 'label_model'],
+    [2, 'label_api_key'], [3, 'label_base_url'], [4, 'label_temperature'],
+    [5, 'label_langsmith_key'], [6, 'label_langsmith_project'],
     [8, 'label_music_volume'],
   ]);
   const subtitles = document.querySelectorAll('#settingsOverlay .config-subtitle');
   if (subtitles[0]) subtitles[0].textContent = L('settings_provider_title');
   if (subtitles[1]) subtitles[1].textContent = L('settings_langsmith_title');
-  if (subtitles[2]) subtitles[2].textContent = L('settings_audio_title');
+  if (subtitles[2]) subtitles[2].textContent = L('settings_usage_title');
+  if (subtitles[3]) subtitles[3].textContent = L('settings_audio_title');
+  // Localize checkbox label (preserve the <input> inside)
+  const chkLabel = document.querySelector('#chkShowTokens');
+  if (chkLabel && chkLabel.parentNode) {
+    const lbl = chkLabel.parentNode;
+    // Keep checkbox, replace text
+    lbl.childNodes.forEach(n => { if (n.nodeType === 3) n.textContent = ' ' + L('label_show_tokens'); });
+  }
   const settingsBtns = document.querySelectorAll('#settingsOverlay .cyber-btn-text');
   if (settingsBtns[0]) settingsBtns[0].textContent = L('btn_save');
   if (settingsBtns[1]) settingsBtns[1].textContent = L('btn_close');
@@ -673,7 +685,6 @@ function handleServerMessage(msg) {
   switch (msg.type) {
     case 'status':
       cachedSessions = msg.sessions || [];
-      document.getElementById('btnResume').style.display = cachedSessions.length > 0 ? '' : 'none';
       if (msg.saves && msg.saves.length > 0) {
         document.getElementById('btnLoadGame').style.display = '';
         cachedSaves = msg.saves;
@@ -685,13 +696,14 @@ function handleServerMessage(msg) {
       // Read language from settings
       if (msg.settings && msg.settings.language) {
         const lang = msg.settings.language.display || msg.settings.language.tui || 'en';
-        document.getElementById('selectUiLanguage').value = lang;
+        document.getElementById('selectMenuLanguage').value = lang;
         setLanguage(lang);
       }
       break;
 
     case 'game_started':
       switchScreen('gameScreen');
+      MusicEngine.preloadAll();
       if (msg.session) updateAllPanels(msg.session);
       enableInput();
       break;
@@ -708,7 +720,7 @@ function handleServerMessage(msg) {
         resumeMessageEl = addTypingMessage(msg.text, role);
         isFirstInput = true;
       } else {
-        addTypingMessage(msg.text, role);
+        addTypingMessage(msg.text, role, msg.usage);
       }
       break;
 
@@ -767,6 +779,34 @@ function prefillLangsmithSettings(ls) {
   if (ls.enabled) document.getElementById('inputLangsmithKey').placeholder = '••••••• (configured)';
 }
 
+// Token display preference (persisted in localStorage)
+function _showTokens() {
+  return localStorage.getItem('signal_lost_show_tokens') === '1';
+}
+
+// Estimate cost from token counts (rough pricing per 1M tokens)
+// Uses model from settings; defaults to a mid-range estimate
+function _estimateCost(inputTokens, outputTokens) {
+  // Rough $/1M token rates for common models
+  const model = (document.getElementById('inputModel')?.value || '').toLowerCase();
+  let inRate = 3, outRate = 15; // default mid-range $/1M
+  if (model.includes('gpt-4o-mini') || model.includes('haiku')) { inRate = 0.25; outRate = 1.25; }
+  else if (model.includes('gpt-4o') || model.includes('gpt-4.1')) { inRate = 2.5; outRate = 10; }
+  else if (model.includes('sonnet')) { inRate = 3; outRate = 15; }
+  else if (model.includes('opus')) { inRate = 15; outRate = 75; }
+  else if (model.includes('o1') || model.includes('o3')) { inRate = 10; outRate = 40; }
+  else if (model.includes('gpt-3.5') || model.includes('gpt-4.1-nano')) { inRate = 0.1; outRate = 0.4; }
+  const cost = (inputTokens * inRate + outputTokens * outRate) / 1_000_000;
+  return cost;
+}
+
+function _formatCost(cost) {
+  if (cost < 0.01) return '$' + cost.toFixed(4);
+  return '$' + cost.toFixed(3);
+}
+
+let _settingsSnapshot = null; // snapshot before opening settings
+
 function openSettings() {
   document.getElementById('settingsOverlay').style.display = 'flex';
   document.getElementById('settingsStatus').textContent = '';
@@ -774,16 +814,26 @@ function openSettings() {
   const vol = MusicEngine.getVolume();
   document.getElementById('inputMusicVolume').value = vol;
   document.getElementById('musicVolValue').textContent = Math.round(vol * 100) + '%';
+  // Snapshot current state so cancel can restore
+  _settingsSnapshot = { volume: vol };
+  // Sync token tracking checkbox
+  document.getElementById('chkShowTokens').checked = _showTokens();
+  // Show cumulative usage stats if available
+  _updateUsageStats();
   playBeep(1000, 0.04);
 }
 
 function closeSettings() {
+  // Restore to pre-open state (cancel = discard changes)
+  if (_settingsSnapshot) {
+    MusicEngine.setVolume(_settingsSnapshot.volume);
+    _settingsSnapshot = null;
+  }
   document.getElementById('settingsOverlay').style.display = 'none';
 }
 
 function saveSettings() {
-  const lang = document.getElementById('selectUiLanguage').value;
-  const payload = { action: 'save_provider', provider: getProviderConfig(), language: lang };
+  const payload = { action: 'save_provider', provider: getProviderConfig() };
   const lsKey = document.getElementById('inputLangsmithKey').value;
   const lsProject = document.getElementById('inputLangsmithProject').value;
   if (lsKey || lsProject) {
@@ -791,9 +841,31 @@ function saveSettings() {
     if (lsKey) payload.langsmith.api_key = lsKey;
     if (lsProject) payload.langsmith.project = lsProject;
   }
+  // Save token display preference
+  localStorage.setItem('signal_lost_show_tokens',
+    document.getElementById('chkShowTokens').checked ? '1' : '0');
   sendWS(payload);
-  setLanguage(lang);
+  _settingsSnapshot = null;  // Mark as saved so close doesn't revert
   document.getElementById('settingsStatus').textContent = L('saving');
+  document.getElementById('settingsOverlay').style.display = 'none';
+}
+
+let _cachedUsage = null;
+
+function _updateUsageStats() {
+  const u = _cachedUsage;
+  const el = document.getElementById('usageStats');
+  if (!el) return;
+  if (!u || !u.total_calls) {
+    el.innerHTML = '<span class="dim" style="font-size:11px">No usage data yet</span>';
+    return;
+  }
+  el.innerHTML = `<div style="font-size:11px;color:var(--text-dim);line-height:1.6">
+    LLM calls: <span class="cyan">${u.total_calls}</span> &nbsp;|&nbsp;
+    Input: <span class="cyan">${(u.input_tokens || 0).toLocaleString()}</span> &nbsp;|&nbsp;
+    Output: <span class="cyan">${(u.output_tokens || 0).toLocaleString()}</span> &nbsp;|&nbsp;
+    Total: <span class="cyan">${(u.total_tokens || 0).toLocaleString()}</span> tokens
+  </div>`;
 }
 
 function onProviderChange() {
@@ -841,6 +913,8 @@ function requestReturnToMenu() {
 function confirmReturnToMenu() {
   document.getElementById('confirmMenuDialog').style.display = 'none';
   switchScreen('menuScreen');
+  // Refresh saves/sessions list from server
+  sendWS({ action: 'init' });
 }
 
 function closeConfirmMenu() {
@@ -938,10 +1012,10 @@ function showDiscoveryNotification(msg) {
   const container = document.getElementById('chatMessages');
   const el = document.createElement('div');
   el.className = 'chat-msg discovery-notification';
+  const label = currentLang === 'zh' ? '◈ 痕迹发现' : '◈ TRACE DISCOVERED';
   el.innerHTML = `
     <div class="discovery-badge">
-      <span class="discovery-icon">◈</span>
-      <span class="discovery-label">TRACE DISCOVERED — Layer ${msg.layer}</span>
+      <span class="discovery-label">${label}</span>
     </div>
     <div class="discovery-text">${esc(msg.description)}</div>
   `;
@@ -951,7 +1025,7 @@ function showDiscoveryNotification(msg) {
 }
 
 function _chatPrefixes() {
-  return { player: L('chat_player'), agent: L('chat_agent'), system: L('chat_system') };
+  return { player: L('chat_player'), agent: L('chat_agent'), system: L('chat_system'), warning: L('chat_agent') };
 }
 
 function addChatMessage(text, role = 'agent') {
@@ -967,7 +1041,7 @@ function addChatMessage(text, role = 'agent') {
   return msg;
 }
 
-function addTypingMessage(text, role = 'agent') {
+function addTypingMessage(text, role = 'agent', usage = null) {
   const container = document.getElementById('chatMessages');
   const msg = document.createElement('div');
   msg.className = `chat-msg ${role}`;
@@ -985,7 +1059,18 @@ function addTypingMessage(text, role = 'agent') {
       i += speed; container.scrollTop = container.scrollHeight;
       if (Math.random() < 0.05) playBeep(600 + Math.random() * 400, 0.02, 0.01);
       setTimeout(typeNext, interval);
-    } else { contentEl.classList.remove('typing'); enableInput(); }
+    } else {
+      contentEl.classList.remove('typing');
+      // Show token/cost subtly if enabled
+      if (usage && usage.total && _showTokens()) {
+        const cost = _estimateCost(usage.input || 0, usage.output || 0);
+        const tokenEl = document.createElement('div');
+        tokenEl.className = 'msg-tokens';
+        tokenEl.textContent = `${usage.total.toLocaleString()} tokens · ${_formatCost(cost)}`;
+        msg.appendChild(tokenEl);
+      }
+      enableInput();
+    }
   }
   typeNext();
   return msg;
@@ -1105,6 +1190,8 @@ function updateAllPanels(session) {
   updateWorldPanel(session.world_state);
   updateLogPanel(session.log);
   updateConversationPanel(session.conversation);
+  // Cache usage data for settings display
+  if (session.usage) _cachedUsage = session.usage;
   // Update background music based on current district
   MusicEngine.updateFromSession(session);
 }
@@ -1267,7 +1354,7 @@ function updateTracesPanel(traces) {
     html += `<div class="panel-section">`;
     for (const trace of discovered) {
       html += `<div class="trace-item discovered">
-        <span class="dim" style="font-size:11px">${esc(trace.id)}</span>
+        <span class="dim" style="font-size:11px">${esc(trace.id.replace(/-L\d+-/, '-'))}</span>
         ${esc(trace.description)}
         ${trace.turn ? `<span class="dim"> (${L('turn')} ${trace.turn})</span>` : ''}
       </div>`;
@@ -1563,8 +1650,14 @@ function updateConversationPanel(conversation) {
       const isPlayer = entry.role === 'user' || entry.role === 'human';
       const roleLabel = isPlayer ? `\u25B6 ${L('player_label')}` : `\u25C0 ${L('agent_label')}`;
       const roleCls = isPlayer ? 'magenta' : 'cyan';
+      let tokenHtml = '';
+      if (entry.tokens && _showTokens()) {
+        const t = entry.tokens;
+        const cost = _estimateCost(t.input || 0, t.output || 0);
+        tokenHtml = `<span class="conv-tokens">${(t.total || 0).toLocaleString()} tok · ${_formatCost(cost)}</span>`;
+      }
       html += `<div class="conv-entry">
-        <div class="conv-header"><span class="dim">T${entry.turn || '?'}</span> <span class="${roleCls}">${roleLabel}</span></div>
+        <div class="conv-header"><span class="dim">T${entry.turn || '?'}</span> <span class="${roleCls}">${roleLabel}</span>${tokenHtml}</div>
         <div class="conv-content">${esc(entry.content || '')}</div>
       </div>`;
     }
@@ -1637,7 +1730,14 @@ document.addEventListener('keydown', (e) => {
 // STARTUP
 // ================================================================
 
-window.addEventListener('load', () => { runBootSequence(); });
+window.addEventListener('load', () => {
+  // Restore saved UI language before boot
+  const savedLang = localStorage.getItem('signal_lost_ui_lang');
+  if (savedLang && (savedLang === 'en' || savedLang === 'zh')) {
+    setLanguage(savedLang);
+  }
+  runBootSequence();
+});
 
 // Start music on first user interaction (browsers require gesture for AudioContext)
 document.addEventListener('click', function _initMusic() {

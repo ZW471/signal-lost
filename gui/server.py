@@ -135,6 +135,14 @@ def _get_session_data(session_dir: str | None = None) -> dict:
                     except json.JSONDecodeError:
                         pass
     data["conversation"] = conversation
+    # Include cumulative usage stats
+    usage_path = os.path.join(sd, "usage.json")
+    if os.path.exists(usage_path):
+        try:
+            with open(usage_path, "r", encoding="utf-8") as f:
+                data["usage"] = json.load(f)
+        except (json.JSONDecodeError, OSError):
+            pass
     return data
 
 
@@ -490,12 +498,26 @@ async def _run_turn(ws: WebSocket, player_input: str | None = None, mode: str = 
         game_over = result.get("game_over", False)
         ending = result.get("ending")
 
+        # Determine message role
+        if mode == "resume":
+            msg_role = "system"
+        elif result.get("is_warning"):
+            msg_role = "warning"
+        else:
+            msg_role = "agent"
+
+        turn_usage = result.get("turn_usage") or {}
         await ws.send_json({
             "type": "narrative",
             "text": narrative,
             "game_over": game_over,
             "ending": ending,
-            "role": "system" if mode == "resume" else "agent",
+            "role": msg_role,
+            "usage": {
+                "input": turn_usage.get("input_tokens", 0),
+                "output": turn_usage.get("output_tokens", 0),
+                "total": turn_usage.get("total_tokens", 0),
+            } if turn_usage.get("total_tokens") else None,
         })
 
         # Send discovery notifications (ephemeral trace alerts)
@@ -506,6 +528,7 @@ async def _run_turn(ws: WebSocket, player_input: str | None = None, mode: str = 
                     "type": "discovery",
                     "trace_id": d["trace_id"],
                     "layer": d["layer"],
+                    "layer_name": d.get("layer_name", ""),
                     "description": d["description"],
                 })
 

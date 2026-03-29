@@ -53,6 +53,8 @@ class GameState(TypedDict):
     blocking_reason: str | None  # Human-readable reason for rejection
     skip_validation: bool        # If True, this turn is a system-injected event (resume/info)
     language_retry_count: int    # How many times output_language_checker has retried (cap: 1)
+    is_warning: bool             # True when input_blocked_handler generated a warning message
+    turn_usage: dict             # Per-turn LLM token usage accumulated across nodes
 
 
 def reset_turn_flags() -> dict:
@@ -68,6 +70,8 @@ def reset_turn_flags() -> dict:
         "blocking_reason": None,
         "skip_validation": False,
         "language_retry_count": 0,
+        "is_warning": False,
+        "turn_usage": {},
     }
 
 
@@ -126,7 +130,8 @@ def save_session_file(session_dir: str, key: str, data: dict) -> None:
         _write_json(os.path.join(session_dir, filename), data)
 
 
-def append_conversation(session_dir: str, role: str, content: str, turn: int) -> None:
+def append_conversation(session_dir: str, role: str, content: str, turn: int,
+                        tokens: dict | None = None) -> None:
     """Append a line to conversation.jsonl."""
     path = os.path.join(session_dir, "conversation.jsonl")
     entry = {
@@ -135,8 +140,29 @@ def append_conversation(session_dir: str, role: str, content: str, turn: int) ->
         "turn": turn,
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
+    if tokens:
+        entry["tokens"] = tokens
     with open(path, "a", encoding="utf-8") as f:
         f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+
+
+def load_usage(session_dir: str) -> dict:
+    """Load cumulative usage stats from usage.json."""
+    path = os.path.join(session_dir, "usage.json")
+    if os.path.exists(path):
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except (json.JSONDecodeError, OSError):
+            pass
+    return {"total_calls": 0, "input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
+
+
+def save_usage(session_dir: str, usage: dict) -> None:
+    """Save cumulative usage stats to usage.json."""
+    path = os.path.join(session_dir, "usage.json")
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(usage, f, indent=2)
 
 
 # ---------------------------------------------------------------------------
@@ -181,6 +207,9 @@ def initial_state(session_dir: str) -> GameState:
         blocking_reason=None,
         skip_validation=False,
         language_retry_count=0,
+        is_warning=False,
+        turn_usage={},
+        discovery_notifications=[],
     )
 
 

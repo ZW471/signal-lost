@@ -18,7 +18,7 @@ from langchain_core.messages import AIMessage, HumanMessage, RemoveMessage, Syst
 from langgraph.graph import END, StateGraph
 from langgraph.prebuilt import ToolNode
 
-from engine.state import GameState, append_conversation, empty_turn_delta, reset_turn_flags, save_session_file
+from engine.state import GameState, append_conversation, empty_turn_delta, reset_turn_flags, save_session_file, load_usage, save_usage
 from engine.tools import ALL_TOOLS, set_session_dir, set_current_inventory
 from engine.game_data import (
     TRACE_CONDITIONS,
@@ -55,6 +55,32 @@ def set_llm(llm):
     """Set the LLM instance to use. Called by run.py."""
     global _llm_instance
     _llm_instance = llm
+
+
+def _extract_usage(response) -> dict:
+    """Extract token usage from an LLM response (AIMessage)."""
+    meta = getattr(response, "usage_metadata", None)
+    if meta and isinstance(meta, dict):
+        return {
+            "input_tokens": meta.get("input_tokens", 0),
+            "output_tokens": meta.get("output_tokens", 0),
+            "total_tokens": meta.get("total_tokens", 0),
+        }
+    return {}
+
+
+def _accumulate_usage(state: dict, node_name: str, usage: dict) -> dict:
+    """Add node usage to the turn_usage accumulator and return updated turn_usage."""
+    tu = dict(state.get("turn_usage") or {})
+    if not usage:
+        return tu
+    tu[node_name] = usage
+    # Update totals
+    tu["input_tokens"] = tu.get("input_tokens", 0) + usage.get("input_tokens", 0)
+    tu["output_tokens"] = tu.get("output_tokens", 0) + usage.get("output_tokens", 0)
+    tu["total_tokens"] = tu.get("total_tokens", 0) + usage.get("total_tokens", 0)
+    tu["calls"] = tu.get("calls", 0) + 1
+    return tu
 
 
 # ---------------------------------------------------------------------------
@@ -193,7 +219,9 @@ def resolver(state: GameState) -> dict:
     if isinstance(response.content, str) and "<think>" in response.content:
         response.content = _strip_thinking(response.content)
 
-    return {"messages": [response]}
+    usage = _extract_usage(response)
+    turn_usage = _accumulate_usage(state, "resolver", usage)
+    return {"messages": [response], "turn_usage": turn_usage}
 
 
 # ---------------------------------------------------------------------------
@@ -266,7 +294,7 @@ def _get_district_status(district_name: str, world_state: dict) -> str:
     return "unknown"
 
 
-def _check_movement_allowed(content: str, state: dict) -> str | None:
+def _check_movement_allowed(content: str, state: dict, language: str = "en") -> str | None:
     """Return a blocking reason if the player tries to move to a restricted/nonexistent district."""
     if not _MOVE_VERBS.search(content):
         return None
@@ -298,8 +326,12 @@ def _check_movement_allowed(content: str, state: dict) -> str | None:
             elif status in ("restricted", "限制出入"):
                 return None  # Allow attempt, resolver will gate it
             elif status in ("locked", "封锁"):
+                if language == "zh":
+                    return f"前往{target_district}的通道已封锁。你需要先找到进入的方法。"
                 return f"Access to {target_district} is locked. You need to discover how to get there first."
             elif status in ("hidden", "隐藏"):
+                if language == "zh":
+                    return "你还不知道那个地方。"
                 return "You don't know about that place yet."
 
     # Check undiscovered registry
@@ -309,8 +341,12 @@ def _check_movement_allowed(content: str, state: dict) -> str | None:
         if target_district.lower() in name.lower():
             status = entry.get("status", "").lower()
             if status in ("hidden", "隐藏"):
+                if language == "zh":
+                    return "你还不知道那个地方。"
                 return "You don't know about that place yet."
             elif status in ("locked", "封锁"):
+                if language == "zh":
+                    return f"前往{target_district}的通道已封锁。你还没有找到进入的方法。"
                 return f"Access to {target_district} is locked. You haven't found a way in yet."
             elif status in ("restricted", "限制出入"):
                 return None  # Allow attempt
@@ -351,6 +387,7 @@ Classify the player input as VALID or INVALID based on the rules below AND the c
 ## Current Game State:
 {state_context}
 
+Reply in {response_language}.
 Reply with ONLY:
 VALID
 — or —
@@ -440,33 +477,41 @@ def input_validator(state: GameState) -> dict:
             }
 
     # Python movement validation — check district access
-    movement_block = _check_movement_allowed(content, state)
+    language = _read_language_setting(state["session_dir"])
+    movement_block = _check_movement_allowed(content, state, language)
     if movement_block:
         return {"input_blocked": True, "blocking_reason": movement_block}
 
     # LLM semantic check with full game state context (catches fabrication)
     state_context = _build_validator_context(state)
-    validator_prompt = _VALIDATOR_SYSTEM_TEMPLATE.format(state_context=state_context)
+    response_language = "Chinese (中文)" if language == "zh" else "English"
+    validator_prompt = _VALIDATOR_SYSTEM_TEMPLATE.format(
+        state_context=state_context, response_language=response_language
+    )
     llm = get_llm()
     try:
         response = llm.invoke([
             SystemMessage(content=validator_prompt),
             HumanMessage(content=f"Player input: {content}"),
         ])
+        usage = _extract_usage(response)
+        turn_usage = _accumulate_usage(state, "input_validator", usage)
         result = response.content.strip()
         if result.upper().startswith("INVALID"):
             colon_idx = result.find(":")
-            reason = result[colon_idx + 1:].strip() if colon_idx != -1 else "This action is not valid."
-            return {"input_blocked": True, "blocking_reason": reason}
+            fallback = "该操作无效。" if language == "zh" else "This action is not valid."
+            reason = result[colon_idx + 1:].strip() if colon_idx != -1 else fallback
+            return {"input_blocked": True, "blocking_reason": reason, "turn_usage": turn_usage}
     except Exception:
         pass  # Validation failure is non-fatal — let the turn proceed
 
-    return {"input_blocked": False, "blocking_reason": None}
+    return {"input_blocked": False, "blocking_reason": None, "turn_usage": turn_usage if "turn_usage" in locals() else {}}
 
 
 def input_blocked_handler(state: GameState) -> dict:
     """Emit a warning for blocked input.  Does NOT log to conversation or advance the turn."""
     messages = state["messages"]
+    language = _read_language_setting(state["session_dir"])
 
     # Remove the rejected HumanMessage from graph state so it's not visible next turn
     invalid_human_id = None
@@ -477,32 +522,44 @@ def input_blocked_handler(state: GameState) -> dict:
 
     removals = [RemoveMessage(id=invalid_human_id)] if invalid_human_id else []
 
-    reason = state.get("blocking_reason") or "That action is not valid in this game."
+    reason = state.get("blocking_reason") or (
+        "该操作在本游戏中无效。" if language == "zh" else "That action is not valid in this game."
+    )
 
     # Generate contextual suggestions based on current state
     location = state.get("location", {})
     npcs = state.get("npcs", {})
-    district = location.get("district", "the district")
-    area = location.get("area", "your current location")
+    district = location.get("district", "蔓城" if language == "zh" else "the district")
+    area = location.get("area", "当前位置" if language == "zh" else "your current location")
     present_npcs = [
         name for name, info in npcs.items()
         if isinstance(info, dict) and info.get("location", {}).get("district") == district
         and not info.get("hidden")
     ]
 
-    suggestions = [f"Explore {area}", f"Look around {district}"]
-    if present_npcs:
-        suggestions.insert(0, f"Talk to {present_npcs[0]}")
-    suggestions.append("Check your knowledge")
-
-    warning = (
-        f"[System Warning] {reason}\n\n"
-        f"Try instead: {', '.join(suggestions[:3])}"
-    )
+    if language == "zh":
+        suggestions = [f"探索 {area}", f"环顾 {district}"]
+        if present_npcs:
+            suggestions.insert(0, f"与{present_npcs[0]}交谈")
+        suggestions.append("查看已知信息")
+        warning = (
+            f"[系统警告] {reason}\n\n"
+            f"你可以尝试：{', '.join(suggestions[:3])}"
+        )
+    else:
+        suggestions = [f"Explore {area}", f"Look around {district}"]
+        if present_npcs:
+            suggestions.insert(0, f"Talk to {present_npcs[0]}")
+        suggestions.append("Check your knowledge")
+        warning = (
+            f"[System Warning] {reason}\n\n"
+            f"Try instead: {', '.join(suggestions[:3])}"
+        )
 
     return {
         "messages": removals,
         "narrative": warning,
+        "is_warning": True,
         "input_blocked": False,
         "blocking_reason": None,
         "skip_conversation_log": True,
@@ -1040,13 +1097,31 @@ def state_writer(state: GameState) -> dict:
                 is_system_turn = True
                 break
 
+    # Save cumulative usage stats
+    turn_usage = state.get("turn_usage") or {}
+    if turn_usage and turn_usage.get("calls"):
+        cumulative = load_usage(session_dir)
+        cumulative["total_calls"] = cumulative.get("total_calls", 0) + turn_usage.get("calls", 0)
+        cumulative["input_tokens"] = cumulative.get("input_tokens", 0) + turn_usage.get("input_tokens", 0)
+        cumulative["output_tokens"] = cumulative.get("output_tokens", 0) + turn_usage.get("output_tokens", 0)
+        cumulative["total_tokens"] = cumulative.get("total_tokens", 0) + turn_usage.get("total_tokens", 0)
+        save_usage(session_dir, cumulative)
+
     if not is_system_turn:
         turn = player.get("turn", 1)
+        # Build compact turn token summary for conversation log
+        turn_tokens = None
+        if turn_usage and turn_usage.get("total_tokens"):
+            turn_tokens = {
+                "input": turn_usage.get("input_tokens", 0),
+                "output": turn_usage.get("output_tokens", 0),
+                "total": turn_usage.get("total_tokens", 0),
+            }
         for msg in current_msgs:
             if isinstance(msg, HumanMessage):
                 append_conversation(session_dir, "user", str(msg.content), turn)
         if narrative:
-            append_conversation(session_dir, "assistant", narrative, turn)
+            append_conversation(session_dir, "assistant", narrative, turn, tokens=turn_tokens)
 
     # Build removal list for processed tool messages to prevent reprocessing.
     # The add_messages reducer accumulates messages — returning a subset does
@@ -1160,6 +1235,8 @@ def location_updater(state: GameState) -> dict:
             HumanMessage(content=f"Generate location details for: "
                          f"{location.get('district', '?')} — {location.get('area', '?')}"),
         ])
+        usage = _extract_usage(response)
+        turn_usage = _accumulate_usage(state, "location_updater", usage)
         raw = response.content.strip()
 
         # Strip thinking tags from local models
@@ -1180,7 +1257,7 @@ def location_updater(state: GameState) -> dict:
         # Persist to disk
         save_session_file(session_dir, "location.json", location)
 
-        return {"location": location}
+        return {"location": location, "turn_usage": turn_usage}
 
     except Exception:
         # Non-fatal — game continues with existing descriptions
@@ -1376,6 +1453,8 @@ def world_simulator(state: GameState) -> dict:
             SystemMessage(content=_WORLD_SIM_SYSTEM + lang_note),
             HumanMessage(content=json.dumps(context, ensure_ascii=False)),
         ])
+        usage = _extract_usage(response)
+        turn_usage = _accumulate_usage(state, "world_simulator", usage)
         raw = response.content.strip()
 
         # Strip thinking tags from local models
@@ -1449,7 +1528,8 @@ def world_simulator(state: GameState) -> dict:
     save_session_file(session_dir, "npcs", npcs)
     save_session_file(session_dir, "world_state", world_state)
 
-    result: dict = {"npcs": npcs, "world_state": world_state}
+    result: dict = {"npcs": npcs, "world_state": world_state,
+                    "turn_usage": turn_usage if "turn_usage" in locals() else {}}
 
     # Append visible world events to the turn narrative
     if player_visible_texts:
@@ -1520,13 +1600,22 @@ def trace_checker(state: GameState) -> dict:
     if new_discoveries:
         save_session_file(session_dir, "traces", traces)
         # Build discovery notifications for GUI
+        _LAYER_NAMES = {
+            1: {"en": "The Surface", "zh": "表层"},
+            2: {"en": "The Conspiracy", "zh": "阴谋"},
+            3: {"en": "The Severance Truth", "zh": "断离真相"},
+            4: {"en": "The Mirror", "zh": "镜像"},
+            5: {"en": "The Full Truth", "zh": "完整真相"},
+        }
         notifications = []
         for tc in TRACE_CONDITIONS:
             if tc["id"] in new_discoveries:
                 from engine.game_data import get_localized
+                layer_info = _LAYER_NAMES.get(tc["layer"], {})
                 notifications.append({
                     "trace_id": tc["id"],
                     "layer": tc["layer"],
+                    "layer_name": layer_info.get(language, layer_info.get("en", f"Layer {tc['layer']}")),
                     "description": get_localized(tc, "description", language),
                 })
         result["discovery_notifications"] = notifications
