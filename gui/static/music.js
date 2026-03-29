@@ -2,85 +2,50 @@
    SIGNAL LOST — Background Music Engine
 
    Plays looping MP3 tracks for each district and the menu.
-   Crossfades between tracks over 5 seconds using Web Audio API.
+   Uses HTML Audio elements for reliability, with JS crossfade.
+   Crossfade duration: 5 seconds.
    ================================================================ */
 
 const MusicEngine = (() => {
-  let ctx = null;
-  let masterGain = null;
-  let currentTrack = null;   // { source, gain, name }
-  let fadeDuration = 5;      // seconds
+  const FADE_MS = 5000;
+  const FADE_STEP = 50;  // ms per step
   let volume = 0.35;
   let muted = false;
-  let _pendingTrack = null;  // track requested before ctx is ready
-  const _bufferCache = {};   // name → AudioBuffer
+  let currentAudio = null;   // currently playing Audio element
+  let currentName = null;
+  let _fadeOutTimer = null;
+  let _fadeInTimer = null;
 
   // MP3 file mapping: track name → URL path
-  // Note: "The Resonance .mp3" has a trailing space in the filename
   const TRACK_FILES = {
     'menu':            '/assets/music/Menu.mp3',
-    'The Sprawl':      '/assets/music/The Sprawl.mp3',
-    'Neon Row':        '/assets/music/Neon Row.mp3',
-    'The Undercroft':  '/assets/music/The Undercroft.mp3',
+    'The Sprawl':      '/assets/music/The%20Sprawl.mp3',
+    'Neon Row':        '/assets/music/Neon%20Row.mp3',
+    'The Undercroft':  '/assets/music/The%20Undercroft.mp3',
     'Sector 7':        '/assets/music/Sector7.mp3',
-    'The Resonance':   '/assets/music/The Resonance .mp3',
-    'Chrome Heights':  '/assets/music/Chrome Heights.mp3',
+    'The Resonance':   '/assets/music/The%20Resonance%20.mp3',
+    'Chrome Heights':  '/assets/music/Chrome%20Heights.mp3',
   };
 
-  // District name aliases (Chinese names, etc.)
+  // Aliases for Chinese district names
   const ALIASES = {
-    '\u8513\u57CE':       'The Sprawl',      // 蔓城
-    '\u9713\u8679\u8857': 'Neon Row',        // 霓虹街
-    '\u5E95\u6E0A':       'The Undercroft',   // 底渊
-    '\u7B2C\u4E03\u533A': 'Sector 7',        // 第七区
-    '\u5171\u9E23\u6240': 'The Resonance',    // 共鸣所
-    '\u5C16\u5854':       'Chrome Heights',   // 尖塔 — The Spire maps to Chrome Heights music
+    '\u8513\u57CE':       'The Sprawl',
+    '\u9713\u8679\u8857': 'Neon Row',
+    '\u5E95\u6E0A':       'The Undercroft',
+    '\u7B2C\u4E03\u533A': 'Sector 7',
+    '\u5171\u9E23\u6240': 'The Resonance',
+    '\u5C16\u5854':       'Chrome Heights',
     'The Spire':          'Chrome Heights',
-    '\u9540\u91D1\u53F0': 'Chrome Heights',   // 镀金台
+    '\u9540\u91D1\u53F0': 'Chrome Heights',
   };
 
-  // ---------------------------------------------------------------
-  // AudioContext (lazy init on user gesture)
-  // ---------------------------------------------------------------
-  function ensureContext() {
-    if (!ctx) {
-      ctx = new (window.AudioContext || window.webkitAudioContext)();
-      masterGain = ctx.createGain();
-      masterGain.gain.value = muted ? 0 : volume;
-      masterGain.connect(ctx.destination);
-    }
-    if (ctx.state === 'suspended') ctx.resume();
-    return ctx;
-  }
+  // Audio element cache
+  const _audioCache = {};
 
-  // ---------------------------------------------------------------
-  // Load and cache an MP3 as AudioBuffer
-  // ---------------------------------------------------------------
-  async function loadBuffer(name) {
-    if (_bufferCache[name]) return _bufferCache[name];
-    const url = TRACK_FILES[name];
-    if (!url) return null;
-    try {
-      const resp = await fetch(url);
-      if (!resp.ok) { console.warn('MusicEngine: failed to fetch', url); return null; }
-      const arrayBuf = await resp.arrayBuffer();
-      const audioBuf = await ctx.decodeAudioData(arrayBuf);
-      _bufferCache[name] = audioBuf;
-      return audioBuf;
-    } catch (e) {
-      console.warn('MusicEngine: error loading', url, e);
-      return null;
-    }
-  }
-
-  // ---------------------------------------------------------------
-  // Resolve district name → canonical track name
-  // ---------------------------------------------------------------
   function resolveTrack(name) {
     if (!name) return null;
     if (TRACK_FILES[name]) return name;
     if (ALIASES[name]) return ALIASES[name];
-    // Case-insensitive fallback
     const lower = name.toLowerCase();
     for (const key of Object.keys(TRACK_FILES)) {
       if (key.toLowerCase() === lower) return key;
@@ -91,64 +56,92 @@ const MusicEngine = (() => {
     return null;
   }
 
-  // ---------------------------------------------------------------
-  // Core: switch track with crossfade
-  // ---------------------------------------------------------------
-  async function switchTo(trackName) {
+  /** Get or create a cached Audio element for a track */
+  function getAudio(name) {
+    if (_audioCache[name]) return _audioCache[name];
+    const url = TRACK_FILES[name];
+    if (!url) return null;
+    const audio = new Audio(url);
+    audio.loop = true;
+    audio.preload = 'auto';
+    audio.volume = 0;
+    _audioCache[name] = audio;
+    return audio;
+  }
+
+  /** Fade an audio element's volume from current to target over duration */
+  function fade(audio, targetVol, durationMs, onDone) {
+    if (!audio) { if (onDone) onDone(); return; }
+    const startVol = audio.volume;
+    const diff = targetVol - startVol;
+    const steps = Math.max(1, Math.floor(durationMs / FADE_STEP));
+    let step = 0;
+    const timer = setInterval(() => {
+      step++;
+      if (step >= steps) {
+        audio.volume = targetVol;
+        clearInterval(timer);
+        if (onDone) onDone();
+      } else {
+        audio.volume = Math.max(0, Math.min(1, startVol + diff * (step / steps)));
+      }
+    }, FADE_STEP);
+    return timer;
+  }
+
+  function effectiveVolume() {
+    return muted ? 0 : volume;
+  }
+
+  /** Switch to a new track with crossfade */
+  function switchTo(trackName) {
     const resolved = resolveTrack(trackName);
     if (!resolved) return;
+    if (resolved === currentName && currentAudio) return;
 
-    ensureContext();
+    const newAudio = getAudio(resolved);
+    if (!newAudio) return;
 
-    // If AudioContext is still suspended, defer until running
-    if (ctx.state !== 'running') {
-      _pendingTrack = resolved;
-      ctx.onstatechange = () => {
-        if (ctx.state === 'running' && _pendingTrack) {
-          const pending = _pendingTrack;
-          _pendingTrack = null;
-          ctx.onstatechange = null;
-          switchTo(pending);
-        }
-      };
-      return;
+    // Clear any ongoing fades
+    if (_fadeOutTimer) clearInterval(_fadeOutTimer);
+    if (_fadeInTimer) clearInterval(_fadeInTimer);
+
+    // Fade out current
+    const oldAudio = currentAudio;
+    const oldName = currentName;
+    if (oldAudio) {
+      _fadeOutTimer = fade(oldAudio, 0, FADE_MS, () => {
+        oldAudio.pause();
+        oldAudio.currentTime = 0;
+        _fadeOutTimer = null;
+      });
     }
 
-    // Already playing this track
-    if (currentTrack && currentTrack.name === resolved) return;
-
-    // Load the audio buffer
-    const buffer = await loadBuffer(resolved);
-    if (!buffer) return;
-
-    // Fade out current track
-    if (currentTrack) {
-      const old = currentTrack;
-      const t = ctx.currentTime;
-      old.gain.gain.setValueAtTime(old.gain.gain.value, t);
-      old.gain.gain.linearRampToValueAtTime(0, t + fadeDuration);
-      setTimeout(() => {
-        try { old.source.stop(); } catch (e) { /* already stopped */ }
-        old.gain.disconnect();
-      }, fadeDuration * 1000 + 200);
-      currentTrack = null;
+    // Start and fade in new
+    newAudio.volume = 0;
+    const playPromise = newAudio.play();
+    if (playPromise) {
+      playPromise.then(() => {
+        _fadeInTimer = fade(newAudio, effectiveVolume(), FADE_MS, () => {
+          _fadeInTimer = null;
+        });
+      }).catch(err => {
+        // Autoplay blocked — retry on next user interaction
+        console.warn('MusicEngine: play blocked, will retry on click', err);
+        const retry = () => {
+          newAudio.play().then(() => {
+            _fadeInTimer = fade(newAudio, effectiveVolume(), FADE_MS, () => {
+              _fadeInTimer = null;
+            });
+          }).catch(() => {});
+          document.removeEventListener('click', retry);
+        };
+        document.addEventListener('click', retry, { once: true });
+      });
     }
 
-    // Create new source → gain → master
-    const source = ctx.createBufferSource();
-    source.buffer = buffer;
-    source.loop = true;
-
-    const gain = ctx.createGain();
-    const t = ctx.currentTime;
-    gain.gain.setValueAtTime(0, t);
-    gain.gain.linearRampToValueAtTime(1.0, t + fadeDuration);
-
-    source.connect(gain);
-    gain.connect(masterGain);
-    source.start(0);
-
-    currentTrack = { source, gain, name: resolved };
+    currentAudio = newAudio;
+    currentName = resolved;
   }
 
   // ---------------------------------------------------------------
@@ -164,40 +157,41 @@ const MusicEngine = (() => {
   function playMenu() { switchTo('menu'); }
 
   function stopAll() {
-    if (currentTrack) {
-      const old = currentTrack;
-      const t = ctx.currentTime;
-      old.gain.gain.setValueAtTime(old.gain.gain.value, t);
-      old.gain.gain.linearRampToValueAtTime(0, t + fadeDuration);
-      setTimeout(() => {
-        try { old.source.stop(); } catch (e) {}
-        old.gain.disconnect();
-      }, fadeDuration * 1000 + 200);
-      currentTrack = null;
+    if (_fadeOutTimer) clearInterval(_fadeOutTimer);
+    if (_fadeInTimer) clearInterval(_fadeInTimer);
+    if (currentAudio) {
+      _fadeOutTimer = fade(currentAudio, 0, FADE_MS, () => {
+        currentAudio.pause();
+        currentAudio.currentTime = 0;
+        _fadeOutTimer = null;
+      });
+      currentAudio = null;
+      currentName = null;
     }
   }
 
   function setVolume(v) {
     volume = Math.max(0, Math.min(1, v));
-    if (masterGain) masterGain.gain.value = muted ? 0 : volume;
+    if (currentAudio && !muted) {
+      currentAudio.volume = volume;
+    }
   }
 
   function toggleMute() {
     muted = !muted;
-    if (masterGain) masterGain.gain.value = muted ? 0 : volume;
+    if (currentAudio) {
+      currentAudio.volume = muted ? 0 : volume;
+    }
     return muted;
   }
 
   function isMuted() { return muted; }
   function getVolume() { return volume; }
 
-  // Preload all tracks in background after first user gesture
+  /** Preload all tracks */
   function preloadAll() {
-    ensureContext();
-    if (ctx.state === 'running') {
-      for (const name of Object.keys(TRACK_FILES)) {
-        loadBuffer(name); // fire-and-forget
-      }
+    for (const name of Object.keys(TRACK_FILES)) {
+      getAudio(name); // creates Audio element which starts preloading
     }
   }
 
