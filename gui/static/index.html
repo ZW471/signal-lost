@@ -175,6 +175,7 @@
         <span class="status-value" id="statTime">—</span>
       </div>
       <div class="status-item actions">
+        <button class="status-btn" onclick="startTutorial()" title="Tutorial" id="btnTutorial">❓</button>
         <button class="status-btn" onclick="toggleMusic()" title="Music" id="btnMusicToggle">🔊</button>
         <button class="status-btn" onclick="saveGame()" title="Save Game">💾</button>
         <button class="status-btn" onclick="openSettings()" title="Settings">⚙</button>
@@ -227,6 +228,19 @@
           <div class="panel" id="panel-log"></div>
           <div class="panel" id="panel-conversation"></div>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== TUTORIAL OVERLAY ========== -->
+  <div id="tutorialOverlay" style="display:none">
+    <div class="tutorial-highlight" id="tutorialHighlight"></div>
+    <div class="tutorial-tooltip" id="tutorialTooltip">
+      <div class="tutorial-step-indicator" id="tutorialStepIndicator"></div>
+      <div class="tutorial-text" id="tutorialText"></div>
+      <div class="tutorial-buttons">
+        <button class="tutorial-btn" id="tutorialSkip" onclick="endTutorial()"></button>
+        <button class="tutorial-btn primary" id="tutorialNext" onclick="nextTutorialStep()"></button>
       </div>
     </div>
   </div>

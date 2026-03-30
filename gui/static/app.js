@@ -140,6 +140,8 @@ const LABELS = {
     game_over_reconnect: 'RECONNECT', game_over_fallback: '// CONNECTION TERMINATED',
     // Connection
     connection_lost: 'Connection lost. Reconnecting...',
+    // Tutorial
+    tutorial_step: 'STEP', tutorial_skip: 'SKIP', tutorial_next: 'NEXT', tutorial_finish: 'GOT IT',
     // Boot
     boot_sub: '// NEURAL INTERFACE v3.7.1',
   },
@@ -222,6 +224,8 @@ const LABELS = {
     game_over_reconnect: '重新连接', game_over_fallback: '// 连接已终止',
     // Connection
     connection_lost: '连接已断开，正在重连...',
+    // Tutorial
+    tutorial_step: '步骤', tutorial_skip: '跳过', tutorial_next: '下一步', tutorial_finish: '知道了',
     // Boot
     boot_sub: '// 神经接口 v3.7.1',
   },
@@ -674,6 +678,7 @@ let cachedSaves = [];
 let cachedSessions = [];
 let selectedBackground = 'street_runner';
 let isFirstInput = true; // Track if first input after resume (to remove system message)
+let pendingTutorial = false; // Show tutorial after new game starts
 let resumeMessageEl = null; // Reference to the resume system message element
 let discoveryEls = []; // Track discovery notification elements (ephemeral)
 
@@ -705,6 +710,7 @@ function handleServerMessage(msg) {
       switchScreen('gameScreen');
       MusicEngine.preloadAll();
       if (msg.session) updateAllPanels(msg.session);
+      if (pendingTutorial) { pendingTutorial = false; setTimeout(startTutorial, 600); }
       break;
 
     case 'thinking':
@@ -965,7 +971,7 @@ function startNewGame() {
     difficulty: document.getElementById('selectDifficulty').value,
     language: document.getElementById('selectLanguage').value,
   };
-  clearChat(); isFirstInput = true; resumeMessageEl = null;
+  clearChat(); isFirstInput = true; pendingTutorial = true; resumeMessageEl = null;
   sendWS({ action: 'new_game', config, provider: getProviderConfig() });
   switchScreen('gameScreen'); showThinking(); disableInput();
 }
@@ -1180,6 +1186,132 @@ function showGameOver(ending, narrative) {
   document.getElementById('gameOverNarrative').textContent = narrative || '';
   document.getElementById('gameOverOverlay').style.display = 'flex';
   playBeep(200, 0.3, 0.05);
+}
+
+// ================================================================
+// TUTORIAL
+// ================================================================
+
+let tutorialStep = 0;
+let tutorialActive = false;
+
+const TUTORIAL_STEPS = {
+  en: [
+    { target: '#chatPanel', text: 'This is the <b>Command Terminal</b>. Type actions here to interact with the world — talk to NPCs, investigate locations, hack systems, or anything you can imagine.', pos: 'right' },
+    { target: '.info-panels', text: 'This is the <b>Info Panel</b>. It tracks everything about your character and the world. Use the tabs above to switch views.', pos: 'left' },
+    { target: '[data-panel="identity"]', text: '<b>ID</b> — Your identity card. Shows your name, background, integrity (health), credits, and status effects.', pos: 'below', activateTab: 'identity' },
+    { target: '[data-panel="knowledge"]', text: '<b>KNOW</b> — Everything you\'ve learned: facts, rumors, evidence, theories, and connections between them.', pos: 'below', activateTab: 'knowledge' },
+    { target: '[data-panel="traces"]', text: '<b>TRACE</b> — Fragments of truth you\'ve uncovered. Discover all traces across 5 layers to reach the ending.', pos: 'below', activateTab: 'traces' },
+    { target: '[data-panel="district"]', text: '<b>LOC</b> — Your current location, danger level, signal strength, nearby exits, and points of interest.', pos: 'below', activateTab: 'district' },
+    { target: '[data-panel="inventory"]', text: '<b>INV</b> — Items you\'re carrying. Limited slots, so choose wisely.', pos: 'below', activateTab: 'inventory' },
+    { target: '[data-panel="network"]', text: '<b>NPC</b> — People you\'ve met. Track their faction, trust level, location, and quests.', pos: 'below', activateTab: 'network' },
+    { target: '[data-panel="world"]', text: '<b>WORLD</b> — Global state: NEXUS alert level, fragment decay, and district access status.', pos: 'below', activateTab: 'world' },
+    { target: '#chatInput', text: 'You\'re ready. Type your first action and press Enter. Explore, investigate, and survive. Good luck, operative.', pos: 'above' },
+  ],
+  zh: [
+    { target: '#chatPanel', text: '这是<b>命令终端</b>。在这里输入行动来与世界互动——与NPC对话、调查地点、入侵系统，或任何你能想象的事。', pos: 'right' },
+    { target: '.info-panels', text: '这是<b>信息面板</b>。它追踪你角色和世界的一切信息。使用上方的标签切换视图。', pos: 'left' },
+    { target: '[data-panel="identity"]', text: '<b>身份</b> — 你的身份卡。显示姓名、背景、完整性（生命值）、信用点和状态效果。', pos: 'below', activateTab: 'identity' },
+    { target: '[data-panel="knowledge"]', text: '<b>知识</b> — 你所了解的一切：事实、传闻、证据、推论以及它们之间的关联。', pos: 'below', activateTab: 'knowledge' },
+    { target: '[data-panel="traces"]', text: '<b>痕迹</b> — 你发现的真相碎片。发现5层中的所有痕迹以到达结局。', pos: 'below', activateTab: 'traces' },
+    { target: '[data-panel="district"]', text: '<b>区域</b> — 当前位置、危险等级、信号强度、附近出口和兴趣点。', pos: 'below', activateTab: 'district' },
+    { target: '[data-panel="inventory"]', text: '<b>物品</b> — 你携带的物品。槽位有限，请明智选择。', pos: 'below', activateTab: 'inventory' },
+    { target: '[data-panel="network"]', text: '<b>人脉</b> — 你遇到的人。追踪他们的阵营、信任度、位置和任务。', pos: 'below', activateTab: 'network' },
+    { target: '[data-panel="world"]', text: '<b>世界</b> — 全局状态：连结警报等级、碎片衰变和区域通行状况。', pos: 'below', activateTab: 'world' },
+    { target: '#chatInput', text: '准备就绪。输入你的第一个行动并按回车。探索、调查、生存。祝你好运，特工。', pos: 'above' },
+  ],
+};
+
+function startTutorial() {
+  tutorialStep = 0;
+  tutorialActive = true;
+  document.getElementById('tutorialOverlay').style.display = 'block';
+  showTutorialStep();
+  playBeep(1000, 0.03);
+}
+
+function endTutorial() {
+  tutorialActive = false;
+  document.getElementById('tutorialOverlay').style.display = 'none';
+  // Restore ID tab
+  const idTab = document.querySelector('[data-panel="identity"]');
+  if (idTab) switchPanel(idTab);
+  playBeep(600, 0.03);
+}
+
+function nextTutorialStep() {
+  tutorialStep++;
+  const steps = TUTORIAL_STEPS[currentLang] || TUTORIAL_STEPS.en;
+  if (tutorialStep >= steps.length) {
+    endTutorial();
+    return;
+  }
+  showTutorialStep();
+  playBeep(900, 0.02);
+}
+
+function showTutorialStep() {
+  const steps = TUTORIAL_STEPS[currentLang] || TUTORIAL_STEPS.en;
+  const step = steps[tutorialStep];
+  const overlay = document.getElementById('tutorialOverlay');
+  const highlight = document.getElementById('tutorialHighlight');
+  const tooltip = document.getElementById('tutorialTooltip');
+  const textEl = document.getElementById('tutorialText');
+  const indicator = document.getElementById('tutorialStepIndicator');
+  const skipBtn = document.getElementById('tutorialSkip');
+  const nextBtn = document.getElementById('tutorialNext');
+
+  // Activate tab if needed
+  if (step.activateTab) {
+    const tabBtn = document.querySelector(`[data-panel="${step.activateTab}"]`);
+    if (tabBtn) switchPanel(tabBtn);
+  }
+
+  const target = document.querySelector(step.target);
+  if (!target) { nextTutorialStep(); return; }
+
+  const rect = target.getBoundingClientRect();
+
+  // Position highlight
+  highlight.style.left = rect.left - 4 + 'px';
+  highlight.style.top = rect.top - 4 + 'px';
+  highlight.style.width = rect.width + 8 + 'px';
+  highlight.style.height = rect.height + 8 + 'px';
+
+  // Set content
+  const isLast = tutorialStep === steps.length - 1;
+  indicator.textContent = `${L('tutorial_step')} ${tutorialStep + 1} / ${steps.length}`;
+  textEl.innerHTML = step.text;
+  skipBtn.textContent = L('tutorial_skip');
+  nextBtn.textContent = isLast ? L('tutorial_finish') : L('tutorial_next');
+
+  // Position tooltip
+  tooltip.style.animation = 'none';
+  tooltip.offsetHeight; // force reflow
+  tooltip.style.animation = '';
+
+  // Reset positioning
+  tooltip.style.left = '';
+  tooltip.style.right = '';
+  tooltip.style.top = '';
+  tooltip.style.bottom = '';
+
+  const tooltipW = 340;
+  const margin = 16;
+
+  if (step.pos === 'right') {
+    tooltip.style.left = Math.min(rect.right + margin, window.innerWidth - tooltipW - margin) + 'px';
+    tooltip.style.top = rect.top + 'px';
+  } else if (step.pos === 'left') {
+    tooltip.style.left = Math.max(rect.left - tooltipW - margin, margin) + 'px';
+    tooltip.style.top = rect.top + 'px';
+  } else if (step.pos === 'below') {
+    tooltip.style.left = Math.max(margin, Math.min(rect.left, window.innerWidth - tooltipW - margin)) + 'px';
+    tooltip.style.top = rect.bottom + margin + 'px';
+  } else if (step.pos === 'above') {
+    tooltip.style.left = Math.max(margin, rect.left) + 'px';
+    tooltip.style.bottom = (window.innerHeight - rect.top + margin) + 'px';
+  }
 }
 
 // ================================================================

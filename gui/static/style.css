@@ -1247,6 +1247,95 @@ html, body {
 }
 
 /* ================================================================
+   TUTORIAL OVERLAY
+   ================================================================ */
+
+#tutorialOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  pointer-events: none;
+}
+
+.tutorial-highlight {
+  position: absolute;
+  z-index: 201;
+  border: 2px solid var(--cyan);
+  border-radius: 4px;
+  box-shadow: 0 0 0 9999px rgba(5, 5, 10, 0.82), 0 0 20px rgba(0, 255, 245, 0.3);
+  transition: all 0.4s ease;
+  pointer-events: none;
+}
+
+.tutorial-tooltip {
+  position: absolute;
+  z-index: 202;
+  background: var(--bg-panel);
+  border: 1px solid var(--cyan);
+  box-shadow: 0 0 24px rgba(0, 255, 245, 0.15);
+  padding: 16px 20px;
+  max-width: 340px;
+  min-width: 240px;
+  pointer-events: auto;
+  animation: tutorial-pop 0.3s ease-out;
+}
+
+@keyframes tutorial-pop {
+  0% { opacity: 0; transform: translateY(8px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+.tutorial-step-indicator {
+  font-family: var(--font-display);
+  font-size: 10px;
+  letter-spacing: 2px;
+  color: var(--cyan);
+  margin-bottom: 8px;
+  text-transform: uppercase;
+}
+
+.tutorial-text {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text);
+  margin-bottom: 14px;
+}
+
+.tutorial-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.tutorial-btn {
+  font-family: var(--font-display);
+  font-size: 11px;
+  letter-spacing: 1px;
+  padding: 6px 16px;
+  border: 1px solid var(--border);
+  background: var(--bg-input);
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  pointer-events: auto;
+}
+
+.tutorial-btn:hover {
+  border-color: var(--text-dim);
+  color: var(--text);
+}
+
+.tutorial-btn.primary {
+  border-color: var(--cyan);
+  color: var(--cyan);
+}
+
+.tutorial-btn.primary:hover {
+  background: rgba(0, 255, 245, 0.1);
+  box-shadow: 0 0 10px rgba(0, 255, 245, 0.2);
+}
+
+/* ================================================================
    GAME OVER OVERLAY
    ================================================================ */
 
