@@ -812,8 +812,18 @@ function openSettings() {
   const vol = MusicEngine.getVolume();
   document.getElementById('inputMusicVolume').value = vol;
   document.getElementById('musicVolValue').textContent = Math.round(vol * 100) + '%';
-  // Snapshot current state so cancel can restore
-  _settingsSnapshot = { volume: vol };
+  // Snapshot ALL form state so cancel can restore
+  _settingsSnapshot = {
+    volume: vol,
+    provider: document.getElementById('selectProvider').value,
+    model: document.getElementById('inputModel').value,
+    temperature: document.getElementById('inputTemp').value,
+    apiKey: document.getElementById('inputApiKey').value,
+    baseUrl: document.getElementById('inputBaseUrl').value,
+    langsmithKey: document.getElementById('inputLangsmithKey').value,
+    langsmithProject: document.getElementById('inputLangsmithProject').value,
+    showTokens: _showTokens(),
+  };
   // Sync token tracking checkbox
   document.getElementById('chkShowTokens').checked = _showTokens();
   // Show cumulative usage stats if available
@@ -822,9 +832,19 @@ function openSettings() {
 }
 
 function closeSettings() {
-  // Restore to pre-open state (cancel = discard changes)
+  // Restore to pre-open state (cancel = discard all unsaved changes)
   if (_settingsSnapshot) {
     MusicEngine.setVolume(_settingsSnapshot.volume);
+    document.getElementById('selectProvider').value = _settingsSnapshot.provider;
+    document.getElementById('inputModel').value = _settingsSnapshot.model;
+    document.getElementById('inputTemp').value = _settingsSnapshot.temperature;
+    document.getElementById('tempValue').textContent = _settingsSnapshot.temperature;
+    document.getElementById('inputApiKey').value = _settingsSnapshot.apiKey;
+    document.getElementById('inputBaseUrl').value = _settingsSnapshot.baseUrl;
+    document.getElementById('inputLangsmithKey').value = _settingsSnapshot.langsmithKey;
+    document.getElementById('inputLangsmithProject').value = _settingsSnapshot.langsmithProject;
+    document.getElementById('chkShowTokens').checked = _settingsSnapshot.showTokens;
+    onProviderChange(); // re-sync field visibility for restored provider
     _settingsSnapshot = null;
   }
   document.getElementById('settingsOverlay').style.display = 'none';
@@ -875,17 +895,17 @@ const DEFAULT_MODELS = {
   lmstudio: '[model]',
 };
 
+let _lastProvider = null; // tracks provider to detect actual switches
+
 function onProviderChange() {
   const p = document.getElementById('selectProvider').value;
   document.getElementById('apiKeyGroup').style.display = (p === 'local' || p === 'claude-code') ? 'none' : '';
   document.getElementById('baseUrlGroup').style.display = p === 'local' ? '' : 'none';
-  // Update model field to the provider's default
-  const modelInput = document.getElementById('inputModel');
-  const current = modelInput.value.trim();
-  const allDefaults = Object.values(DEFAULT_MODELS);
-  if (!current || allDefaults.includes(current)) {
-    modelInput.value = DEFAULT_MODELS[p] || '';
+  // Only update model when the provider actually changes (not on initial load)
+  if (_lastProvider !== null && _lastProvider !== p) {
+    document.getElementById('inputModel').value = DEFAULT_MODELS[p] || '';
   }
+  _lastProvider = p;
 }
 
 document.getElementById('inputTemp').addEventListener('input', function() {
