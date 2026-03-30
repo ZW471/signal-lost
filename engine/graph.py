@@ -41,6 +41,7 @@ from engine.reducer import reduce_turn_messages, trim_to_window
 
 _llm_instance = None
 _zero_cost: bool = False
+_fast_llm_instance = None
 
 
 def get_llm():
@@ -62,6 +63,30 @@ def set_llm(llm, *, zero_cost: bool = False):
     global _llm_instance, _zero_cost
     _llm_instance = llm
     _zero_cost = zero_cost
+
+
+def get_fast_llm():
+    """Get the fast (haiku-class) LLM for lightweight tasks.
+
+    Falls back to the main LLM if no fast LLM is configured.
+    Used for language correction and other non-critical LLM calls.
+    """
+    return _fast_llm_instance or _llm_instance
+
+
+def set_fast_llm(llm):
+    """Set a fast (haiku-class) LLM for lightweight tasks like translation."""
+    global _fast_llm_instance
+    _fast_llm_instance = llm
+
+
+def _is_claude_code_provider() -> bool:
+    """Check if the current provider is claude-code (subprocess-based CLI)."""
+    try:
+        llm = get_llm()
+        return getattr(llm, '_llm_type', '') == 'claude-code-cli'
+    except Exception:
+        return False
 
 
 def _extract_usage(response) -> dict:
@@ -752,13 +777,25 @@ def _find_english_fields(obj, path: str = "") -> list[str]:
     return problems
 
 
+_LANG_CORRECTION_PROMPT = """\
+Translate this cyberpunk game narrative from English to Simplified Chinese (简体中文).
+
+Rules:
+- Keep proper nouns in English: NEXUS, Signal, Netrunner, district names, NPC names
+- Keep tool/command names in English: dice, cipher, signal, glitch
+- Translate everything else to natural, atmospheric Chinese
+- Keep the same second-person present-tense style
+- Preserve all formatting (line breaks, dashes, etc.)
+- Return ONLY the translated text, no explanation"""
+
+
 def output_language_checker(state: GameState) -> dict:
     """Verify LLM output matches the configured display language.
 
     Skipped for system-event turns (resume/load) and for any language other
-    than 'zh'.  If Chinese is required but the output is in English, a
-    correction SystemMessage is injected and the resolver is re-run once.
-    The retry counter prevents infinite loops.
+    than 'zh'.  If Chinese is required but output is in English, uses a
+    fast (haiku-class) LLM to translate the narrative in-place rather than
+    re-running the full resolver.
     """
     # System-event turns (resume recaps) skip language validation
     if state.get("skip_conversation_log", False):
@@ -771,63 +808,50 @@ def output_language_checker(state: GameState) -> dict:
     if language != "zh":
         return {"language_retry_count": 0}
 
-    # Already retried once — accept output and move on
-    retry_count = state.get("language_retry_count", 0)
-    if retry_count >= 1:
-        return {"language_retry_count": 0}
-
     messages = state["messages"]
     current_msgs = _current_turn_messages(messages)
-    problems: list[str] = []
 
-    # 1. Check narrative (last AI message without tool calls)
-    for msg in reversed(current_msgs):
+    # Find the narrative AI message (last AIMessage without tool calls)
+    narrative_msg = None
+    narrative_idx = None
+    for i, msg in enumerate(messages):
         if isinstance(msg, AIMessage) and msg.content and not msg.tool_calls:
-            if _is_english(str(msg.content)):
-                snippet = str(msg.content)[:80] + "…"
-                problems.append(f'  · narrative: "{snippet}"')
-            break
+            narrative_msg = msg
+            narrative_idx = i
 
-    # 2. Check tool call arguments for text fields
-    for msg in current_msgs:
-        if isinstance(msg, AIMessage) and msg.tool_calls:
-            for tc in msg.tool_calls:
-                args = tc.get("args", {})
-                problems.extend(_find_english_fields(args, tc.get("name", "tool")))
-
-    if not problems:
+    if not narrative_msg:
         return {"language_retry_count": 0}
 
-    # Build correction message with specific problems listed
-    problem_text = "\n".join(problems)
-    correction = SystemMessage(content=(
-        "[语言校正 / LANGUAGE CORRECTION]\n"
-        "游戏语言设置为简体中文，但你的上一条回复包含了英文内容。\n"
-        "The game language is set to 简体中文 (Simplified Chinese), "
-        "but your previous response contained English where Chinese was required.\n\n"
-        f"检测到的问题 / Problems detected:\n{problem_text}\n\n"
-        "请用中文重新生成完整回复。规则：\n"
-        "Please regenerate your entire response in Chinese. Rules:\n"
-        "- 叙事文本、状态效果名称与强度、日志标题、世界事件、NPC 对话必须用中文\n"
-        "  (Narrative, status effect names/intensities, log titles, world events, "
-        "NPC dialogue must be in Chinese)\n"
-        "- 专有名词可保留英文：NEXUS、Signal、Netrunner、district 名称等\n"
-        "  (Proper nouns may stay in English: NEXUS, Signal, Netrunner, district names, etc.)\n"
-        "- 工具命令保持英文：dice、cipher、signal、glitch\n"
-        "  (Tool commands stay in English: dice, cipher, signal, glitch)"
-    ))
+    narrative_text = str(narrative_msg.content)
+    if not _is_english(narrative_text):
+        return {"language_retry_count": 0}
 
-    return {
-        "messages": [correction],
-        "language_retry_count": 1,
-    }
+    # Narrative is in English but should be Chinese — translate via fast LLM
+    try:
+        fast_llm = get_fast_llm()
+        response = fast_llm.invoke([
+            SystemMessage(content=_LANG_CORRECTION_PROMPT),
+            HumanMessage(content=narrative_text),
+        ])
+        translated = response.content.strip()
 
+        if not translated or _is_english(translated):
+            # Translation failed or still English — accept as-is
+            return {"language_retry_count": 0}
 
-def route_after_language_check(state: GameState) -> Literal["resolver", "state_writer"]:
-    """Route to resolver for a retry, or proceed to state_writer."""
-    if state.get("language_retry_count", 0) >= 1:
-        return "resolver"
-    return "state_writer"
+        # Replace the narrative message content with the translated version
+        updated_msg = AIMessage(
+            content=translated,
+            id=narrative_msg.id,
+            response_metadata=getattr(narrative_msg, "response_metadata", {}),
+        )
+        return {
+            "messages": [updated_msg],
+            "language_retry_count": 0,
+        }
+    except Exception:
+        # Translation failure is non-fatal — proceed with English
+        return {"language_retry_count": 0}
 
 
 # ---------------------------------------------------------------------------
@@ -862,6 +886,9 @@ def state_writer(state: GameState) -> dict:
     npcs = copy.deepcopy(state["npcs"])
     world_state = copy.deepcopy(state["world_state"])
     log = copy.deepcopy(state["log"])
+
+    # Track new knowledge entries for notifications
+    knowledge_notifications: list[dict] = []
 
     # Only process messages from the current turn to avoid
     # reprocessing old ToolMessages that accumulate in state.
@@ -931,6 +958,41 @@ def state_writer(state: GameState) -> dict:
             key = type_map.get(entry_type, entry_type + "s")
             if key not in knowledge:
                 knowledge[key] = []
+
+            # --- Auto-generate ID if missing ---
+            id_prefix_map = {
+                "facts": "FACT",
+                "rumors": "RUMOR",
+                "evidence": "EVID",
+                "theories": "THEO",
+            }
+            if "id" not in entry and key in id_prefix_map:
+                prefix = id_prefix_map[key]
+                existing_nums = []
+                for e in knowledge[key]:
+                    eid = e.get("id", "")
+                    if eid.startswith(prefix + "-"):
+                        try:
+                            existing_nums.append(int(eid[len(prefix) + 1:]))
+                        except ValueError:
+                            pass
+                next_num = max(existing_nums, default=0) + 1
+                entry["id"] = f"{prefix}-{next_num:03d}"
+
+            # --- Extract source from description if embedded ---
+            if entry.get("source") == "unknown" and "description" in entry:
+                desc = entry["description"]
+                # Match patterns like (来源：米拉) or (source: Mira) or （来源：米拉）
+                src_match = re.search(
+                    r'[（(]\s*(?:来源|source)\s*[:：]\s*(.+?)\s*[）)]',
+                    desc, re.IGNORECASE,
+                )
+                if src_match:
+                    entry["source"] = src_match.group(1).strip()
+                    # Remove the source annotation from description
+                    entry["description"] = desc[:src_match.start()].rstrip("，。, ") + desc[src_match.end():]
+                    entry["description"] = entry["description"].strip()
+
             # Skip if an entry with the same ID already exists
             entry_id = entry.get("id") or entry.get("statement", "")
             existing_ids = {
@@ -941,6 +1003,7 @@ def state_writer(state: GameState) -> dict:
                 pass  # Duplicate — skip
             else:
                 knowledge[key].append(entry)
+                knowledge_notifications.append({"entry_type": entry_type})
 
         elif mutation_type == "update_npc":
             npc_name = result.get("name", "")
@@ -1288,6 +1351,7 @@ def state_writer(state: GameState) -> dict:
         "narrative": narrative,
         "messages": removals + reduced_new,
         "skip_conversation_log": False,
+        "knowledge_notifications": knowledge_notifications,
     }
 
 
@@ -1509,6 +1573,10 @@ def world_simulator(state: GameState) -> dict:
     Runs a lightweight LLM call (no tools) to decide what NPCs do on their
     own: follow-ups, location moves, mood shifts, off-screen world impacts.
     Visible events are appended to the turn's narrative.
+
+    NOTE: This function is no longer part of the main graph pipeline.
+    In the GUI, it runs via WorldSimScheduler in the background.
+    For headless/test mode, it can be called inline after graph.invoke().
     """
     player = state["player"]
     npcs = copy.deepcopy(state["npcs"])
@@ -1808,7 +1876,6 @@ def build_graph() -> StateGraph:
     graph.add_node("state_writer", state_writer)
     graph.add_node("location_updater", location_updater)
     graph.add_node("world_ticker", world_ticker)
-    graph.add_node("world_simulator", world_simulator)
     graph.add_node("trace_checker", trace_checker)
     graph.add_node("consequence", consequence)
 
@@ -1842,18 +1909,14 @@ def build_graph() -> StateGraph:
         {"resolver": "resolver", "state_writer": "state_writer"},
     )
 
-    # output_language_checker → resolver (retry) or state_writer
-    graph.add_conditional_edges(
-        "output_language_checker",
-        route_after_language_check,
-        {"resolver": "resolver", "state_writer": "state_writer"},
-    )
+    # output_language_checker → state_writer (translation handled in-place by haiku)
+    graph.add_edge("output_language_checker", "state_writer")
 
-    # state_writer → location_updater → world_ticker → world_simulator → trace_checker → consequence
+    # state_writer → location_updater → world_ticker → trace_checker → consequence
+    # Note: world_simulator is decoupled — runs via WorldSimScheduler in the background
     graph.add_edge("state_writer", "location_updater")
     graph.add_edge("location_updater", "world_ticker")
-    graph.add_edge("world_ticker", "world_simulator")
-    graph.add_edge("world_simulator", "trace_checker")
+    graph.add_edge("world_ticker", "trace_checker")
     graph.add_edge("trace_checker", "consequence")
 
     # consequence → END (one turn per invocation)

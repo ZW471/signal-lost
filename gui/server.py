@@ -29,7 +29,9 @@ if _GAME_ROOT not in sys.path:
 
 from langchain_core.messages import HumanMessage
 
-from engine.graph import compile_graph, set_llm
+from engine.graph import compile_graph, set_llm, set_fast_llm, get_llm
+from engine.world_sim_scheduler import WorldSimScheduler
+from engine.claude_code_engine import run_turn as cc_run_turn
 from engine.state import (
     create_new_session,
     copy_save_to_session,
@@ -105,6 +107,37 @@ _game_graph = None
 _game_state = None
 _game_lock = threading.Lock()
 _active_session_dir: str | None = None
+_world_sim_scheduler: WorldSimScheduler | None = None
+
+
+_is_claude_code: bool = False
+
+
+def _setup_fast_llm(provider: str):
+    """Set up a fast (haiku-class) LLM for lightweight tasks.
+
+    Uses Anthropic haiku when the main provider has an Anthropic API key.
+    Falls back to the main LLM otherwise (claude-code, local, etc.).
+    """
+    if provider == "anthropic" and os.environ.get("ANTHROPIC_API_KEY"):
+        try:
+            fast = create_llm("anthropic", "claude-haiku-4-5-20250620")
+            set_fast_llm(fast)
+        except Exception:
+            pass  # Fall back to main LLM
+    # For other providers, fast_llm stays None → get_fast_llm() returns main LLM
+
+
+def _start_world_sim_scheduler(session_dir: str):
+    """Create or restart the WorldSimScheduler for the active session."""
+    global _world_sim_scheduler
+    if _world_sim_scheduler is not None:
+        _world_sim_scheduler.stop()
+    _world_sim_scheduler = WorldSimScheduler(
+        session_dir=session_dir,
+        llm_getter=get_llm,
+        game_lock=_game_lock,
+    )
 
 
 def _filter_hidden(obj):
@@ -207,7 +240,7 @@ async def session_data():
 
 @app.websocket("/ws")
 async def websocket_endpoint(ws: WebSocket):
-    global _game_graph, _game_state, _active_session_dir
+    global _game_graph, _game_state, _active_session_dir, _is_claude_code
 
     await ws.accept()
 
@@ -252,6 +285,8 @@ async def websocket_endpoint(ws: WebSocket):
                 try:
                     llm = create_llm(provider, model, **extra)
                     set_llm(llm, zero_cost=provider in ("claude-code", "local", "lmstudio"))
+                    _is_claude_code = provider == "claude-code"
+                    _setup_fast_llm(provider)
                 except Exception as e:
                     await ws.send_json({"type": "error", "message": f"Failed to create LLM: {e}"})
                     continue
@@ -284,6 +319,7 @@ async def websocket_endpoint(ws: WebSocket):
 
                 _game_graph = compile_graph()
                 _game_state = initial_state(_active_session_dir)
+                _start_world_sim_scheduler(_active_session_dir)
 
                 await ws.send_json({
                     "type": "game_started",
@@ -323,6 +359,8 @@ async def websocket_endpoint(ws: WebSocket):
                 try:
                     llm = create_llm(provider, model, **extra)
                     set_llm(llm, zero_cost=provider in ("claude-code", "local", "lmstudio"))
+                    _is_claude_code = provider == "claude-code"
+                    _setup_fast_llm(provider)
                 except Exception as e:
                     await ws.send_json({"type": "error", "message": f"Failed to create LLM: {e}"})
                     continue
@@ -330,6 +368,7 @@ async def websocket_endpoint(ws: WebSocket):
                 _active_session_dir = sess_path
                 _game_graph = compile_graph()
                 _game_state = initial_state(_active_session_dir)
+                _start_world_sim_scheduler(_active_session_dir)
 
                 await ws.send_json({
                     "type": "game_started",
@@ -366,6 +405,8 @@ async def websocket_endpoint(ws: WebSocket):
                 try:
                     llm = create_llm(provider, model, **extra)
                     set_llm(llm, zero_cost=provider in ("claude-code", "local", "lmstudio"))
+                    _is_claude_code = provider == "claude-code"
+                    _setup_fast_llm(provider)
                 except Exception as e:
                     await ws.send_json({"type": "error", "message": f"Failed to create LLM: {e}"})
                     continue
@@ -374,6 +415,7 @@ async def websocket_endpoint(ws: WebSocket):
                 copy_save_to_session(save_path, _active_session_dir)
                 _game_graph = compile_graph()
                 _game_state = initial_state(_active_session_dir)
+                _start_world_sim_scheduler(_active_session_dir)
 
                 await ws.send_json({
                     "type": "game_started",
@@ -459,7 +501,8 @@ async def websocket_endpoint(ws: WebSocket):
                 })
 
     except WebSocketDisconnect:
-        pass
+        if _world_sim_scheduler:
+            _world_sim_scheduler.stop()
     except Exception as e:
         try:
             await ws.send_json({"type": "error", "message": str(e)})
@@ -473,11 +516,39 @@ async def _run_turn(ws: WebSocket, player_input: str | None = None, mode: str = 
 
     await ws.send_json({"type": "thinking"})
 
+    import time as _time
+    _turn_start = _time.time()
+
     loop = asyncio.get_event_loop()
 
     def _invoke():
         global _game_state
         with _game_lock:
+            # --- Claude-code bypass: single LLM call, pure Python post-processing ---
+            if _is_claude_code and _active_session_dir:
+                return cc_run_turn(
+                    session_dir=_active_session_dir,
+                    player_input=player_input or "",
+                    mode=mode,
+                )
+
+            # --- Standard LangGraph path ---
+            # Inject any pending world events from background world simulator
+            if _world_sim_scheduler and mode == "play":
+                pending = _world_sim_scheduler.get_pending_events()
+                if pending:
+                    world_section = "\n\n".join(pending)
+                    _game_state["messages"].append(
+                        HumanMessage(content=(
+                            f"[SYSTEM: While you were away, the world moved on.]\n{world_section}"
+                        ))
+                    )
+                    _game_state["skip_conversation_log"] = True
+                    _game_state["skip_turn_increment"] = True
+                    _game_state["skip_validation"] = True
+                    result = _game_graph.invoke(_game_state)
+                    _game_state = result
+
             if mode == "resume":
                 player = _game_state.get("player", {})
                 location = _game_state.get("location", {})
@@ -514,12 +585,14 @@ async def _run_turn(ws: WebSocket, player_input: str | None = None, mode: str = 
             msg_role = "agent"
 
         turn_usage = result.get("turn_usage") or {}
+        elapsed = result.get("elapsed_seconds") or round(_time.time() - _turn_start, 1)
         await ws.send_json({
             "type": "narrative",
             "text": narrative,
             "game_over": game_over,
             "ending": ending,
             "role": msg_role,
+            "elapsed_seconds": elapsed,
             "usage": {
                 "input": turn_usage.get("input_tokens", 0),
                 "output": turn_usage.get("output_tokens", 0),
@@ -540,6 +613,14 @@ async def _run_turn(ws: WebSocket, player_input: str | None = None, mode: str = 
                     "description": d["description"],
                 })
 
+        # Send knowledge-added notifications (brief bottom-right toast)
+        knowledge_notifs = result.get("knowledge_notifications", [])
+        for kn in knowledge_notifs:
+            await ws.send_json({
+                "type": "knowledge_added",
+                "entry_type": kn.get("entry_type", "fact"),
+            })
+
         await ws.send_json({
             "type": "session_update",
             "session": _get_session_data(),
@@ -551,6 +632,12 @@ async def _run_turn(ws: WebSocket, player_input: str | None = None, mode: str = 
                 "ending": ending,
                 "narrative": narrative,
             })
+            # Stop world sim on game over
+            if _world_sim_scheduler:
+                _world_sim_scheduler.stop()
+        elif mode == "play" and _world_sim_scheduler:
+            # Schedule background world simulation after player turn
+            _world_sim_scheduler.on_player_input()
 
     except Exception as e:
         import traceback

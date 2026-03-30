@@ -716,10 +716,10 @@ function handleServerMessage(msg) {
       const role = msg.role || 'agent';
       if (role === 'system') {
         // Resume message — will be removed after first player input
-        resumeMessageEl = addTypingMessage(msg.text, role);
+        resumeMessageEl = addTypingMessage(msg.text, role, null, msg.elapsed_seconds);
         isFirstInput = true;
       } else {
-        addTypingMessage(msg.text, role, msg.usage);
+        addTypingMessage(msg.text, role, msg.usage, msg.elapsed_seconds);
       }
       break;
 
@@ -729,6 +729,10 @@ function handleServerMessage(msg) {
 
     case 'discovery':
       showDiscoveryNotification(msg);
+      break;
+
+    case 'knowledge_added':
+      showKnowledgeNotification(msg.entry_type);
       break;
 
     case 'game_over':
@@ -1028,6 +1032,30 @@ function showDiscoveryNotification(msg) {
   discoveryEls.push(el);
 }
 
+function showKnowledgeNotification(entryType) {
+  const labels = {
+    fact:       { en: 'New fact discovered',     zh: '新事实已记录' },
+    rumor:      { en: 'New rumor discovered',    zh: '新传闻已记录' },
+    evidence:   { en: 'New evidence collected',  zh: '新证据已收集' },
+    theory:     { en: 'New theory formed',       zh: '新理论已形成' },
+    connection: { en: 'New connection found',    zh: '新关联已发现' },
+  };
+  const lang = currentLang === 'zh' ? 'zh' : 'en';
+  const label = (labels[entryType] || labels.fact)[lang];
+
+  const el = document.createElement('div');
+  el.className = 'knowledge-toast';
+  el.textContent = label;
+  document.body.appendChild(el);
+
+  requestAnimationFrame(() => el.classList.add('visible'));
+
+  setTimeout(() => {
+    el.classList.add('fading');
+    setTimeout(() => el.remove(), 500);
+  }, 3000);
+}
+
 function _chatPrefixes() {
   return { player: L('chat_player'), agent: L('chat_agent'), system: L('chat_system'), warning: L('chat_agent') };
 }
@@ -1045,7 +1073,7 @@ function addChatMessage(text, role = 'agent') {
   return msg;
 }
 
-function addTypingMessage(text, role = 'agent', usage = null) {
+function addTypingMessage(text, role = 'agent', usage = null, elapsedSeconds = null) {
   const container = document.getElementById('chatMessages');
   const msg = document.createElement('div');
   msg.className = `chat-msg ${role}`;
@@ -1065,13 +1093,20 @@ function addTypingMessage(text, role = 'agent', usage = null) {
       setTimeout(typeNext, interval);
     } else {
       contentEl.classList.remove('typing');
-      // Show token/cost subtly if enabled
+      // Build info line: time always shown, tokens optional
+      const infoParts = [];
+      if (elapsedSeconds != null) {
+        infoParts.push(`${elapsedSeconds}s`);
+      }
       if (usage && usage.total && _showTokens()) {
         const cost = _getCost(usage);
-        const tokenEl = document.createElement('div');
-        tokenEl.className = 'msg-tokens';
-        tokenEl.textContent = `${usage.total.toLocaleString()} tokens · ${_formatCost(cost)}`;
-        msg.appendChild(tokenEl);
+        infoParts.push(`${usage.total.toLocaleString()} tokens · ${_formatCost(cost)}`);
+      }
+      if (infoParts.length > 0) {
+        const infoEl = document.createElement('div');
+        infoEl.className = 'msg-tokens';
+        infoEl.textContent = infoParts.join(' · ');
+        msg.appendChild(infoEl);
       }
       enableInput();
     }

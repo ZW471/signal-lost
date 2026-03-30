@@ -42,6 +42,7 @@ class GameState(TypedDict):
     ending: str | None    # Which ending triggered, if any
     narrative: str        # The narrative text to display to the player
     discovery_notifications: list  # Populated by trace_checker, consumed by server
+    knowledge_notifications: list  # Populated by state_writer, consumed by server
 
     # --- Session directory path ---
     session_dir: str      # Path to session/ folder
@@ -123,6 +124,14 @@ def save_session(session_dir: str, state: GameState) -> None:
         data = state.get(key, {})
         if data:
             _write_json(os.path.join(session_dir, filename), data)
+
+
+def load_session_file(session_dir: str, key: str) -> dict:
+    """Load a single session file by state key name."""
+    filename = SESSION_FILES.get(key)
+    if not filename:
+        return {}
+    return _read_json(os.path.join(session_dir, filename))
 
 
 def save_session_file(session_dir: str, key: str, data: dict) -> None:
@@ -212,6 +221,7 @@ def initial_state(session_dir: str) -> GameState:
         is_warning=False,
         turn_usage={},
         discovery_notifications=[],
+        knowledge_notifications=[],
     )
 
 

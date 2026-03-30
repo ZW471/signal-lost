@@ -300,6 +300,7 @@ class ClaudeCodeLLM(BaseChatModel):
             "--output-format", "stream-json",
             "--verbose",
             "--tools", "",
+            "--effort", "low",
         ]
 
         if self._session_id:
@@ -341,6 +342,7 @@ class ClaudeCodeLLM(BaseChatModel):
                             "--output-format", "stream-json",
                             "--verbose",
                             "--tools", "",
+                            "--effort", "low",
                         ]
                         continue
                     raise RuntimeError(f"claude CLI exited {result.returncode}: {stderr}")
