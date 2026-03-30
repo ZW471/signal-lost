@@ -213,6 +213,28 @@ def generate_minor_npc(district: str | None = None, faction: str | None = None) 
 # ═══════════════════════════════════════════════════════════════════════════
 
 
+def _parse_json_arg(value: Any, fallback_key: str = "description") -> dict:
+    """Parse a tool argument that should be a JSON object.
+
+    Handles three input forms (common with simulated tool calling):
+      1. dict  — pass through (already parsed by JSON extractor)
+      2. JSON string — parse it
+      3. plain string — wrap as {fallback_key: value} instead of erroring
+    """
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+            if isinstance(parsed, dict):
+                return parsed
+        except (json.JSONDecodeError, TypeError):
+            pass
+        # Plain string fallback — wrap it so the tool still succeeds
+        return {fallback_key: value}
+    return {fallback_key: str(value)}
+
+
 @tool
 def update_player(changes: str) -> str:
     """Update player state fields.
@@ -224,11 +246,8 @@ def update_player(changes: str) -> str:
     Args:
         changes: JSON string of changes, e.g. '{"credits": 40, "neural_implant": "Active"}'
     """
-    try:
-        parsed = json.loads(changes)
-        return json.dumps({"type": "update_player", "changes": parsed})
-    except json.JSONDecodeError:
-        return json.dumps({"error": "Invalid JSON in changes"})
+    parsed = _parse_json_arg(changes, "value")
+    return json.dumps({"type": "update_player", "changes": parsed})
 
 
 @tool
@@ -244,11 +263,11 @@ def add_knowledge(entry_type: str, entry: str) -> str:
             For theories: {"id": "THEO-NNN", "statement": "...", "based_on": ["FACT-001", "RUMOR-002"]}
             For connections: {"ids": ["FACT-001", "RUMOR-003"], "relationship": "..."}
     """
-    try:
-        parsed = json.loads(entry)
-        return json.dumps({"type": "add_knowledge", "entry_type": entry_type, "entry": parsed})
-    except json.JSONDecodeError:
-        return json.dumps({"error": "Invalid JSON in entry"})
+    parsed = _parse_json_arg(entry, "description")
+    # Ensure a 'source' field exists (required by knowledge schema)
+    if "source" not in parsed:
+        parsed["source"] = "unknown"
+    return json.dumps({"type": "add_knowledge", "entry_type": entry_type, "entry": parsed})
 
 
 @tool
@@ -261,11 +280,8 @@ def update_npc(name: str, changes: str) -> str:
             To update: {"trust_level": "cautious_ally", "location_last_seen": "..."}
             To add new: {"name": "Mira", "faction": "...", "trust_level": "neutral", ...}
     """
-    try:
-        parsed = json.loads(changes)
-        return json.dumps({"type": "update_npc", "name": name, "changes": parsed})
-    except json.JSONDecodeError:
-        return json.dumps({"error": "Invalid JSON in changes"})
+    parsed = _parse_json_arg(changes, "description")
+    return json.dumps({"type": "update_npc", "name": name, "changes": parsed})
 
 
 @tool
@@ -284,11 +300,8 @@ def update_location(location_data: str) -> str:
             - points_of_interest: list of notable things the player can interact with, e.g. ["Mira's Noodle Shop — steaming bowls..."]
             - npcs_present: list of characters visible here, e.g. ["Mira — behind the counter, watching you"]
     """
-    try:
-        parsed = json.loads(location_data)
-        return json.dumps({"type": "update_location", "data": parsed})
-    except json.JSONDecodeError:
-        return json.dumps({"error": "Invalid JSON in location_data"})
+    parsed = _parse_json_arg(location_data, "description")
+    return json.dumps({"type": "update_location", "data": parsed})
 
 
 @tool
@@ -307,7 +320,7 @@ def update_inventory(action: str, item: str | None = None) -> str:
     try:
         if action == "update_credits":
             return json.dumps({"type": "update_inventory", "action": action, "amount": int(item or 0)})
-        parsed = json.loads(item or "{}")
+        parsed = _parse_json_arg(item or "{}", "name")
         if action == "sell":
             return json.dumps({
                 "type": "update_inventory",
@@ -329,11 +342,8 @@ def update_world_state(changes: str) -> str:
             Examples: {"nexus_alert_delta": 10}, {"fragment_decay_delta": -5},
             {"discover_district": "The Undercroft"}, {"add_event": "NEXUS raid on Undercroft"}
     """
-    try:
-        parsed = json.loads(changes)
-        return json.dumps({"type": "update_world_state", "changes": parsed})
-    except json.JSONDecodeError:
-        return json.dumps({"error": "Invalid JSON in changes"})
+    parsed = _parse_json_arg(changes, "description")
+    return json.dumps({"type": "update_world_state", "changes": parsed})
 
 
 @tool

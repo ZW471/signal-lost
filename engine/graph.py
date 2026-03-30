@@ -317,7 +317,11 @@ def resolver(state: GameState) -> dict:
 
     usage = _extract_usage(response)
     turn_usage = _accumulate_usage(state, "resolver", usage)
-    return {"messages": [response], "turn_usage": turn_usage}
+    result = {"messages": [response], "turn_usage": turn_usage}
+    # Track tool-call rounds for loop cap (see after_tools)
+    if response.tool_calls:
+        result["tool_call_rounds"] = state.get("tool_call_rounds", 0) + 1
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -690,11 +694,18 @@ def should_continue_tools(state: GameState) -> Literal["tool_executor", "output_
     return "output_language_checker"
 
 
+_MAX_TOOL_ROUNDS = 4  # Safety cap — prevents unbounded resolver↔tool loops
+
+
 def after_tools(state: GameState) -> Literal["resolver", "state_writer"]:
-    """After tool execution, route back to resolver for more tool calls or proceed."""
-    # Check if the resolver needs to process tool results
-    # Look at the message before the tool messages — if it had tool_calls,
-    # the resolver needs to see the results
+    """After tool execution, route back to resolver or proceed if loop cap reached.
+
+    Tools are always executed regardless of the cap — we only stop calling
+    the resolver *again*.  This ensures no tool calls are silently dropped.
+    """
+    rounds = state.get("tool_call_rounds", 0)
+    if rounds >= _MAX_TOOL_ROUNDS:
+        return "state_writer"
     return "resolver"
 
 
@@ -1824,8 +1835,12 @@ def build_graph() -> StateGraph:
         {"tool_executor": "tool_executor", "output_language_checker": "output_language_checker"},
     )
 
-    # tool_executor → back to resolver (for multi-step tool use)
-    graph.add_edge("tool_executor", "resolver")
+    # tool_executor → back to resolver (multi-step) or state_writer (loop cap)
+    graph.add_conditional_edges(
+        "tool_executor",
+        after_tools,
+        {"resolver": "resolver", "state_writer": "state_writer"},
+    )
 
     # output_language_checker → resolver (retry) or state_writer
     graph.add_conditional_edges(

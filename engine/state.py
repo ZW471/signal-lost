@@ -55,6 +55,7 @@ class GameState(TypedDict):
     language_retry_count: int    # How many times output_language_checker has retried (cap: 1)
     is_warning: bool             # True when input_blocked_handler generated a warning message
     turn_usage: dict             # Per-turn LLM token usage accumulated across nodes
+    tool_call_rounds: int        # How many resolver→tool_executor rounds this turn (cap: 4)
 
 
 def reset_turn_flags() -> dict:
@@ -72,6 +73,7 @@ def reset_turn_flags() -> dict:
         "language_retry_count": 0,
         "is_warning": False,
         "turn_usage": {},
+        "tool_call_rounds": 0,
     }
 
 

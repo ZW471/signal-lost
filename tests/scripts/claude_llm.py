@@ -4,11 +4,18 @@ Signal Lost — Claude Code CLI LLM Wrapper
 A LangChain BaseChatModel that uses `claude -p` (Claude Code print mode)
 for inference instead of a direct API call. This lets you run the game
 engine using your Claude Code subscription with no extra API costs.
+
+Optimizations (inspired by Paperclip's claude-local adapter):
+- stream-json output for structured NDJSON parsing
+- stdin piping instead of --system-prompt CLI arg
+- session reuse via --resume for faster subsequent calls
+- nesting-guard env var stripping
 """
 
 from __future__ import annotations
 
 import json
+import os
 import re
 import subprocess
 import time
@@ -23,6 +30,54 @@ from langchain_core.runnables import Runnable, RunnableBinding
 from langchain_core.tools import BaseTool
 from langchain_core.utils.function_calling import convert_to_openai_tool
 
+# Env vars that prevent nested Claude Code sessions from starting
+_NESTING_GUARD_VARS = (
+    "CLAUDECODE",
+    "CLAUDE_CODE_ENTRYPOINT",
+    "CLAUDE_CODE_SESSION",
+    "CLAUDE_CODE_PARENT_SESSION",
+)
+
+
+def _clean_env() -> dict[str, str]:
+    """Return os.environ with Claude Code nesting-guard vars stripped."""
+    return {k: v for k, v in os.environ.items() if k not in _NESTING_GUARD_VARS}
+
+
+def _parse_stream_json(stdout: str) -> tuple[str, str | None]:
+    """Parse NDJSON stream from `claude -p --output-format stream-json --verbose`.
+
+    Returns (result_text, session_id).
+    Raises RuntimeError if the stream indicates an error or contains no result.
+    """
+    session_id: str | None = None
+    result_text: str | None = None
+
+    for line in stdout.split("\n"):
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+
+        event_type = event.get("type")
+
+        if event_type == "system":
+            session_id = event.get("session_id") or session_id
+
+        elif event_type == "result":
+            session_id = event.get("session_id") or session_id
+            if event.get("is_error"):
+                error_msg = event.get("result", "Unknown error from Claude CLI")
+                raise RuntimeError(f"claude CLI error: {error_msg}")
+            result_text = event.get("result", "")
+
+    if result_text is None:
+        raise RuntimeError("claude CLI returned no result event in stream-json output")
+
+    return result_text, session_id
 
 
 def _serialize_messages(messages: list[BaseMessage]) -> tuple[str, str]:
@@ -62,23 +117,22 @@ def _serialize_messages(messages: list[BaseMessage]) -> tuple[str, str]:
 def _format_tool_schemas(tools: list[dict]) -> str:
     """Build a compact tool description block for the system prompt."""
     lines = [
-        "\n\n## TOOL CALLING — TWO-PHASE RESPONSE",
-        "You have game tools. Your response MUST follow this two-phase flow:",
+        "\n\n## TOOL CALLING",
+        "You have game tools. When you need to call tools:",
         "",
-        "**PHASE 1 (when you need to call tools):**",
-        "Output ONLY a JSON object with your tool calls. NO narrative text. NO prose.",
-        "Just the raw JSON on a single line:",
-        '{"tool_calls": [{"name": "tool_name", "args": {"param": "value"}}]}',
+        "1. Call ALL tools you need in ONE JSON response — do NOT spread tool calls across multiple responses.",
+        '   Format: {"tool_calls": [{"name": "tool_name", "args": {"param": "value"}}, ...]}',
         "",
-        "**PHASE 2 (after you see [TOOL RESULT] messages, OR if no tools needed):**",
-        "Write your FULL narrative response as rich, vivid, atmospheric prose.",
-        "Multiple paragraphs. Immersive noir cyberpunk storytelling.",
-        "NO JSON. NO tool calls. Just pure narrative.",
+        "2. After you see [TOOL RESULT] messages, write your narrative response.",
+        "   Write rich, vivid, atmospheric cyberpunk prose (at least 3-4 paragraphs).",
         "",
-        "CRITICAL RULES:",
-        "- NEVER mix narrative and tool calls in the same response",
-        "- When calling tools, output ONLY JSON — save your storytelling for after",
-        "- When writing narrative, write at LEAST 3-4 paragraphs of vivid prose",
+        "3. If no tools are needed, just write your narrative directly.",
+        "",
+        "IMPORTANT:",
+        "- Bundle ALL tool calls into a SINGLE JSON object — one response, all tools at once.",
+        "- For tool args that expect JSON (like 'changes'), pass the value directly as an object, NOT as a string.",
+        '  Correct: {"name": "update_player", "args": {"changes": {"credits": 40}}}',
+        '  Wrong:   {"name": "update_player", "args": {"changes": "{\\"credits\\": 40}"}}',
         "",
         "### Available Tools:",
     ]
@@ -174,6 +228,13 @@ def _parse_tool_response(raw: str) -> AIMessage:
                 for tc in tool_calls_raw
                 if isinstance(tc, dict) and "name" in tc
             ]
+            # Normalize: tools that expect JSON string params may receive
+            # dicts from the model.  Serialize them so the tool gets valid JSON.
+            _JSON_STRING_PARAMS = {"changes", "entry", "location_data", "item"}
+            for tc in tool_calls:
+                for param, val in list(tc["args"].items()):
+                    if param in _JSON_STRING_PARAMS and isinstance(val, dict):
+                        tc["args"][param] = json.dumps(val, ensure_ascii=False)
             narrative = "\n".join(narrative_parts).strip()
             # Also include any "text" from the JSON itself
             json_text = json_match.get("text", "")
@@ -186,11 +247,15 @@ def _parse_tool_response(raw: str) -> AIMessage:
 
 
 class ClaudeCodeLLM(BaseChatModel):
-    """LangChain chat model that delegates to `claude -p` (Claude Code CLI)."""
+    """LangChain chat model that delegates to `claude -p` (Claude Code CLI).
+
+    Uses stream-json output, stdin piping, and session reuse for performance.
+    """
 
     model_name: str = "sonnet"
     max_retries: int = 2
     timeout: int = 180
+    _session_id: str | None = None
 
     @property
     def _llm_type(self) -> str:
@@ -228,35 +293,71 @@ class ClaudeCodeLLM(BaseChatModel):
         return ChatResult(generations=[ChatGeneration(message=message)])
 
     def _call_claude(self, system_prompt: str, user_prompt: str) -> str:
-        """Invoke `claude -p` and return the raw response text."""
+        """Invoke `claude -p` with stream-json output and session reuse."""
         cmd = [
             "claude", "-p",
             "--model", self.model_name,
+            "--output-format", "stream-json",
+            "--verbose",
             "--tools", "",
-            "--no-session-persistence",
         ]
 
-        if system_prompt:
-            cmd.extend(["--system-prompt", system_prompt])
+        if self._session_id:
+            cmd.extend(["--resume", self._session_id])
 
+        # Pipe system prompt + conversation via stdin instead of --system-prompt arg
+        stdin_parts = []
+        if system_prompt:
+            stdin_parts.append(f"[SYSTEM PROMPT]\n{system_prompt}")
+        if user_prompt:
+            stdin_parts.append(f"[CONVERSATION]\n{user_prompt}")
+        stdin_text = "\n\n".join(stdin_parts)
+
+        env = _clean_env()
         last_error = None
+
         for attempt in range(self.max_retries + 1):
             try:
                 result = subprocess.run(
                     cmd,
-                    input=user_prompt,
+                    input=stdin_text,
                     capture_output=True,
                     text=True,
                     timeout=self.timeout,
+                    env=env,
                 )
+
                 if result.returncode != 0:
-                    raise RuntimeError(f"claude CLI exited {result.returncode}: {result.stderr[:500]}")
+                    stderr = result.stderr[:500] if result.stderr else ""
+                    # If session resume failed (stale/unknown), retry without it
+                    if self._session_id and ("unknown session" in stderr.lower()
+                                              or "session" in stderr.lower()):
+                        self._session_id = None
+                        cmd = [c for c in cmd if c != "--resume" and c != self._session_id]
+                        # Rebuild cmd without --resume
+                        cmd = [
+                            "claude", "-p",
+                            "--model", self.model_name,
+                            "--output-format", "stream-json",
+                            "--verbose",
+                            "--tools", "",
+                        ]
+                        continue
+                    raise RuntimeError(f"claude CLI exited {result.returncode}: {stderr}")
 
                 output = result.stdout.strip()
                 if not output:
                     raise RuntimeError("claude CLI returned empty response")
 
-                return output
+                # Parse NDJSON stream for result text and session_id
+                text, session_id = _parse_stream_json(output)
+                if session_id:
+                    self._session_id = session_id
+
+                if not text:
+                    raise RuntimeError("claude CLI returned empty result text")
+
+                return text
 
             except (subprocess.TimeoutExpired, RuntimeError) as e:
                 last_error = e

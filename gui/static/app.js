@@ -705,7 +705,6 @@ function handleServerMessage(msg) {
       switchScreen('gameScreen');
       MusicEngine.preloadAll();
       if (msg.session) updateAllPanels(msg.session);
-      enableInput();
       break;
 
     case 'thinking':
@@ -1083,6 +1082,7 @@ function addTypingMessage(text, role = 'agent', usage = null) {
 
 function sendMessage() {
   const input = document.getElementById('chatInput');
+  if (input.disabled) return;
   const text = input.value.trim();
   if (!text) return;
 
@@ -1111,8 +1111,8 @@ function showThinking() {
   document.getElementById('chatMessages').scrollTop = document.getElementById('chatMessages').scrollHeight;
 }
 function hideThinking() { document.getElementById('thinkingIndicator').style.display = 'none'; }
-function enableInput() { const i = document.getElementById('chatInput'); i.disabled = false; i.focus(); }
-function disableInput() { document.getElementById('chatInput').disabled = true; }
+function enableInput() { const i = document.getElementById('chatInput'); i.disabled = false; i.focus(); document.querySelector('.send-btn').disabled = false; }
+function disableInput() { document.getElementById('chatInput').disabled = true; document.querySelector('.send-btn').disabled = true; }
 
 // ================================================================
 // SAVE / LOAD
@@ -1747,17 +1747,15 @@ window.addEventListener('load', () => {
 });
 
 // Start music on first user interaction (browsers require gesture for AudioContext)
-document.addEventListener('click', function _initMusic() {
-  // Resume AudioContext if suspended (required by some browsers)
+function _initMusicOnce() {
   if (audioCtx.state === 'suspended') audioCtx.resume();
-  MusicEngine.playMenu();
+  // Only play menu music if we're on a menu screen; skip if already in-game
+  const onMenu = ['menuScreen', 'bootScreen', 'newGameScreen', 'loadGameScreen']
+    .some(id => { const el = document.getElementById(id); return el && el.classList.contains('active'); });
+  if (onMenu) MusicEngine.playMenu();
   MusicEngine.preloadAll();
-  document.removeEventListener('click', _initMusic);
-}, { once: true });
-// Also listen for keydown as a user gesture
-document.addEventListener('keydown', function _initMusicKey() {
-  if (audioCtx.state === 'suspended') audioCtx.resume();
-  MusicEngine.playMenu();
-  MusicEngine.preloadAll();
-  document.removeEventListener('keydown', _initMusicKey);
-}, { once: true });
+  document.removeEventListener('click', _initMusicOnce);
+  document.removeEventListener('keydown', _initMusicOnce);
+}
+document.addEventListener('click', _initMusicOnce, { once: false });
+document.addEventListener('keydown', _initMusicOnce, { once: false });
