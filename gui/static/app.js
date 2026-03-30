@@ -1206,6 +1206,8 @@ const TUTORIAL_STEPS = {
     { target: '[data-panel="inventory"]', text: '<b>INV</b> — Items you\'re carrying. Limited slots, so choose wisely.', pos: 'below', activateTab: 'inventory' },
     { target: '[data-panel="network"]', text: '<b>NPC</b> — People you\'ve met. Track their faction, trust level, location, and quests.', pos: 'below', activateTab: 'network' },
     { target: '[data-panel="world"]', text: '<b>WORLD</b> — Global state: NEXUS alert level, fragment decay, and district access status.', pos: 'below', activateTab: 'world' },
+    { target: '[data-panel="log"]', text: '<b>LOG</b> — Session log of key events: discoveries, encounters, and world changes. A quick recap of what happened.', pos: 'below', activateTab: 'log' },
+    { target: '[data-panel="conversation"]', text: '<b>CONV</b> — Full conversation history. Scroll back through everything you and the system have said.', pos: 'below', activateTab: 'conversation' },
     { target: '#chatInput', text: 'You\'re ready. Type your first action and press Enter. Explore, investigate, and survive. Good luck, operative.', pos: 'above' },
   ],
   zh: [
@@ -1218,6 +1220,8 @@ const TUTORIAL_STEPS = {
     { target: '[data-panel="inventory"]', text: '<b>物品</b> — 你携带的物品。槽位有限，请明智选择。', pos: 'below', activateTab: 'inventory' },
     { target: '[data-panel="network"]', text: '<b>人脉</b> — 你遇到的人。追踪他们的阵营、信任度、位置和任务。', pos: 'below', activateTab: 'network' },
     { target: '[data-panel="world"]', text: '<b>世界</b> — 全局状态：连结警报等级、碎片衰变和区域通行状况。', pos: 'below', activateTab: 'world' },
+    { target: '[data-panel="log"]', text: '<b>日志</b> — 关键事件记录：发现、遭遇和世界变化。快速回顾发生的一切。', pos: 'below', activateTab: 'log' },
+    { target: '[data-panel="conversation"]', text: '<b>对话</b> — 完整对话记录。回顾你和系统之间的所有交流。', pos: 'below', activateTab: 'conversation' },
     { target: '#chatInput', text: '准备就绪。输入你的第一个行动并按回车。探索、调查、生存。祝你好运，特工。', pos: 'above' },
   ],
 };
