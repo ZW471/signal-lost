@@ -39,7 +39,6 @@ from engine.game_data import (
     ITEM_SKILL_PENALTIES,
 )
 from engine.tools import (
-    roll_dice,
     decrypt_cipher,
     analyze_signal,
     generate_glitch_event,
@@ -134,12 +133,15 @@ State mutations (declare what changes):
 - `update_world_state`: `{"changes": {"nexus_alert_delta": N, "fragment_decay_delta": N, "discover_district": "Name", "add_event": "event text"}}`
 - `add_log_entry`: `{"title": "...", "tag": "movement|dialogue|discovery|danger|signal|system|trade", "text": "..."}`
 
-Game tools (engine executes these):
-- `roll_dice`: `{"expression": "d100", "target": 60, "modifier": 0, "skill_type": ""}` — write narrative for the ATTEMPT, not outcome
+Game tools (engine executes these — do NOT use roll_dice, you decide outcomes directly):
 - `decrypt_cipher`: `{"method": "caesar|xor|reverse|base64|analyze", "text": "...", "key": "..."}`
 - `analyze_signal`: `{"description": "...", "scan": true/false, "strength": N, "resonate": false}`
 - `generate_glitch_event`: `{"district": "...", "strength": 30}`
 - `generate_minor_npc`: `{"district": "...", "faction": "..."}`
+
+**IMPORTANT — No dice rolls**: You decide ALL outcomes directly based on narrative \
+logic, player skill, difficulty, and what makes the story compelling. Do NOT call \
+roll_dice. Write definitive outcomes in your narrative.
 
 **location_update** (null unless player moved): If you called `update_location` \
 in tool_calls, also provide the full new location description:
@@ -401,7 +403,6 @@ def _fallback(text: str) -> dict:
 # ---------------------------------------------------------------------------
 
 _GAME_TOOLS = {
-    "roll_dice": roll_dice,
     "decrypt_cipher": decrypt_cipher,
     "analyze_signal": analyze_signal,
     "generate_glitch_event": generate_glitch_event,
@@ -440,30 +441,20 @@ def _execute_game_tools(tool_calls: list, narrative: str, inventory: dict) -> tu
                 pass
             continue
 
+        if name == "roll_dice":
+            continue  # Dice rolls removed — model decides outcomes directly
+
         tool_fn = _GAME_TOOLS.get(name)
         if not tool_fn:
             continue
 
         try:
-            if name == "roll_dice":
-                result = tool_fn.invoke(args)
-                result_data = json.loads(result) if isinstance(result, str) else result
-                total = result_data.get("total", "?")
-                target = args.get("target")
-                success = result_data.get("success")
-                if target is not None and success is not None:
-                    outcome = "Success" if success else "Failure"
-                    extra_narrative.append(f"\n\n*[Roll: d100 → {total} vs target {target} — {outcome}]*")
-                else:
-                    extra_narrative.append(f"\n\n*[Roll result: {total}]*")
-            else:
-                result = tool_fn.invoke(args)
-                result_data = json.loads(result) if isinstance(result, str) else result
-                # For signal analysis, cipher results, etc. — append summary
-                if isinstance(result_data, dict):
-                    summary = result_data.get("interpretation") or result_data.get("result") or result_data.get("description", "")
-                    if summary:
-                        extra_narrative.append(f"\n\n*[{name}: {str(summary)[:200]}]*")
+            result = tool_fn.invoke(args)
+            result_data = json.loads(result) if isinstance(result, str) else result
+            if isinstance(result_data, dict):
+                summary = result_data.get("interpretation") or result_data.get("result") or result_data.get("description", "")
+                if summary:
+                    extra_narrative.append(f"\n\n*[{name}: {str(summary)[:200]}]*")
         except Exception as e:
             logger.warning("Game tool %s failed: %s", name, e)
 

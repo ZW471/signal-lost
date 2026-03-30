@@ -1160,8 +1160,18 @@ function toggleMusic() {
   playBeep(muted ? 400 : 800, 0.03);
 }
 
-function saveGame() { document.getElementById('saveDialog').style.display = 'flex'; document.getElementById('saveName').focus(); playBeep(1000, 0.04); }
-function confirmSave() { sendWS({ action: 'save_game', save_name: document.getElementById('saveName').value.trim() || 'quicksave' }); }
+function _defaultSaveName() {
+  const now = new Date();
+  const mm = String(now.getMonth() + 1).padStart(2, '0');
+  const dd = String(now.getDate()).padStart(2, '0');
+  const yyyy = now.getFullYear();
+  const hh = String(now.getHours()).padStart(2, '0');
+  const mi = String(now.getMinutes()).padStart(2, '0');
+  const alias = (document.getElementById('statAlias')?.textContent || '').trim() || 'Unknown';
+  return `${mm}-${dd}-${yyyy} ${hh}:${mi} ${alias}`;
+}
+function saveGame() { const el = document.getElementById('saveName'); el.value = _defaultSaveName(); document.getElementById('saveDialog').style.display = 'flex'; el.focus(); el.select(); playBeep(1000, 0.04); }
+function confirmSave() { sendWS({ action: 'save_game', save_name: document.getElementById('saveName').value.trim() || _defaultSaveName() }); }
 function closeSaveDialog() { document.getElementById('saveDialog').style.display = 'none'; }
 
 function showGameOver(ending, narrative) {
@@ -1394,9 +1404,10 @@ function updateTracesPanel(traces) {
     html += `<div class="panel-empty">${L('no_traces')}</div>`;
   } else {
     html += `<div class="panel-section">`;
-    for (const trace of discovered) {
+    for (let i = 0; i < discovered.length; i++) {
+      const trace = discovered[i];
       html += `<div class="trace-item discovered">
-        <span class="dim" style="font-size:11px">${esc(trace.id.replace(/-L\d+-/, '-'))}</span>
+        <span class="dim" style="font-size:11px">TRACE-${String(i + 1).padStart(2, '0')}</span>
         ${esc(trace.description)}
         ${trace.turn ? `<span class="dim"> (${L('turn')} ${trace.turn})</span>` : ''}
       </div>`;
