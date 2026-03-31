@@ -181,18 +181,24 @@ def _get_session_data(session_dir: str | None = None) -> dict:
 
 
 def _list_saves() -> list[dict]:
-    """List available save games."""
+    """List available save games, sorted newest-first by last modification time."""
     saves = []
     if os.path.isdir(SAVES_DIR):
-        for name in sorted(os.listdir(SAVES_DIR)):
+        for name in os.listdir(SAVES_DIR):
             save_path = os.path.join(SAVES_DIR, name)
             if os.path.isdir(save_path):
                 player = _read_json(os.path.join(save_path, "player.json"))
+                player_file = os.path.join(save_path, "player.json")
+                mtime = os.path.getmtime(player_file) if os.path.isfile(player_file) else os.path.getmtime(save_path)
                 saves.append({
                     "name": name,
                     "player_name": player.get("name", "Unknown"),
                     "turn": player.get("turn", "?"),
+                    "mtime": mtime,
                 })
+    saves.sort(key=lambda s: s["mtime"], reverse=True)
+    for s in saves:
+        del s["mtime"]
     return saves
 
 

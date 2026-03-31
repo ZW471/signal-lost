@@ -641,7 +641,7 @@ def list_active_sessions(sessions_root: str) -> list[dict]:
     sessions: list[dict] = []
     if not os.path.isdir(sessions_root):
         return sessions
-    for entry in sorted(os.listdir(sessions_root)):
+    for entry in os.listdir(sessions_root):
         sess_path = os.path.join(sessions_root, entry)
         if not os.path.isdir(sess_path):
             continue
@@ -655,7 +655,11 @@ def list_active_sessions(sessions_root: str) -> list[dict]:
             "alias": player.get("alias", ""),
             "turn": player.get("turn", "?"),
             "background": player.get("background", "?"),
+            "mtime": os.path.getmtime(os.path.join(sess_path, "player.json")) if os.path.isfile(os.path.join(sess_path, "player.json")) else os.path.getmtime(sess_path),
         })
+    sessions.sort(key=lambda s: s["mtime"], reverse=True)
+    for s in sessions:
+        del s["mtime"]
     return sessions
 
 
