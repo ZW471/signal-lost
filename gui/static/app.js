@@ -1058,6 +1058,9 @@ function showDiscoveryNotification(msg) {
   discoveryEls.push(el);
 }
 
+// Track active knowledge toasts for vertical stacking
+let _activeToasts = [];
+
 function showKnowledgeNotification(entryType) {
   const labels = {
     fact:       { en: 'New fact discovered',     zh: '新事实已记录' },
@@ -1072,13 +1075,28 @@ function showKnowledgeNotification(entryType) {
   const el = document.createElement('div');
   el.className = 'knowledge-toast';
   el.textContent = label;
+
+  // Stack vertically above existing toasts
+  const baseBottom = 24;
+  const toastHeight = 40; // approximate height of each toast + gap
+  const offset = baseBottom + _activeToasts.length * toastHeight;
+  el.style.bottom = offset + 'px';
+
   document.body.appendChild(el);
+  _activeToasts.push(el);
 
   requestAnimationFrame(() => el.classList.add('visible'));
 
   setTimeout(() => {
     el.classList.add('fading');
-    setTimeout(() => el.remove(), 500);
+    setTimeout(() => {
+      el.remove();
+      _activeToasts = _activeToasts.filter(t => t !== el);
+      // Reposition remaining toasts
+      _activeToasts.forEach((t, i) => {
+        t.style.bottom = (baseBottom + i * toastHeight) + 'px';
+      });
+    }, 500);
   }, 3000);
 }
 

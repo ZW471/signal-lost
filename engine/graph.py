@@ -889,6 +889,8 @@ def state_writer(state: GameState) -> dict:
 
     # Track new knowledge entries for notifications
     knowledge_notifications: list[dict] = []
+    # Track elapsed in-world minutes reported by the model
+    elapsed_minutes: int = 0
 
     # Only process messages from the current turn to avoid
     # reprocessing old ToolMessages that accumulate in state.
@@ -1061,6 +1063,20 @@ def state_writer(state: GameState) -> dict:
                         integrity["current"] = max(0, integrity.get("current", 1) - 2)
                     new_loc = {"district": "The Sprawl", "area": "Rain Alley (detained)"}
 
+            # Normalize exit direction keys to English lowercase
+            exits = new_loc.get("exits", {})
+            if exits:
+                _ZH_TO_EN = {
+                    "北": "north", "南": "south", "东": "east", "西": "west",
+                    "东北": "northeast", "西北": "northwest", "东南": "southeast", "西南": "southwest",
+                    "上": "up", "下": "down",
+                }
+                normalized = {}
+                for k, v in exits.items():
+                    key = _ZH_TO_EN.get(k, k).lower()
+                    normalized[key] = v
+                new_loc["exits"] = normalized
+
             # Merge into existing location — preserve fields the LLM didn't resend
             location.update(new_loc)
 
@@ -1174,6 +1190,9 @@ def state_writer(state: GameState) -> dict:
                 events = world_state.get("global_events", [])
                 events.append(changes["add_event"])
                 world_state["global_events"] = events
+
+        elif mutation_type == "advance_time":
+            elapsed_minutes += result.get("minutes", 0)
 
         elif mutation_type == "add_log_entry":
             entries = log.get("entries", [])
@@ -1352,6 +1371,7 @@ def state_writer(state: GameState) -> dict:
         "messages": removals + reduced_new,
         "skip_conversation_log": False,
         "knowledge_notifications": knowledge_notifications,
+        "elapsed_minutes": elapsed_minutes,
     }
 
 
@@ -1460,32 +1480,63 @@ def world_ticker(state: GameState) -> dict:
     turn = player.get("turn", 1)
     player["turn"] = turn + 1
 
-    # Advance time every TURNS_PER_PERIOD turns
-    if turn % TURNS_PER_PERIOD == 0:
-        from engine.game_data import TIME_PERIODS_ZH
-        language = _read_language_setting(session_dir)
-        current_time = player.get("time", "Morning")
-        # Match against both EN and ZH time periods to find current index
-        _all_periods = list(zip(TIME_PERIODS, TIME_PERIODS_ZH))
-        for i, (en_period, zh_period) in enumerate(_all_periods):
-            if en_period.lower() in current_time.lower() or zh_period in current_time:
-                next_idx = (i + 1) % len(TIME_PERIODS)
-                # Set time in the active language
-                if language == "zh":
-                    player["time"] = TIME_PERIODS_ZH[next_idx]
-                else:
-                    player["time"] = TIME_PERIODS[next_idx]
+    # --- Elapsed-time-based period advancement ---
+    # The resolver sets `elapsed_minutes` each turn based on narrative.
+    # We accumulate minutes within the current period and advance when
+    # the total exceeds MINUTES_PER_PERIOD (360 min = 6 hours).
+    from engine.game_data import (
+        TIME_PERIODS_ZH, MINUTES_PER_PERIOD,
+        PERIOD_START_HOUR, PERIOD_START_HOUR_ZH,
+    )
+    language = _read_language_setting(session_dir)
+    time_data = world_state.get("time", {})
+    elapsed = state.get("elapsed_minutes", 0)
+    # Fallback: if the model didn't output elapsed_minutes, use a default
+    # based on the old fixed-turn logic (~120 min per turn = 360/3)
+    if not elapsed:
+        elapsed = MINUTES_PER_PERIOD // TURNS_PER_PERIOD
 
-                # Update world_state time (keep all fields in sync)
-                time_data = world_state.get("time", {})
-                if language == "zh":
-                    time_data["period"] = TIME_PERIODS_ZH[next_idx]
-                else:
-                    time_data["period"] = TIME_PERIODS[next_idx]
-                if next_idx == 0:  # New day
-                    time_data["day"] = time_data.get("day", 1) + 1
-                world_state["time"] = time_data
-                break
+    period_minutes = time_data.get("period_minutes", 0) + elapsed
+    time_data["period_minutes"] = period_minutes
+
+    # Advance period(s) — can skip multiple periods if elapsed is huge
+    current_time = player.get("time", "Morning")
+    _all_periods = list(zip(TIME_PERIODS, TIME_PERIODS_ZH))
+    # Find current period index
+    current_idx = 0
+    for i, (en_period, zh_period) in enumerate(_all_periods):
+        if en_period.lower() in current_time.lower() or zh_period in current_time:
+            current_idx = i
+            break
+
+    while period_minutes >= MINUTES_PER_PERIOD:
+        period_minutes -= MINUTES_PER_PERIOD
+        current_idx = (current_idx + 1) % len(TIME_PERIODS)
+        if current_idx == 0:  # New day
+            time_data["day"] = time_data.get("day", 1) + 1
+
+    time_data["period_minutes"] = period_minutes
+
+    # Set time in the active language
+    if language == "zh":
+        player["time"] = TIME_PERIODS_ZH[current_idx]
+        time_data["period"] = TIME_PERIODS_ZH[current_idx]
+    else:
+        player["time"] = TIME_PERIODS[current_idx]
+        time_data["period"] = TIME_PERIODS[current_idx]
+
+    # Compute approximate clock time for narrative reference
+    start_hour_map = PERIOD_START_HOUR_ZH if language == "zh" else PERIOD_START_HOUR
+    period_key = TIME_PERIODS_ZH[current_idx] if language == "zh" else TIME_PERIODS[current_idx]
+    start_hour = start_hour_map.get(period_key, 6)
+    total_minutes_in_period = period_minutes
+    clock_hour = start_hour + total_minutes_in_period // 60
+    clock_minute = total_minutes_in_period % 60
+    # Wrap around midnight
+    clock_hour = clock_hour % 24
+    time_data["clock"] = f"{int(clock_hour):02d}:{int(clock_minute):02d}"
+
+    world_state["time"] = time_data
 
     # Passive NEXUS alert decay (-1% per day cycle = every 9 turns)
     if turn % 9 == 0:

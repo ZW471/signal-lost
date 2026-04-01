@@ -347,6 +347,28 @@ def update_world_state(changes: str) -> str:
 
 
 @tool
+def advance_time(minutes: int, reason: str = "") -> str:
+    """Report how many in-world minutes have elapsed this turn.
+
+    Call this ONCE per turn AFTER resolving the player's action.
+    Estimate realistically based on what happened in the narrative:
+    - Quick look/examine: 1-5 minutes
+    - Short conversation: 5-15 minutes
+    - Detailed dialogue or investigation: 15-30 minutes
+    - Travel between areas in same district: 10-20 minutes
+    - Travel between districts: 30-60 minutes
+    - Hacking/decryption task: 15-45 minutes
+    - Resting/sleeping: 120-480 minutes
+
+    Args:
+        minutes: Number of in-world minutes that passed (1-480)
+        reason: Brief reason for the time estimate (e.g. "short conversation with Mira")
+    """
+    clamped = max(1, min(480, minutes))
+    return json.dumps({"type": "advance_time", "minutes": clamped, "reason": reason})
+
+
+@tool
 def add_log_entry(title: str, tag: str, text: str) -> str:
     """Add an entry to the session log.
 
@@ -424,6 +446,7 @@ STATE_TOOLS = [
     update_location,
     update_inventory,
     update_world_state,
+    advance_time,
     add_log_entry,
 ]
 

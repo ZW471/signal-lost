@@ -400,6 +400,13 @@ TIME_PERIODS = ["Morning", "Afternoon", "Night"]
 TIME_PERIODS_ZH = ["晨", "午", "夜"]
 TURNS_PER_PERIOD = 3
 
+# Each period spans this many in-world minutes (6:00–12:00, 12:00–18:00, 18:00–6:00)
+MINUTES_PER_PERIOD = 360  # 6 hours
+
+# Period start hours (24h format) for display and narrative sync
+PERIOD_START_HOUR = {"Morning": 6, "Afternoon": 12, "Night": 18}
+PERIOD_START_HOUR_ZH = {"晨": 6, "午": 12, "夜": 18}
+
 
 def get_localized(data: dict, key: str, lang: str):
     """Pick the language-appropriate variant of a field.

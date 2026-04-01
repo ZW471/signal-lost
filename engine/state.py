@@ -57,6 +57,7 @@ class GameState(TypedDict):
     is_warning: bool             # True when input_blocked_handler generated a warning message
     turn_usage: dict             # Per-turn LLM token usage accumulated across nodes
     tool_call_rounds: int        # How many resolver→tool_executor rounds this turn (cap: 4)
+    elapsed_minutes: int         # Minutes elapsed this turn (set by state_writer from model output)
 
 
 def reset_turn_flags() -> dict:
@@ -75,6 +76,7 @@ def reset_turn_flags() -> dict:
         "is_warning": False,
         "turn_usage": {},
         "tool_call_rounds": 0,
+        "elapsed_minutes": 0,
     }
 
 
@@ -594,7 +596,7 @@ def create_new_session(
                 {"name": L["district_spire"], "name_zh": "尖塔", "status": L["hidden"], "unlock": L["unlock_layer4"], "notes": L["notes_spire"]},
             ],
         },
-        "time": {"day": 1, "period": L["time_morning"]},
+        "time": {"day": 1, "period": L["time_morning"], "period_minutes": 0, "clock": "06:00"},
         "global_events": [],
         "_ending_trajectory": {"hidden": True, "value": "neutral — no direction yet"},
     })

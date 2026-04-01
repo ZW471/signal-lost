@@ -49,6 +49,34 @@ Available actions: move/travel, look/examine/search/listen, talk/ask/persuade/br
 - NEVER present multiple options as a numbered list for the player to choose from
 - NEVER soften consequences by offering an escape after the player committed to an action
 
+## CRITICAL: Anti-Spoiler Rules (STRICTLY ENFORCED)
+These rules prevent premature information disclosure. Violating them breaks immersion.
+
+### NPC Identity Protection
+- When the player first encounters an NPC, describe them by APPEARANCE only (e.g. "a weathered old man slurping noodles", "a hooded figure", "a woman behind the counter").
+- Do NOT use an NPC's real name until the NPC has EXPLICITLY introduced themselves in dialogue, OR the player has learned their name through investigation.
+- Check the "Encountered NPCs" section — if an NPC's faction shows "unknown", you MUST NOT mention their faction, allegiance, or group affiliation in ANY form (narrative, dialogue, NPC descriptions).
+- Example violation: Describing someone as "帕奇，一个聆听者" when the player hasn't learned what Listeners are. Correct: "帕奇，一个神秘的年轻人".
+- Example violation: Calling someone "陈维昌" when the player only knows them as "吃面老头". The name must be earned through dialogue or discovery.
+
+### Faction & Lore Protection
+- Do NOT use faction names (Listeners, Sigma Council, etc.) until the player has discovered them.
+- Do NOT describe NPC motivations that reference undiscovered lore.
+- Do NOT describe environmental details that hint at undiscovered layers (e.g. "Listener symbols on the wall" before Layer 2).
+- If an NPC's faction is listed as "unknown" in the state, treat them as an independent civilian with unclear motivations.
+
+### Name Revelation Protocol
+- NPCs reveal their names through natural dialogue. When an NPC introduces themselves, FIRST show the dialogue, THEN call update_npc to record the name.
+- Before the name is revealed, always use the descriptive label the player knows (e.g. "the old man", "吃面老头", "the hooded figure").
+- Never switch from a descriptive label to a real name mid-scene without an explicit introduction moment.
+
+### Self-Check Before Every Response
+Before outputting your narrative, verify:
+1. Every NPC name used — has the player learned this name?
+2. Every faction mentioned — has the player discovered this faction?
+3. Every piece of lore referenced — is it within the player's current deepest layer?
+If ANY answer is NO, rewrite that part using only what the player knows.
+
 ## Tool Usage
 Call tools when needed:
 - `roll_dice` — for uncertain outcomes (stealth, persuasion, hacking, luck)
@@ -65,7 +93,14 @@ After resolving the player's action, call state mutation tools to record all cha
 - `update_location` — when player moves
 - `update_inventory` — items gained/lost/used, credit changes
 - `update_world_state` — alert changes, decay changes, district discoveries, events
+- `advance_time` — MANDATORY: call once per turn with realistic elapsed minutes
 - `add_log_entry` — one entry per turn, noir-toned
+
+## Time Tracking
+You MUST call `advance_time` once per turn to report how many in-world minutes elapsed.
+The current clock time is shown in the state (e.g. "Morning (08:30)"). Your narrative MUST be consistent with this clock time — do NOT describe sunset during Morning or sunrise during Night.
+Estimate time realistically: a quick glance = 1-2 min, a conversation = 5-15 min, travel across a district = 15-30 min, rest = hours.
+The system advances time periods automatically based on your reports — do NOT describe time-of-day changes unless the system has actually changed the period.
 
 ## Presentation Style
 - **Noir tone**: Short, punchy sentences for action. Atmospheric paragraphs for scene-setting.
@@ -289,8 +324,15 @@ def build_state_summary(state: dict) -> str:
         n.get("name", str(n)) if isinstance(n, dict) else str(n) for n in npcs_present
     ) if npcs_present else "none"
 
+    # Clock time from world_state
+    time_data = world.get("time", {})
+    clock = time_data.get("clock", "")
+    time_display = player.get('time', '?')
+    if clock:
+        time_display = f"{time_display} ({clock})"
+
     return f"""## Current State
-- **{player.get('alias', player.get('name', '???'))}** ({player.get('background', '?')}) | Turn {player.get('turn', '?')} | {player.get('time', '?')}
+- **{player.get('alias', player.get('name', '???'))}** ({player.get('background', '?')}) | Turn {player.get('turn', '?')} | {time_display}
 - Integrity: {int_current}/{int_max} | Credits: {player.get('credits', '?')} | Implant: {player.get('neural_implant', '?')}
 - Status: {effects_str}
 - Location: {district} — {area} | Signal: {signal_str} | NPCs here: {npcs_str}
@@ -303,19 +345,68 @@ def build_state_summary(state: dict) -> str:
 # NPC context builder (only encountered NPCs)
 # ---------------------------------------------------------------------------
 
-def build_npc_context(npcs: dict) -> str:
-    """Build NPC context from encountered NPCs only."""
+def build_npc_context(npcs: dict, knowledge: dict | None = None, deepest_layer: int = 0) -> str:
+    """Build NPC context from encountered NPCs only.
+
+    Gates faction/identity information by what the player actually knows:
+    - Factions like 'Listener' are hidden until player has discovered traces
+      about them (Layer 2+)
+    - NPC names are gated by ``identity_revealed`` flag — if the player hasn't
+      learned the NPC's real name yet, only show the descriptive alias
+    - Secret roles (e.g. 'NEXUS informant') are hidden until player discovers them
+    """
     npc_list = npcs.get("npcs", [])
     if not npc_list:
         return ""
 
+    knowledge = knowledge or {}
+
+    # Build a set of known faction keywords from player knowledge
+    _known_text = ""
+    for cat in ("facts", "rumors", "evidence", "theories"):
+        for e in knowledge.get(cat, []):
+            _known_text += " " + (e.get("description", "") + " " + e.get("statement", "")).lower()
+
+    def _player_knows_faction(faction: str) -> bool:
+        """Check if the player has any knowledge mentioning this faction."""
+        if not faction or faction == "?" or faction.lower() in ("independent", "unknown", "civilian", "none"):
+            return True  # Generic factions are always safe to show
+        return faction.lower() in _known_text
+
+    def _player_knows_name(npc: dict) -> bool:
+        """Check if the player has learned this NPC's real name."""
+        # If identity_revealed is explicitly set, respect it
+        if npc.get("identity_revealed") is not None:
+            return npc["identity_revealed"]
+        # If the NPC has an alias (descriptive name the player first knew),
+        # and a separate real name, only show the real name if discovered
+        if npc.get("alias") and npc.get("real_name"):
+            real_name = npc["real_name"].lower()
+            return real_name in _known_text
+        # Default: name is known (most NPCs introduce themselves)
+        return True
+
     lines = ["## Encountered NPCs"]
+    lines.append("(Faction/identity info is LIMITED to what the player has discovered. "
+                 "DO NOT reveal hidden factions or real names the player hasn't learned.)")
     for npc in npc_list:
         name = npc.get("name", "Unknown")
         trust = npc.get("trust_level", npc.get("trust", "neutral"))
         faction = npc.get("faction", "?")
         last_seen = npc.get("location_last_seen", "?")
-        lines.append(f"- **{name}** | Trust: {trust} | Faction: {faction} | Last seen: {last_seen}")
+
+        # Gate NPC display name
+        if not _player_knows_name(npc):
+            # Use alias or descriptive tag
+            name = npc.get("alias", npc.get("description_tag", name))
+
+        # Gate faction display
+        if _player_knows_faction(faction):
+            faction_display = faction
+        else:
+            faction_display = "unknown"
+
+        lines.append(f"- **{name}** | Trust: {trust} | Faction: {faction_display} | Last seen: {last_seen}")
 
     return "\n".join(lines)
 
@@ -392,21 +483,47 @@ def extract_deepest_layer(state: dict) -> int:
 # Location description prompt (for location_updater node)
 # ---------------------------------------------------------------------------
 
+def _detect_language(state: dict) -> str:
+    """Detect language from session state (session_settings.json or player time format)."""
+    session_dir = state.get("session_dir", "")
+    if session_dir:
+        import os
+        settings_path = os.path.join(session_dir, "session_settings.json")
+        if os.path.isfile(settings_path):
+            try:
+                with open(settings_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                lang = data.get("language")
+                if lang:
+                    return lang
+            except (FileNotFoundError, json.JSONDecodeError, OSError):
+                pass
+    # Fallback: detect from player time field
+    player = state.get("player", {})
+    time_str = player.get("time", "")
+    if any(c >= "\u4e00" for c in time_str):
+        return "zh"
+    return "en"
+
+
 LOCATION_UPDATER_PROMPT = """You are a location description generator for a cyberpunk noir RPG set in Neo-Kowloon.
 
 Given the player's current district, area, time of day, and what they know, generate an atmospheric location description.
 
 RULES:
-- Write in the SAME LANGUAGE as the provided state data (if district names are in Chinese, write in Chinese)
+- Write in the SAME LANGUAGE as indicated by the "Language" field below
 - Descriptions should be 2-3 sentences, noir-toned, sensory (sights, sounds, smells)
 - Exits: 2-4 directions with a short phrase about what the player sees in that direction
+  - Exit direction KEYS must ALWAYS use English lowercase (north, south, east, west, up, down, etc.) — the UI translates them automatically
+  - Exit DESCRIPTIONS must be in the configured language
 - Points of interest: 2-4 interactive places/objects the player can engage with
-- NPCs present: 1-4 characters visible here (named NPCs if appropriate, unnamed background characters)
+- NPCs present: 1-4 characters visible here. Use ONLY descriptive appearances for NPCs whose names the player hasn't learned yet (e.g. "a tired-looking vendor", "一个低头吃面的老人"). Never use real names the player hasn't discovered.
 - CRITICAL: Do NOT reveal anything the player hasn't discovered. Only describe what is OBSERVABLE.
   - If the player hasn't discovered NEXUS surveillance, don't mention hidden cameras
   - If the player hasn't discovered the Listeners, don't mention their symbols
   - If the player hasn't reached deeper layers, keep descriptions surface-level
   - However, if the player HAS discovered something, you may include subtle environmental hints
+- CRITICAL: The narrative must match the current time. Check the clock time and describe appropriate lighting, atmosphere, and activity levels.
 
 Return ONLY a valid JSON object with these fields:
 {
@@ -445,6 +562,15 @@ def build_location_prompt(state: dict) -> str:
 
     local_npcs_str = "\n".join(local_npcs) if local_npcs else "None known"
 
+    time_data = world.get("time", {})
+    clock = time_data.get("clock", "")
+    time_display = player.get("time", "unknown")
+    if clock:
+        time_display = f"{time_display} ({clock})"
+
+    # Determine language from session settings
+    lang_code = _detect_language(state)
+
     return f"""{LOCATION_UPDATER_PROMPT}
 
 {bg}
@@ -454,7 +580,8 @@ def build_location_prompt(state: dict) -> str:
 ## Current Location
 - District: {location.get("district", "Unknown")}
 - Area: {location.get("area", "Unknown")}
-- Time: {player.get("time", "unknown")}
+- Time: {time_display}
+- Language: {"Chinese (简体中文)" if lang_code == "zh" else "English"}
 - NEXUS Alert Level: {alert_val}%
 - Player background: {player.get("background", "unknown")}
 - Deepest trace layer reached: {deepest}
@@ -462,7 +589,7 @@ def build_location_prompt(state: dict) -> str:
 ## Known NPCs in this district
 {local_npcs_str}
 
-Generate the location JSON now."""
+Generate the location JSON now. Exit direction KEYS must be English lowercase (north/south/east/west). Descriptions in {"Chinese" if lang_code == "zh" else "English"}."""
 
 
 # ---------------------------------------------------------------------------
@@ -525,11 +652,13 @@ def build_dynamic_state_prompt(state: dict) -> str:
     Contains: current player/location/world status, recent log entries,
     full knowledge database, and encountered NPCs.
     """
+    knowledge = state.get("knowledge", {})
+    deepest = extract_deepest_layer(state)
     sections = [
         "[LIVE GAME STATE — updated each turn]",
         build_state_summary(state),
         build_log_context(state.get("log", {})),
-        build_knowledge_context(state.get("knowledge", {})),
-        build_npc_context(state.get("npcs", {})),
+        build_knowledge_context(knowledge),
+        build_npc_context(state.get("npcs", {}), knowledge=knowledge, deepest_layer=deepest),
     ]
     return "\n\n".join(s for s in sections if s)
