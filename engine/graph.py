@@ -5,6 +5,11 @@ The game engine as a LangGraph state machine.
 
 Flow: input_gate → resolver (LLM + tools) → state_writer → location_updater
       → world_ticker → trace_checker → consequence → [END or loop back]
+
+⚠️ SYNC WARNING: State mutation logic, world_ticker, trace_checker, consequence,
+exit normalization, and events_update must stay in sync with claude_code_engine.py.
+When updating any of these, mirror the change in both files.
+Last synced: 2026-04-01
 """
 
 from __future__ import annotations
@@ -1191,6 +1196,33 @@ def state_writer(state: GameState) -> dict:
                 events.append(changes["add_event"])
                 world_state["global_events"] = events
 
+            # ⚠️ SYNC: events_update — mirrored in claude_code_engine.py _apply_mutations
+            if "events_update" in changes:
+                events = world_state.get("global_events", [])
+                updates = changes["events_update"]
+                if isinstance(updates, list):
+                    # Process removals in reverse order to preserve indices
+                    removes = sorted(
+                        [u for u in updates if u.get("action") == "remove"],
+                        key=lambda u: u.get("index", 0),
+                        reverse=True,
+                    )
+                    for u in removes:
+                        idx = u.get("index", -1)
+                        if 0 <= idx < len(events):
+                            events.pop(idx)
+                    # Process replacements
+                    for u in updates:
+                        if u.get("action") == "replace":
+                            idx = u.get("index", -1)
+                            if 0 <= idx < len(events) and "text" in u:
+                                events[idx] = u["text"]
+                    # Process additions
+                    for u in updates:
+                        if u.get("action") == "add" and "text" in u:
+                            events.append(u["text"])
+                    world_state["global_events"] = events
+
         elif mutation_type == "advance_time":
             elapsed_minutes += result.get("minutes", 0)
 
@@ -1397,16 +1429,52 @@ def _location_changed_this_turn(state: GameState) -> bool:
     return False
 
 
+def _should_refresh_location(state: GameState) -> bool:
+    """Check if the location description should be refreshed even without movement.
+
+    ⚠️ SYNC: This logic is handled differently in claude_code_engine.py —
+    the bypass engine instructs the LLM to provide location_update whenever
+    NPCs or atmosphere change, not just on movement.
+
+    Triggers:
+    1. Location actually changed (update_location called)
+    2. Time period changed this turn (atmosphere shifts)
+    3. Every 5 turns (periodic refresh for NPC/atmosphere freshness)
+    """
+    if _location_changed_this_turn(state):
+        return True
+
+    # Check if time period changed this turn
+    elapsed = state.get("elapsed_minutes", 0)
+    if elapsed:
+        from engine.game_data import MINUTES_PER_PERIOD
+        time_data = state.get("world_state", {}).get("time", {})
+        period_mins = time_data.get("period_minutes", 0)
+        # If accumulated minutes before this turn's addition was in a different period
+        prev_mins = period_mins - elapsed
+        if prev_mins < 0 or elapsed >= MINUTES_PER_PERIOD:
+            return True
+
+    # Periodic refresh every 5 turns for NPC/atmosphere freshness
+    turn = state.get("player", {}).get("turn", 1)
+    if turn % 5 == 0:
+        return True
+
+    return False
+
+
 def location_updater(state: GameState) -> dict:
-    """Regenerate location descriptions when the player moves.
+    """Regenerate location descriptions when the scene changes.
 
     Calls the LLM with a focused prompt to generate description, exits,
     points_of_interest, and npcs_present based on the player's current
-    knowledge and trace depth. Only runs when update_location was called
-    this turn.
+    knowledge and trace depth. Runs when:
+    - Player moved (update_location called)
+    - Time period changed (atmosphere shifts)
+    - NPCs arrived/left the current location
     """
-    # Only regenerate if location actually changed this turn
-    if not _location_changed_this_turn(state):
+    # ⚠️ SYNC: Trigger logic differs in claude_code_engine.py (LLM decides)
+    if not _should_refresh_location(state):
         return {}
 
     location = copy.deepcopy(state["location"])

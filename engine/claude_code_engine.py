@@ -1,6 +1,11 @@
 """
 Signal Lost — Claude-Code Bypass Engine
 
+⚠️ SYNC WARNING: State mutation logic, world_ticker, trace_checker, consequence,
+exit normalization, and events_update must stay in sync with graph.py.
+When updating any of these, mirror the change in both files.
+Last synced: 2026-04-01
+
 Replaces the entire LangGraph pipeline with a single `claude -p` call.
 The model receives a mega-prompt containing all game rules, state, tool schemas,
 and validation context. It returns structured JSON that pure Python post-processing
@@ -130,7 +135,9 @@ State mutations (declare what changes):
 - `update_npc`: `{"name": "NPC Name", "changes": {"trust": "wary", "mood": "nervous", ...}}`
 - `update_location`: `{"location_data": {"district": "...", "area": "...", "signal_strength": N, "danger_level": "...", "nexus_patrol": "..."}}`
 - `update_inventory`: `{"action": "add|remove|sell|update_credits", "item": {"name": "...", ...}, "credits_gained": N, "amount": N}`
-- `update_world_state`: `{"changes": {"nexus_alert_delta": N, "fragment_decay_delta": N, "discover_district": "Name", "add_event": "event text"}}`
+- `update_world_state`: `{"changes": {"nexus_alert_delta": N, "fragment_decay_delta": N, "discover_district": "Name", "add_event": "event text", "events_update": [{"action": "remove|replace|add", "index": N, "text": "..."}]}}`
+  - Use `events_update` to manage global_events: remove obsolete events, replace updated ones, add new ones. Review events each turn and clean up stale entries.
+- `advance_time`: `{"minutes": N, "reason": "brief reason"}` — MANDATORY once per turn. Report how many in-world minutes elapsed (1-480). Quick look=1-5, conversation=5-15, travel=15-30, rest=120-480.
 - `add_log_entry`: `{"title": "...", "tag": "movement|dialogue|discovery|danger|signal|system|trade", "text": "..."}`
 
 Game tools (engine executes these — do NOT use roll_dice, you decide outcomes directly):
@@ -143,8 +150,10 @@ Game tools (engine executes these — do NOT use roll_dice, you decide outcomes 
 logic, player skill, difficulty, and what makes the story compelling. Do NOT call \
 roll_dice. Write definitive outcomes in your narrative.
 
-**location_update** (null unless player moved): If you called `update_location` \
-in tool_calls, also provide the full new location description:
+**location_update** (provide when scene changes): Provide this whenever the player \
+moves OR when NPCs arrive/leave OR when time shifts significantly (period change). \
+Not just on movement — atmosphere and people change over time too. If you called \
+`update_location` in tool_calls, also provide the full new location description:
 `{"description": "...", "exits": {"north": "Place", ...}, "points_of_interest": ["..."], "npcs_present": ["..."]}`
 
 ### Validation context:
@@ -411,7 +420,7 @@ _GAME_TOOLS = {
 
 _STATE_TOOLS = {
     "update_player", "add_knowledge", "update_npc", "update_location",
-    "update_inventory", "update_world_state", "add_log_entry",
+    "update_inventory", "update_world_state", "advance_time", "add_log_entry",
 }
 
 
@@ -471,9 +480,13 @@ def _apply_mutations(
     player: dict, knowledge: dict, location: dict,
     inventory: dict, npcs: dict, world_state: dict, log: dict,
     session_dir: str,
-) -> list[dict]:
-    """Apply state mutations from tool_calls. Returns knowledge_notifications list."""
+) -> tuple[list[dict], int]:
+    """Apply state mutations from tool_calls. Returns (knowledge_notifications, elapsed_minutes).
+
+    ⚠️ SYNC: Mirrors state_writer logic in graph.py.
+    """
     knowledge_notifications = []
+    elapsed_minutes = 0
 
     for tc in mutation_calls:
         name = tc.get("name", "")
@@ -692,6 +705,34 @@ def _apply_mutations(
                 events.append(changes["add_event"])
                 world_state["global_events"] = events
 
+            # ⚠️ SYNC: events_update — mirrored in graph.py state_writer
+            if "events_update" in changes:
+                events = world_state.get("global_events", [])
+                updates = changes["events_update"]
+                if isinstance(updates, list):
+                    removes = sorted(
+                        [u for u in updates if u.get("action") == "remove"],
+                        key=lambda u: u.get("index", 0),
+                        reverse=True,
+                    )
+                    for u in removes:
+                        idx = u.get("index", -1)
+                        if 0 <= idx < len(events):
+                            events.pop(idx)
+                    for u in updates:
+                        if u.get("action") == "replace":
+                            idx = u.get("index", -1)
+                            if 0 <= idx < len(events) and "text" in u:
+                                events[idx] = u["text"]
+                    for u in updates:
+                        if u.get("action") == "add" and "text" in u:
+                            events.append(u["text"])
+                    world_state["global_events"] = events
+
+        elif name == "advance_time":
+            # ⚠️ SYNC: mirrored in graph.py state_writer
+            elapsed_minutes += args.get("minutes", 0)
+
         elif name == "add_log_entry":
             entries = log.get("entries", [])
             new_entry = {
@@ -707,37 +748,70 @@ def _apply_mutations(
                 entries = entries[-30:]
             log["entries"] = entries
 
-    return knowledge_notifications
+    return knowledge_notifications, elapsed_minutes
 
 
 # ---------------------------------------------------------------------------
 # World ticker (mirrors graph.py world_ticker logic)
 # ---------------------------------------------------------------------------
 
-def _run_world_ticker(player: dict, world_state: dict, session_dir: str, skip: bool = False):
-    """Advance turn counter, time, and passive decay."""
+def _run_world_ticker(player: dict, world_state: dict, session_dir: str,
+                      skip: bool = False, elapsed_minutes: int = 0):
+    """Advance turn counter, time, and passive decay.
+
+    ⚠️ SYNC: Mirrored in graph.py world_ticker node.
+    """
     if skip:
         return
 
     turn = player.get("turn", 1)
     player["turn"] = turn + 1
 
-    if turn % TURNS_PER_PERIOD == 0:
-        settings = _read_session_settings(session_dir)
-        language = settings.get("language", "en")
-        current_time = player.get("time", "Morning")
-        from engine.game_data import TIME_PERIODS_ZH
-        _all_periods = list(zip(TIME_PERIODS, TIME_PERIODS_ZH))
-        for i, (en_period, zh_period) in enumerate(_all_periods):
-            if en_period.lower() in current_time.lower() or zh_period in current_time:
-                next_idx = (i + 1) % len(TIME_PERIODS)
-                player["time"] = TIME_PERIODS_ZH[next_idx] if language == "zh" else TIME_PERIODS[next_idx]
-                time_data = world_state.get("time", {})
-                time_data["period"] = player["time"]
-                if next_idx == 0:
-                    time_data["day"] = time_data.get("day", 1) + 1
-                world_state["time"] = time_data
-                break
+    # --- Elapsed-time-based period advancement (synced with graph.py) ---
+    from engine.game_data import (
+        TIME_PERIODS_ZH, MINUTES_PER_PERIOD,
+        PERIOD_START_HOUR, PERIOD_START_HOUR_ZH,
+    )
+    settings = _read_session_settings(session_dir)
+    language = settings.get("language", "en")
+    time_data = world_state.get("time", {})
+
+    if not elapsed_minutes:
+        elapsed_minutes = MINUTES_PER_PERIOD // TURNS_PER_PERIOD
+
+    period_minutes = time_data.get("period_minutes", 0) + elapsed_minutes
+    time_data["period_minutes"] = period_minutes
+
+    current_time = player.get("time", "Morning")
+    _all_periods = list(zip(TIME_PERIODS, TIME_PERIODS_ZH))
+    current_idx = 0
+    for i, (en_period, zh_period) in enumerate(_all_periods):
+        if en_period.lower() in current_time.lower() or zh_period in current_time:
+            current_idx = i
+            break
+
+    while period_minutes >= MINUTES_PER_PERIOD:
+        period_minutes -= MINUTES_PER_PERIOD
+        current_idx = (current_idx + 1) % len(TIME_PERIODS)
+        if current_idx == 0:
+            time_data["day"] = time_data.get("day", 1) + 1
+
+    time_data["period_minutes"] = period_minutes
+
+    if language == "zh":
+        player["time"] = TIME_PERIODS_ZH[current_idx]
+        time_data["period"] = TIME_PERIODS_ZH[current_idx]
+    else:
+        player["time"] = TIME_PERIODS[current_idx]
+        time_data["period"] = TIME_PERIODS[current_idx]
+
+    start_hour_map = PERIOD_START_HOUR_ZH if language == "zh" else PERIOD_START_HOUR
+    period_key = TIME_PERIODS_ZH[current_idx] if language == "zh" else TIME_PERIODS[current_idx]
+    start_hour = start_hour_map.get(period_key, 6)
+    clock_hour = (start_hour + period_minutes // 60) % 24
+    clock_minute = period_minutes % 60
+    time_data["clock"] = f"{int(clock_hour):02d}:{int(clock_minute):02d}"
+    world_state["time"] = time_data
 
     if turn % 9 == 0:
         alert = world_state.get("nexus_alert", {})
@@ -944,19 +1018,30 @@ def run_turn(session_dir: str, player_input: str, mode: str = "play") -> dict:
     narrative, mutation_calls = _execute_game_tools(parsed["tool_calls"], narrative, inventory)
 
     # ── Step 7: Apply state mutations ────────────────────────────────
-    knowledge_notifications = _apply_mutations(
+    knowledge_notifications, elapsed_minutes = _apply_mutations(
         mutation_calls, player, knowledge, location,
         inventory, npcs, world_state, log, session_dir,
     )
 
     # ── Step 8: Apply location_update ────────────────────────────────
     if parsed["location_update"] and isinstance(parsed["location_update"], dict):
+        loc_update = parsed["location_update"]
+        # ⚠️ SYNC: normalize exit direction keys — mirrored in graph.py
+        exits = loc_update.get("exits", {})
+        if exits:
+            _ZH_TO_EN = {
+                "北": "north", "南": "south", "东": "east", "西": "west",
+                "东北": "northeast", "西北": "northwest", "东南": "southeast", "西南": "southwest",
+                "上": "up", "下": "down",
+            }
+            loc_update["exits"] = {_ZH_TO_EN.get(k, k).lower(): v for k, v in exits.items()}
         for field in ("description", "exits", "points_of_interest", "npcs_present"):
-            if field in parsed["location_update"]:
-                location[field] = parsed["location_update"][field]
+            if field in loc_update:
+                location[field] = loc_update[field]
 
     # ── Step 9: Run world_ticker ─────────────────────────────────────
-    _run_world_ticker(player, world_state, session_dir, skip=is_resume)
+    _run_world_ticker(player, world_state, session_dir, skip=is_resume,
+                      elapsed_minutes=elapsed_minutes)
 
     # ── Step 10: Save all state ──────────────────────────────────────
     save_session_file(session_dir, "player", player)

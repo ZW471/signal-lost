@@ -1112,7 +1112,8 @@ function addChatMessage(text, role = 'agent') {
   msg.innerHTML = `<div class="msg-prefix">${prefixes[role] || role.toUpperCase()}</div>
     <div class="msg-content">${esc(text)}</div>`;
   container.appendChild(msg);
-  container.scrollTop = container.scrollHeight;
+  // Scroll to the START of the new message, not the bottom
+  msg.scrollIntoView({ behavior: 'smooth', block: 'start' });
   playBeep(role === 'player' ? 1200 : 800, 0.03);
   return msg;
 }
@@ -1127,12 +1128,18 @@ function addTypingMessage(text, role = 'agent', usage = null, elapsedSeconds = n
   msg.innerHTML = `<div class="msg-prefix">${prefixes[role] || role.toUpperCase()}</div>`;
   msg.appendChild(contentEl);
   container.appendChild(msg);
+  // Scroll to the START of the new message
+  msg.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
   let i = 0; const speed = 8, interval = 20;
   function typeNext() {
     if (i < text.length) {
       contentEl.textContent += text.slice(i, i + speed);
-      i += speed; container.scrollTop = container.scrollHeight;
+      i += speed;
+      // Only auto-scroll if user is near the bottom (within 200px)
+      if (container.scrollHeight - container.scrollTop - container.clientHeight < 200) {
+        container.scrollTop = container.scrollHeight;
+      }
       if (Math.random() < 0.05) playBeep(600 + Math.random() * 400, 0.02, 0.01);
       setTimeout(typeNext, interval);
     } else {

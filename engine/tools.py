@@ -340,7 +340,14 @@ def update_world_state(changes: str) -> str:
     Args:
         changes: JSON string of changes.
             Examples: {"nexus_alert_delta": 10}, {"fragment_decay_delta": -5},
-            {"discover_district": "The Undercroft"}, {"add_event": "NEXUS raid on Undercroft"}
+            {"discover_district": "The Undercroft"}, {"add_event": "NEXUS raid on Undercroft"},
+            {"events_update": [{"action": "remove", "index": 0}, {"action": "replace", "index": 2, "text": "updated event"}, {"action": "add", "text": "new event"}]}
+
+        events_update: Use this to manage global_events. Actions:
+            - "add": Append a new event. Requires "text".
+            - "remove": Remove an obsolete event by index. Requires "index".
+            - "replace": Update an existing event's text. Requires "index" and "text".
+        Review global_events each turn and remove obsolete ones (e.g. events that have been superseded or are no longer relevant).
     """
     parsed = _parse_json_arg(changes, "description")
     return json.dumps({"type": "update_world_state", "changes": parsed})

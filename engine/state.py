@@ -506,32 +506,32 @@ def create_new_session(
 
     _write_json(os.path.join(session_dir, "traces.json"), {
         "title": L["traces_title"],
-        "total_discovered": "0 / 16",
+        "total_discovered": "0 / 47",
         "layers": {
             "layer_1_surface": {
                 "name": L["layer_1"],
-                "progress": "0/3",
-                "traces": {f"TRACE-L1-0{i}": _undiscovered(f"TRACE-L1-0{i}") for i in range(1, 4)},
+                "progress": "0/8",
+                "traces": {f"TRACE-L1-0{i}": _undiscovered(f"TRACE-L1-0{i}") for i in range(1, 9)},
             },
             "layer_2_conspiracy": {
                 "name": L["layer_2"],
-                "progress": "0/4",
-                "traces": {f"TRACE-L2-0{i}": _undiscovered(f"TRACE-L2-0{i}") for i in range(1, 5)},
+                "progress": "0/11",
+                "traces": {f"TRACE-L2-{i:02d}": _undiscovered(f"TRACE-L2-{i:02d}") for i in range(1, 12)},
             },
             "layer_3_severance_truth": {
                 "name": L["layer_3"],
-                "progress": "0/4",
-                "traces": {f"TRACE-L3-0{i}": _undiscovered(f"TRACE-L3-0{i}") for i in range(1, 5)},
+                "progress": "0/11",
+                "traces": {f"TRACE-L3-{i:02d}": _undiscovered(f"TRACE-L3-{i:02d}") for i in range(1, 12)},
             },
             "layer_4_mirror": {
                 "name": L["layer_4"],
-                "progress": "0/3",
-                "traces": {f"TRACE-L4-0{i}": _undiscovered(f"TRACE-L4-0{i}") for i in range(1, 4)},
+                "progress": "0/9",
+                "traces": {f"TRACE-L4-0{i}": _undiscovered(f"TRACE-L4-0{i}") for i in range(1, 10)},
             },
             "layer_5_full_truth": {
                 "name": L["layer_5"],
-                "progress": "0/2",
-                "traces": {f"TRACE-L5-0{i}": _undiscovered(f"TRACE-L5-0{i}") for i in range(1, 3)},
+                "progress": "0/8",
+                "traces": {f"TRACE-L5-0{i}": _undiscovered(f"TRACE-L5-0{i}") for i in range(1, 9)},
             },
         },
     })

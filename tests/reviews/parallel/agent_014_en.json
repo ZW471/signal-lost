@@ -1,0 +1,41 @@
+{
+  "agent_id": 14,
+  "language": "en",
+  "character": "Raze (Wraith) — netrunner",
+  "turns_played": 22,
+  "knowledge_count": 6,
+  "traces_discovered": 8,
+  "deepest_layer": 3,
+  "game_over": true,
+  "ending": "death",
+  "errors": [],
+  "narrative_samples": [
+    {
+      "turn": 1,
+      "action": "I listen carefully. What sounds can I hear?",
+      "narrative": "The turn is complete — the narrative was already delivered above. No additional output needed for this turn."
+    },
+    {
+      "turn": 2,
+      "action": "I walk out of my apartment and head into the neon-lit streets, looking around for anything unusual — signs, people, terminals, shops. What's in my immediate surroundings?",
+      "narrative": "[System Warning] The player claims to have an apartment, which has not been established in the current game state — they woke in a rain-soaked alley with no memory, not in an apartment.\n\nTry instead: Explore Rain Alley (near Mira's Noodle Shop), Look around The Sprawl, Check your knowledge"
+    },
+    {
+      "turn": 3,
+      "action": "I push myself up from the wet pavement and look around this rain-soaked alley. What can I see? Any signs, doors, or people nearby?",
+      "narrative": "The narrative is complete. The tool results confirm the state updates were recorded successfully — Mira is logged as encountered (neutral trust), time has advanced to 06:04, and the log entry is saved.\n\nThe scene stands as written. The woman in the noodle shop is watching. Your next move is yours."
+    }
+  ],
+  "spoiler_incidents": [],
+  "plot_summary": "",
+  "districts_visited": [
+    "The Sprawl"
+  ],
+  "npcs_met": [
+    "Repair Stall Vendor",
+    "Mira"
+  ],
+  "final_integrity": 0,
+  "final_credits": 50,
+  "final_alert": 0
+}

@@ -34,18 +34,20 @@ if _GAME_ROOT not in sys.path:
 
 _PLAYER_PROMPT_EN = """\
 You are an autonomous player of Signal Lost, a cyberpunk mystery RPG.
-Your goal is to explore, talk to NPCs, gather knowledge, discover traces,
-and uncover the truth about the Severance and the Signal.
+Your goal is to aggressively explore, uncover every secret, and reach a game ending.
 
-Strategy:
-- Explore your surroundings first (look, examine, search)
-- Talk to every NPC you encounter — ask about the Signal, NEXUS, disappearances
-- Follow leads from conversations and evidence
-- Try to access new areas as you learn about them
-- Decrypt data when you find encrypted items
-- Present evidence to NPCs to unlock deeper dialogue
-- Form theories and test them
-- Be resourceful with your credits
+Strategy — be PROACTIVE and AGGRESSIVE:
+- Explore EVERYWHERE: search every alley, examine every terminal, look behind every door
+- Talk to EVERY NPC — ask about Signal, NEXUS, disappearances, Listeners, Sector 7
+- Push NPCs hard: bribe them, present evidence, build trust, then ask deeper questions
+- Travel to EVERY district you can access — don't stay in one place too long
+- When you hear about a new location, GO THERE immediately
+- Decrypt everything, analyze every signal artifact, resonate when Signal is strong
+- Present evidence to NPCs to unlock deeper dialogue — cross-reference what different NPCs tell you
+- Form theories and share them with NPCs to test reactions
+- Buy intel from information brokers — spend credits aggressively
+- Try to access restricted areas — find keycards, disguises, alternate routes
+- When you have enough knowledge, push toward an ENDING
 
 Based on the game's narrative response, decide your NEXT action as a player.
 Respond with ONLY your action (what you want to do), nothing else.
@@ -54,18 +56,20 @@ Keep it natural — you're a character in this world, not a commander giving ord
 
 _PLAYER_PROMPT_ZH = """\
 你是一个自主玩家，正在游玩《信号遗失》——一款赛博朋克悬疑RPG。
-你的目标是探索世界、与NPC交谈、收集知识、发现痕迹，
-揭开"断裂"和"信号"的真相。
+你的目标是积极探索所有角落、揭开每个秘密，并最终达到游戏结局。
 
-策略：
-- 先探索周围环境（观察、检查、搜索）
-- 与遇到的每个NPC交谈——询问信号、NEXUS、失踪事件
-- 追踪对话和证据中的线索
-- 在了解到新区域后尝试前往
-- 发现加密数据时进行解密
-- 向NPC出示证据以解锁更深层对话
-- 形成理论并验证
-- 合理使用你的信用点
+策略——积极主动，大胆探索：
+- 到处探索：搜查每条巷子，检查每个终端，看看每扇门后面
+- 与每个NPC交谈——询问信号、NEXUS、失踪事件、聆听者、第七区
+- 积极推动NPC：贿赂他们，出示证据，建立信任，然后深入提问
+- 前往每个能到达的区域——不要在一个地方停留太久
+- 听到新地点就立即前往
+- 解密所有东西，分析每个信号遗物，信号强的时候尝试共鸣
+- 向NPC出示证据以解锁更深层对话——交叉对比不同NPC告诉你的内容
+- 形成理论并与NPC分享以测试反应
+- 向信息贩子购买情报——积极花费信用点
+- 尝试进入限制区域——寻找钥匙卡、伪装或替代路线
+- 当知识足够时，推动游戏走向结局
 
 根据游戏的叙事回应，决定你的下一步行动。
 只回答你要做的事（你的行动），不要回答其他内容。
@@ -131,11 +135,11 @@ def run_single_agent(agent_id: int, language: str, max_turns: int) -> dict:
         language=language,
     )
 
-    # Create LLM (claude-code provider) — opus for both game engine and player
-    llm = create_llm("claude-code", "opus")
+    # Create LLM — sonnet for game engine, opus for player agent
+    llm = create_llm("claude-code", "sonnet")
     set_llm(llm, zero_cost=True)
 
-    # Create a separate "player LLM" to decide actions (also opus)
+    # Create a separate "player LLM" to decide actions (opus for better play)
     player_llm = create_llm("claude-code", "opus")
 
     graph = compile_graph()
