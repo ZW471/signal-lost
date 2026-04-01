@@ -531,7 +531,15 @@ async def _run_turn(ws: WebSocket, player_input: str | None = None, mode: str = 
         global _game_state
         with _game_lock:
             # --- Claude-code bypass: single LLM call, pure Python post-processing ---
-            if _is_claude_code and _active_session_dir:
+            # Re-check provider from the actual LLM instance to avoid stale flag
+            from engine.graph import get_llm as _get_current_llm
+            _current_llm = _get_current_llm()
+            _actually_claude_code = (
+                _is_claude_code
+                and _active_session_dir
+                and hasattr(_current_llm, '_call_claude')  # ClaudeCodeLLM signature
+            )
+            if _actually_claude_code:
                 return cc_run_turn(
                     session_dir=_active_session_dir,
                     player_input=player_input or "",

@@ -1246,7 +1246,7 @@ const TUTORIAL_STEPS = {
     { target: '.info-panels', text: 'This is the <b>Info Panel</b>. It tracks everything about your character and the world. Use the tabs above to switch views.', pos: 'left' },
     { target: '[data-panel="identity"]', text: '<b>ID</b> — Your identity card. Shows your name, background, integrity (health), credits, and status effects.', pos: 'below', activateTab: 'identity' },
     { target: '[data-panel="knowledge"]', text: '<b>KNOW</b> — Everything you\'ve learned: facts, rumors, evidence, theories, and connections between them.', pos: 'below', activateTab: 'knowledge' },
-    { target: '[data-panel="traces"]', text: '<b>TRACE</b> — Fragments of truth you\'ve uncovered. Discover all traces across 5 layers to reach the ending.', pos: 'below', activateTab: 'traces' },
+    { target: '[data-panel="traces"]', text: '<b>TRACE</b> — Fragments of truth you\'ve uncovered. The deeper you dig, the more you\'ll find.', pos: 'below', activateTab: 'traces' },
     { target: '[data-panel="district"]', text: '<b>LOC</b> — Your current location, danger level, signal strength, nearby exits, and points of interest.', pos: 'below', activateTab: 'district' },
     { target: '[data-panel="inventory"]', text: '<b>INV</b> — Items you\'re carrying. Limited slots, so choose wisely.', pos: 'below', activateTab: 'inventory' },
     { target: '[data-panel="network"]', text: '<b>NPC</b> — People you\'ve met. Track their faction, trust level, location, and quests.', pos: 'below', activateTab: 'network' },
@@ -1260,7 +1260,7 @@ const TUTORIAL_STEPS = {
     { target: '.info-panels', text: '这是<b>信息面板</b>。它追踪你角色和世界的一切信息。使用上方的标签切换视图。', pos: 'left' },
     { target: '[data-panel="identity"]', text: '<b>身份</b> — 你的身份卡。显示姓名、背景、完整性（生命值）、信用点和状态效果。', pos: 'below', activateTab: 'identity' },
     { target: '[data-panel="knowledge"]', text: '<b>知识</b> — 你所了解的一切：事实、传闻、证据、推论以及它们之间的关联。', pos: 'below', activateTab: 'knowledge' },
-    { target: '[data-panel="traces"]', text: '<b>痕迹</b> — 你发现的真相碎片。发现5层中的所有痕迹以到达结局。', pos: 'below', activateTab: 'traces' },
+    { target: '[data-panel="traces"]', text: '<b>痕迹</b> — 你发现的真相碎片。挖得越深，发现越多。', pos: 'below', activateTab: 'traces' },
     { target: '[data-panel="district"]', text: '<b>区域</b> — 当前位置、危险等级、信号强度、附近出口和兴趣点。', pos: 'below', activateTab: 'district' },
     { target: '[data-panel="inventory"]', text: '<b>物品</b> — 你携带的物品。槽位有限，请明智选择。', pos: 'below', activateTab: 'inventory' },
     { target: '[data-panel="network"]', text: '<b>人脉</b> — 你遇到的人。追踪他们的阵营、信任度、位置和任务。', pos: 'below', activateTab: 'network' },
@@ -1948,6 +1948,14 @@ function alertColor(status) {
 
 document.addEventListener('keydown', (e) => {
   if (document.getElementById('gameScreen').classList.contains('active')) {
+    // Check if any overlay dialog is open — only allow Escape when overlays are visible
+    const overlayOpen = ['settingsOverlay', 'confirmMenuDialog', 'saveDialog'].some(
+      id => { const el = document.getElementById(id); return el && el.style.display !== 'none' && el.style.display !== ''; }
+    );
+    if (e.key === 'Escape') { closeSaveDialog(); closeSettings(); closeConfirmMenu(); return; }
+    // Block all other keybindings when an overlay is open
+    if (overlayOpen) return;
+
     const isInput = document.activeElement === document.getElementById('chatInput');
     const num = parseInt(e.key);
     if (num >= 1 && num <= 9 && !e.ctrlKey && !e.metaKey && !isInput) {
@@ -1956,7 +1964,6 @@ document.addEventListener('keydown', (e) => {
     }
     if (e.key === 't' && !isInput) { document.getElementById('chatInput').focus(); e.preventDefault(); }
     if (e.key === 's' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); saveGame(); }
-    if (e.key === 'Escape') { closeSaveDialog(); closeSettings(); closeConfirmMenu(); }
   }
 });
 
