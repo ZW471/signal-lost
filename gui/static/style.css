@@ -1019,6 +1019,87 @@ html, body {
   box-shadow: 0 0 15px rgba(0,255,245,0.3);
 }
 
+/* Suggested actions (quick-pick buttons above the input) */
+.suggested-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.suggested-actions:not(:empty) {
+  padding: 8px 16px 0;
+}
+.suggested-actions:empty {
+  display: none;
+}
+.suggested-action-btn {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 100%;
+  text-align: left;
+  background: var(--bg-input);
+  border: 1px solid var(--magenta);
+  color: var(--magenta);
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 1.35;
+  padding: 8px 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 8px 100%, 0 calc(100% - 8px));
+  animation: sa-fade-in 0.25s ease;
+}
+.suggested-action-btn::before {
+  content: "▷ ";
+  opacity: 0.7;
+}
+.suggested-action-btn:hover {
+  background: var(--magenta);
+  color: var(--bg-dark);
+  box-shadow: 0 0 14px rgba(255,0,255,0.3), inset 0 0 14px rgba(255,0,255,0.1);
+}
+.suggested-action-btn:active {
+  transform: translateY(1px);
+}
+.suggested-action-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+/* predict_outcome: still pre-computing this action's outcome */
+.suggested-action-btn.pending {
+  opacity: 0.6;
+  border-style: dashed;
+  animation: sa-fade-in 0.25s ease, sa-pulse 1.4s ease-in-out infinite;
+}
+.suggested-action-btn.pending::before {
+  content: "○ ";
+}
+/* predict_outcome: outcome cached — clicking is instant (cyan = warm) */
+.suggested-action-btn.ready {
+  border-color: var(--cyan);
+  color: var(--cyan);
+  opacity: 1;
+}
+.suggested-action-btn.ready::before {
+  content: "⚡ ";
+  opacity: 1;
+}
+.suggested-action-btn.ready:hover {
+  background: var(--cyan);
+  color: var(--bg-dark);
+  box-shadow: 0 0 14px rgba(0,255,245,0.3), inset 0 0 14px rgba(0,255,245,0.1);
+}
+@keyframes sa-fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes sa-pulse {
+  0%, 100% { opacity: 0.45; }
+  50%      { opacity: 0.7; }
+}
+
 /* ================================================================
    INFO PANELS (RIGHT SIDE)
    ================================================================ */

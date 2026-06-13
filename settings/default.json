@@ -64,5 +64,10 @@
     "traces_for_resonance_access": 5,
     "traces_for_good_ending": 7,
     "knowledge_gate_strictness": "standard"
+  },
+  "features": {
+    "suggested_actions": true,
+    "suggested_actions_count": 3,
+    "predict_outcome": true
   }
 }

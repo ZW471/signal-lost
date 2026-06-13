@@ -195,6 +195,7 @@
           </div>
           <span class="thinking-text">PROCESSING NEURAL INPUT</span>
         </div>
+        <div class="suggested-actions" id="suggestedActions" aria-label="Suggested actions"></div>
         <div class="chat-input-container">
           <div class="input-prefix">▶</div>
           <input type="text" class="chat-input" id="chatInput" placeholder="What do you do?" autocomplete="off" onkeydown="if(event.key==='Enter')sendMessage()">
@@ -357,6 +358,17 @@
             <input type="range" class="cyber-slider" id="inputMusicVolume" min="0" max="1" step="0.05" value="0.35" oninput="MusicEngine.setVolume(parseFloat(this.value)); document.getElementById('musicVolValue').textContent = Math.round(this.value * 100) + '%'">
             <span class="slider-value" id="musicVolValue">35%</span>
           </div>
+        </div>
+        <h4 class="config-subtitle" id="gameplaySectionTitle">// GAMEPLAY</h4>
+        <div class="form-group">
+          <label class="cyber-label" style="display:flex;align-items:center;gap:8px;cursor:pointer">
+            <input type="checkbox" id="chkSuggestedActions" style="accent-color:var(--cyan)"> <span id="lblSuggestedActions">Suggest actions each turn</span>
+          </label>
+        </div>
+        <div class="form-group">
+          <label class="cyber-label" style="display:flex;align-items:center;gap:8px;cursor:pointer">
+            <input type="checkbox" id="chkPredictOutcome" style="accent-color:var(--cyan)"> <span id="lblPredictOutcome">Pre-compute suggested actions (instant replies, extra LLM calls)</span>
+          </label>
         </div>
         <div class="form-actions">
           <button class="cyber-btn accent" onclick="saveSettings()">

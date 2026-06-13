@@ -132,6 +132,9 @@ const LABELS = {
     label_langsmith_key: 'API KEY', label_langsmith_project: 'PROJECT NAME',
     settings_usage_title: '// USAGE TRACKING', label_show_tokens: 'Show token usage in conversation',
     settings_audio_title: '// AUDIO', label_music_volume: 'MUSIC VOLUME',
+    settings_gameplay_title: '// GAMEPLAY',
+    label_suggested_actions: 'Suggest actions each turn',
+    label_predict_outcome: 'Pre-compute suggested actions (instant replies, extra LLM calls)',
     btn_close: 'CLOSE',
     settings_saved: 'Settings saved', saving: 'Saving...', saved: 'Saved',
     // Chat prefixes
@@ -216,6 +219,9 @@ const LABELS = {
     label_langsmith_key: 'API密钥', label_langsmith_project: '项目名称',
     settings_usage_title: '// 用量追踪', label_show_tokens: '在对话中显示令牌用量',
     settings_audio_title: '// 音频', label_music_volume: '音乐音量',
+    settings_gameplay_title: '// 玩法',
+    label_suggested_actions: '每回合推荐行动',
+    label_predict_outcome: '预计算推荐行动（点击即时响应，但会增加 LLM 调用）',
     btn_close: '关闭',
     settings_saved: '设置已保存', saving: '保存中...', saved: '已保存',
     // Chat prefixes
@@ -423,6 +429,7 @@ function setLanguage(lang) {
   if (subtitles[1]) subtitles[1].textContent = L('settings_langsmith_title');
   if (subtitles[2]) subtitles[2].textContent = L('settings_usage_title');
   if (subtitles[3]) subtitles[3].textContent = L('settings_audio_title');
+  if (subtitles[4]) subtitles[4].textContent = L('settings_gameplay_title');
   // Localize checkbox label (preserve the <input> inside)
   const chkLabel = document.querySelector('#chkShowTokens');
   if (chkLabel && chkLabel.parentNode) {
@@ -430,6 +437,11 @@ function setLanguage(lang) {
     // Keep checkbox, replace text
     lbl.childNodes.forEach(n => { if (n.nodeType === 3) n.textContent = ' ' + L('label_show_tokens'); });
   }
+  // Gameplay feature toggle labels (translated by id, not index)
+  const lblSA = document.getElementById('lblSuggestedActions');
+  if (lblSA) lblSA.textContent = L('label_suggested_actions');
+  const lblPO = document.getElementById('lblPredictOutcome');
+  if (lblPO) lblPO.textContent = L('label_predict_outcome');
   const settingsBtns = document.querySelectorAll('#settingsOverlay .cyber-btn-text');
   if (settingsBtns[0]) settingsBtns[0].textContent = L('btn_save');
   if (settingsBtns[1]) settingsBtns[1].textContent = L('btn_close');
@@ -681,6 +693,7 @@ let isFirstInput = true; // Track if first input after resume (to remove system 
 let pendingTutorial = false; // Show tutorial after new game starts
 let resumeMessageEl = null; // Reference to the resume system message element
 let discoveryEls = []; // Track discovery notification elements (ephemeral)
+let _cachedFeatures = null; // Latest gameplay feature flags from the server
 
 // ================================================================
 // SERVER MESSAGE HANDLER
@@ -698,6 +711,7 @@ function handleServerMessage(msg) {
       }
       if (msg.provider) prefillProviderSettings(msg.provider);
       if (msg.langsmith) prefillLangsmithSettings(msg.langsmith);
+      if (msg.settings && msg.settings.features) _cachedFeatures = msg.settings.features;
       // Read language from settings
       if (msg.settings && msg.settings.language) {
         const lang = msg.settings.language.display || msg.settings.language.tui || 'en';
@@ -714,6 +728,7 @@ function handleServerMessage(msg) {
       break;
 
     case 'thinking':
+      clearSuggestedActions();
       showThinking();
       break;
 
@@ -722,15 +737,19 @@ function handleServerMessage(msg) {
       const role = msg.role || 'agent';
       if (role === 'system') {
         // Resume message — will be removed after first player input
-        resumeMessageEl = addTypingMessage(msg.text, role, null, msg.elapsed_seconds);
+        resumeMessageEl = addTypingMessage(msg.text, role, null, msg.elapsed_seconds, msg.suggested_actions);
         isFirstInput = true;
       } else {
-        addTypingMessage(msg.text, role, msg.usage, msg.elapsed_seconds);
+        addTypingMessage(msg.text, role, msg.usage, msg.elapsed_seconds, msg.suggested_actions);
       }
       break;
 
     case 'session_update':
       if (msg.session) updateAllPanels(msg.session);
+      break;
+
+    case 'prediction_ready':
+      markPredictionReady(msg.text);
       break;
 
     case 'discovery':
@@ -742,6 +761,7 @@ function handleServerMessage(msg) {
       break;
 
     case 'game_over':
+      clearSuggestedActions();
       setTimeout(() => showGameOver(msg.ending, msg.narrative), 2000);
       break;
 
@@ -754,6 +774,7 @@ function handleServerMessage(msg) {
       notify(L('settings_saved'));
       if (msg.provider) prefillProviderSettings(msg.provider);
       if (msg.langsmith) prefillLangsmithSettings(msg.langsmith);
+      if (msg.features) _cachedFeatures = msg.features;
       document.getElementById('settingsStatus').textContent = L('saved');
       setTimeout(() => { document.getElementById('settingsStatus').textContent = ''; }, 2000);
       break;
@@ -826,6 +847,17 @@ function openSettings() {
   };
   // Sync token tracking checkbox
   document.getElementById('chkShowTokens').checked = _showTokens();
+  // Sync gameplay feature checkboxes from the latest server-known flags.
+  // Both default ON to match settings/default.json — so the boxes reflect the
+  // real default even if the server flags haven't been received yet (a value is
+  // only treated as off when the server explicitly reports false).
+  const _feats = _cachedFeatures || {};
+  const _sa = _feats.suggested_actions !== false;
+  const _po = _feats.predict_outcome !== false;
+  document.getElementById('chkSuggestedActions').checked = _sa;
+  document.getElementById('chkPredictOutcome').checked = _po;
+  _settingsSnapshot.suggestedActions = _sa;
+  _settingsSnapshot.predictOutcome = _po;
   // Show cumulative usage stats if available
   _updateUsageStats();
   playBeep(1000, 0.04);
@@ -844,6 +876,8 @@ function closeSettings() {
     document.getElementById('inputLangsmithKey').value = _settingsSnapshot.langsmithKey;
     document.getElementById('inputLangsmithProject').value = _settingsSnapshot.langsmithProject;
     document.getElementById('chkShowTokens').checked = _settingsSnapshot.showTokens;
+    document.getElementById('chkSuggestedActions').checked = _settingsSnapshot.suggestedActions;
+    document.getElementById('chkPredictOutcome').checked = _settingsSnapshot.predictOutcome;
     onProviderChange(); // re-sync field visibility for restored provider
     _settingsSnapshot = null;
   }
@@ -862,6 +896,12 @@ function saveSettings() {
   // Save token display preference
   localStorage.setItem('signal_lost_show_tokens',
     document.getElementById('chkShowTokens').checked ? '1' : '0');
+  // Gameplay feature toggles (persisted server-side in custom.json + session)
+  payload.features = {
+    suggested_actions: document.getElementById('chkSuggestedActions').checked,
+    predict_outcome: document.getElementById('chkPredictOutcome').checked,
+  };
+  _cachedFeatures = Object.assign({}, _cachedFeatures || {}, payload.features);
   sendWS(payload);
   _settingsSnapshot = null;  // Mark as saved so close doesn't revert
   document.getElementById('settingsStatus').textContent = L('saving');
@@ -1156,7 +1196,7 @@ function addChatMessage(text, role = 'agent') {
   return msg;
 }
 
-function addTypingMessage(text, role = 'agent', usage = null, elapsedSeconds = null) {
+function addTypingMessage(text, role = 'agent', usage = null, elapsedSeconds = null, suggestedActions = null) {
   const container = document.getElementById('chatMessages');
   const msg = document.createElement('div');
   msg.className = `chat-msg ${role}`;
@@ -1198,10 +1238,81 @@ function addTypingMessage(text, role = 'agent', usage = null, elapsedSeconds = n
         msg.appendChild(infoEl);
       }
       enableInput();
+      // Render quick-pick action buttons once the narration finishes typing.
+      renderSuggestedActions(suggestedActions);
     }
   }
   typeNext();
   return msg;
+}
+
+// ----------------------------------------------------------------------------
+// Suggested actions (quick-pick buttons)
+// ----------------------------------------------------------------------------
+
+function clearSuggestedActions() {
+  const c = document.getElementById('suggestedActions');
+  if (c) c.innerHTML = '';
+}
+
+function renderSuggestedActions(actions) {
+  const c = document.getElementById('suggestedActions');
+  if (!c) return;
+  c.innerHTML = '';
+  // Respect the feature flag, in case it was disabled mid-turn.
+  if (_cachedFeatures && _cachedFeatures.suggested_actions === false) return;
+  if (!Array.isArray(actions) || actions.length === 0) return;
+  // When outcome pre-computation is on, buttons start "pending" and brighten to
+  // "ready" (instant reply) once their prediction lands (prediction_ready msg).
+  const predicting = !!(_cachedFeatures && _cachedFeatures.predict_outcome);
+  actions.slice(0, 3).forEach((a, idx) => {
+    const text = (a && (a.text || a)) ? (a.text || a) : '';
+    if (!text) return;
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'suggested-action-btn' + (predicting ? ' pending' : '');
+    btn.dataset.action = text;
+    btn.textContent = text;
+    btn.title = predicting ? (text + ' — pre-computing…') : text;
+    btn.onclick = () => chooseSuggestedAction(text);
+    c.appendChild(btn);
+  });
+}
+
+function markPredictionReady(text) {
+  if (!text) return;
+  document.querySelectorAll('#suggestedActions .suggested-action-btn').forEach(btn => {
+    if (btn.dataset.action === text) {
+      btn.classList.remove('pending');
+      btn.classList.add('ready');
+      btn.title = text + ' — ready (instant)';
+    }
+  });
+}
+
+function chooseSuggestedAction(text) {
+  const input = document.getElementById('chatInput');
+  if (input.disabled) return;
+  text = (text || '').trim();
+  if (!text) return;
+
+  // Mirror sendMessage()'s cleanup of ephemeral UI.
+  if (isFirstInput && resumeMessageEl) {
+    resumeMessageEl.classList.add('fade-out');
+    setTimeout(() => { if (resumeMessageEl && resumeMessageEl.parentNode) resumeMessageEl.parentNode.removeChild(resumeMessageEl); resumeMessageEl = null; }, 500);
+    isFirstInput = false;
+  }
+  discoveryEls.forEach(el => {
+    el.classList.add('fade-out');
+    setTimeout(() => { if (el.parentNode) el.parentNode.removeChild(el); }, 500);
+  });
+  discoveryEls = [];
+
+  clearSuggestedActions();
+  addChatMessage(text, 'player');
+  input.value = '';
+  disableInput();
+  sendWS({ action: 'player_input', text });
 }
 
 function sendMessage() {
@@ -1224,6 +1335,7 @@ function sendMessage() {
   });
   discoveryEls = [];
 
+  clearSuggestedActions();
   addChatMessage(text, 'player');
   input.value = '';
   disableInput();
@@ -1235,8 +1347,8 @@ function showThinking() {
   document.getElementById('chatMessages').scrollTop = document.getElementById('chatMessages').scrollHeight;
 }
 function hideThinking() { document.getElementById('thinkingIndicator').style.display = 'none'; }
-function enableInput() { const i = document.getElementById('chatInput'); i.disabled = false; i.focus(); document.querySelector('.send-btn').disabled = false; }
-function disableInput() { document.getElementById('chatInput').disabled = true; document.querySelector('.send-btn').disabled = true; }
+function enableInput() { const i = document.getElementById('chatInput'); i.disabled = false; i.focus(); document.querySelector('.send-btn').disabled = false; document.querySelectorAll('.suggested-action-btn').forEach(b => b.disabled = false); }
+function disableInput() { document.getElementById('chatInput').disabled = true; document.querySelector('.send-btn').disabled = true; document.querySelectorAll('.suggested-action-btn').forEach(b => b.disabled = true); }
 
 // ================================================================
 // SAVE / LOAD

@@ -29,9 +29,11 @@ if _GAME_ROOT not in sys.path:
 
 from langchain_core.messages import HumanMessage
 
-from engine.graph import compile_graph, set_llm, set_fast_llm, get_llm
+from engine.graph import compile_graph, set_llm, set_fast_llm, get_llm, get_fast_llm
 from engine.world_sim_scheduler import WorldSimScheduler
 from engine.claude_code_engine import run_turn as cc_run_turn
+from engine import action_cache
+from engine.suggestions import read_features, generate_suggested_actions
 from engine.state import (
     create_new_session,
     copy_save_to_session,
@@ -113,6 +115,21 @@ _world_sim_scheduler: WorldSimScheduler | None = None
 
 
 _is_cli_bypass: bool = False
+
+
+# --- Suggested-action outcome cache (predict_outcome feature) --------------
+# In-memory map: action-hash -> {text, state_dir, result, ready}.
+# Backed by speculative session snapshots under <session>/.action_cache/.
+_action_cache: dict[str, dict] = {}
+_action_cache_turn: int | None = None      # player turn the cache branched from
+_action_cache_fp: str | None = None        # fingerprint of that base state
+_predict_generation: int = 0               # bumped to invalidate in-flight work
+_predict_task: "asyncio.Task | None" = None
+# Guards the in-memory cache bookkeeping above. Held only for microsecond-scale
+# critical sections (dict get/set, generation bump) — NEVER during disk or LLM
+# work — so it cannot stall the event loop. Distinct from _game_lock, which
+# serializes actual turn execution.
+_cache_lock = threading.Lock()
 
 
 def _setup_fast_llm(provider: str):
@@ -318,6 +335,7 @@ async def websocket_endpoint(ws: WebSocket):
                 })
 
             elif action == "new_game":
+                _reset_prediction()  # cancel/clear any prior session's predictions
                 config = msg.get("config", {})
                 provider_cfg = msg.get("provider", {})
 
@@ -368,6 +386,7 @@ async def websocket_endpoint(ws: WebSocket):
                 await _run_turn(ws, mode="resume")
 
             elif action == "resume":
+                _reset_prediction()  # cancel/clear any prior session's predictions
                 session_name = msg.get("session_name", "")
                 if not session_name:
                     await ws.send_json({"type": "error", "message": "No session_name provided."})
@@ -398,6 +417,7 @@ async def websocket_endpoint(ws: WebSocket):
                 await _run_turn(ws, mode="resume")
 
             elif action == "load_game":
+                _reset_prediction()  # cancel/clear any prior session's predictions
                 save_name = msg.get("save_name", "")
                 save_path = os.path.join(SAVES_DIR, save_name)
                 if not os.path.isdir(save_path):
@@ -433,7 +453,21 @@ async def websocket_endpoint(ws: WebSocket):
                     await ws.send_json({"type": "error", "message": "No active game. Start or resume first."})
                     continue
 
-                await _run_turn(ws, player_input=text)
+                # Fast path: serve a pre-computed suggested-action outcome.
+                # Run the lock-guarded validate+promote off the event loop so a
+                # background prediction holding _game_lock can't stall the server.
+                import time as _t
+                _start = _t.time()
+                cached = await asyncio.get_event_loop().run_in_executor(
+                    None, _try_serve_cached, text
+                )
+                if cached is not None:
+                    await ws.send_json({"type": "thinking"})
+                    _reset_prediction()  # the promoted snapshot is now the live turn
+                    served = {**cached, "elapsed_seconds": round(_t.time() - _start, 1)}
+                    await _finish_turn(ws, served, "play", _start)
+                else:
+                    await _run_turn(ws, player_input=text)
 
             elif action == "save_game":
                 save_name = msg.get("save_name", "quicksave")
@@ -496,13 +530,36 @@ async def websocket_endpoint(ws: WebSocket):
                 if langsmith_cfg:
                     _apply_langsmith(langsmith_cfg)
 
+                # Gameplay feature toggles (suggested actions / outcome prediction)
+                features = msg.get("features")
+                if isinstance(features, dict):
+                    # Persist globally (custom.json overrides default.json)
+                    custom_path = os.path.join(SETTINGS_DIR, "custom.json")
+                    custom = _read_json(custom_path)
+                    custom.setdefault("features", {})
+                    custom["features"].update(features)
+                    with open(custom_path, "w", encoding="utf-8") as f:
+                        json.dump(custom, f, ensure_ascii=False, indent=2)
+                    # And per-session so it applies to the running game immediately
+                    if _active_session_dir:
+                        ss_path = os.path.join(_active_session_dir, "session_settings.json")
+                        ss = _read_json(ss_path)
+                        ss.setdefault("features", {})
+                        ss["features"].update(features)
+                        with open(ss_path, "w", encoding="utf-8") as f:
+                            json.dump(ss, f, ensure_ascii=False, indent=2)
+                    # Turning prediction off (or changing options) invalidates the cache.
+                    _reset_prediction()
+
                 await ws.send_json({
                     "type": "provider_saved",
                     "provider": cfg_to_save,
                     "langsmith": _get_langsmith_status(),
+                    "features": read_features(_active_session_dir),
                 })
 
     except WebSocketDisconnect:
+        _reset_prediction()  # cancel any in-flight speculation
         if _world_sim_scheduler:
             _world_sim_scheduler.stop()
     except Exception as e:
@@ -510,6 +567,250 @@ async def websocket_endpoint(ws: WebSocket):
             await ws.send_json({"type": "error", "message": str(e)})
         except Exception:
             pass
+
+
+# ---------------------------------------------------------------------------
+# Suggested-action prediction cache (predict_outcome feature)
+# ---------------------------------------------------------------------------
+
+def _reset_prediction(*, clear_disk: bool = True) -> None:
+    """Invalidate any cached or in-flight suggested-action predictions.
+
+    Called whenever a real turn happens or the session changes (the predictions
+    were computed from the now-superseded state). Bumping the generation counter
+    makes any in-flight background task abandon its remaining work. The in-memory
+    bookkeeping is mutated under ``_cache_lock`` so a background task can't write
+    a stale entry into a cache we are concurrently clearing.
+    """
+    global _action_cache, _action_cache_turn, _action_cache_fp, _predict_generation, _predict_task
+    with _cache_lock:
+        _predict_generation += 1
+        _action_cache = {}
+        _action_cache_turn = None
+        _action_cache_fp = None
+    if _predict_task is not None and not _predict_task.done():
+        _predict_task.cancel()
+    _predict_task = None
+    # Disk clear is bounded (<=4 tiny snapshot dirs) so it stays inexpensive.
+    if clear_disk and _active_session_dir:
+        action_cache.clear(_active_session_dir)
+
+
+def _player_turn(session_dir: str) -> int | None:
+    try:
+        with open(os.path.join(session_dir, "player.json"), "r", encoding="utf-8") as f:
+            return json.load(f).get("turn")
+    except (OSError, json.JSONDecodeError):
+        return None
+
+
+def _session_language(session_dir: str | None) -> str:
+    if not session_dir:
+        return "en"
+    ss = _read_json(os.path.join(session_dir, "session_settings.json"))
+    return ss.get("language", "en")
+
+
+def _maybe_schedule_prediction(result: dict, ws: WebSocket | None = None) -> None:
+    """If predict_outcome is on, speculatively pre-compute each suggested action."""
+    global _predict_task
+    session_dir = _active_session_dir
+    if not (_is_cli_bypass and session_dir) or result.get("game_over"):
+        return
+    actions = [a.get("text", "") for a in (result.get("suggested_actions") or []) if a.get("text")]
+    if not actions or not read_features(session_dir)["predict_outcome"]:
+        return
+    try:
+        # Capture session_dir now so the task can't be diverted to a different
+        # session if the player switches games while it runs.
+        _predict_task = asyncio.get_event_loop().create_task(
+            _predict_outcomes(actions, _predict_generation, session_dir, ws)
+        )
+    except RuntimeError:
+        pass  # no running loop
+
+
+async def _predict_outcomes(action_texts: list[str], gen: int, session_dir: str,
+                            ws: WebSocket | None = None) -> None:
+    """Background: speculate the suggested actions, ALL IN PARALLEL.
+
+    The base snapshot is taken once under ``_game_lock`` (so it can't tear against
+    a live turn). Each action then branches from that frozen snapshot into its own
+    isolated working dir and runs a full speculative turn concurrently — codex/
+    claude-code spawn an independent subprocess per call, and the tools' per-turn
+    context is thread-local, so parallel speculations (and the live turn) never
+    interfere. Running them in parallel means all outcomes are ready in roughly
+    one turn's time instead of N turns' time, which is what makes a click actually
+    land on a warm cache. Cancellable via the generation counter; the click-time
+    turn+fingerprint check (in _try_serve_cached) is the authoritative guard
+    against serving a stale outcome.
+    """
+    global _action_cache_turn, _action_cache_fp
+    if not session_dir:
+        return
+    loop = asyncio.get_event_loop()
+
+    def _make_base():
+        with _game_lock:
+            if gen != _predict_generation:
+                return None
+            action_cache.clear(session_dir)
+            base = action_cache.make_base(session_dir)
+            return base, action_cache.fingerprint(session_dir), _player_turn(session_dir)
+
+    try:
+        info = await loop.run_in_executor(None, _make_base)
+        if not info:
+            return
+        base, fp, turn = info
+        with _cache_lock:
+            if gen != _predict_generation:
+                return
+            _action_cache_fp, _action_cache_turn = fp, turn
+
+        def _spec(text):
+            # No _game_lock: operates only on its own copy of the frozen base,
+            # and tool context is thread-local. Independent of the live session.
+            if gen != _predict_generation:
+                return None
+            work_dir = action_cache.prepare_action_dir(session_dir, base, text)
+            res = cc_run_turn(session_dir=work_dir, player_input=text, mode="play")
+            return work_dir, res
+
+        async def _one(text):
+            try:
+                outcome = await loop.run_in_executor(None, _spec, text)
+            except Exception as e:
+                import logging
+                logging.getLogger(__name__).warning("prediction failed for %r: %s", text, e)
+                return
+            if outcome and gen == _predict_generation:
+                work_dir, res = outcome
+                stored = False
+                with _cache_lock:
+                    if gen == _predict_generation:
+                        _action_cache[action_cache.hash_action(text)] = {
+                            "text": text, "state_dir": work_dir, "result": res, "ready": True,
+                        }
+                        stored = True
+                # Tell the client this action is now instant-clickable.
+                if stored and ws is not None:
+                    try:
+                        await ws.send_json({"type": "prediction_ready", "text": text})
+                    except Exception:
+                        pass
+
+        await asyncio.gather(*[_one(t) for t in action_texts])
+    except asyncio.CancelledError:
+        pass
+
+
+def _try_serve_cached(text: str) -> dict | None:
+    """Return a pre-computed result for *text* if a valid cache hit exists.
+
+    Confirms (under ``_game_lock``) that the live session still matches the
+    snapshot the prediction branched from (same turn + fingerprint), then
+    promotes that snapshot to be the live session. Returns the cached result, or
+    None to fall back to a normal live turn. In-memory bookkeeping reads/writes
+    are guarded by ``_cache_lock``.
+    """
+    session_dir = _active_session_dir
+    if not (_is_cli_bypass and session_dir):
+        return None
+    if not read_features(session_dir)["predict_outcome"]:
+        return None
+    global _predict_generation
+    with _cache_lock:
+        entry = _action_cache.get(action_cache.hash_action(text))
+        exp_turn, exp_fp = _action_cache_turn, _action_cache_fp
+    if not entry or not entry.get("ready"):
+        return None
+    with _game_lock:
+        if _player_turn(session_dir) != exp_turn:
+            return None
+        if action_cache.fingerprint(session_dir) != exp_fp:
+            return None
+        action_cache.promote(session_dir, entry["state_dir"])
+    # Invalidate in-flight speculation: the live state is now the next turn.
+    with _cache_lock:
+        _predict_generation += 1
+    return entry["result"]
+
+
+async def _finish_turn(ws: WebSocket, result: dict, mode: str, turn_start: float) -> None:
+    """Send a completed turn's result to the client and schedule follow-ups.
+
+    Shared by live turns (``_run_turn``) and instant cache hits so both paths
+    emit identical message sequences.
+    """
+    import time as _time
+
+    narrative = result.get("narrative", "")
+    game_over = result.get("game_over", False)
+    ending = result.get("ending")
+
+    if mode == "resume":
+        msg_role = "system"
+    elif result.get("is_warning"):
+        msg_role = "warning"
+    else:
+        msg_role = "agent"
+
+    turn_usage = result.get("turn_usage") or {}
+    elapsed = result.get("elapsed_seconds")
+    if elapsed is None:
+        elapsed = round(_time.time() - turn_start, 1)
+
+    await ws.send_json({
+        "type": "narrative",
+        "text": narrative,
+        "game_over": game_over,
+        "ending": ending,
+        "role": msg_role,
+        "elapsed_seconds": elapsed,
+        "suggested_actions": [] if game_over else (result.get("suggested_actions") or []),
+        "usage": {
+            "input": turn_usage.get("input_tokens", 0),
+            "output": turn_usage.get("output_tokens", 0),
+            "total": turn_usage.get("total_tokens", 0),
+            "cost": round(turn_usage.get("cost", 0), 6),
+        } if turn_usage.get("total_tokens") else None,
+    })
+
+    for d in result.get("discovery_notifications", []) or []:
+        await ws.send_json({
+            "type": "discovery",
+            "trace_id": d["trace_id"],
+            "layer": d["layer"],
+            "layer_name": d.get("layer_name", ""),
+            "description": d["description"],
+        })
+
+    for kn in result.get("knowledge_notifications", []) or []:
+        await ws.send_json({
+            "type": "knowledge_added",
+            "entry_type": kn.get("entry_type", "fact"),
+        })
+
+    await ws.send_json({
+        "type": "session_update",
+        "session": _get_session_data(),
+    })
+
+    if game_over:
+        await ws.send_json({
+            "type": "game_over",
+            "ending": ending,
+            "narrative": narrative,
+        })
+        if _world_sim_scheduler:
+            _world_sim_scheduler.stop()
+        return
+
+    if mode == "play" and _world_sim_scheduler:
+        _world_sim_scheduler.on_player_input()
+
+    _maybe_schedule_prediction(result, ws)
 
 
 async def _run_turn(ws: WebSocket, player_input: str | None = None, mode: str = "play"):
@@ -520,6 +821,9 @@ async def _run_turn(ws: WebSocket, player_input: str | None = None, mode: str = 
 
     import time as _time
     _turn_start = _time.time()
+
+    # A real turn supersedes any pending suggested-action predictions.
+    _reset_prediction()
 
     loop = asyncio.get_event_loop()
 
@@ -584,74 +888,38 @@ async def _run_turn(ws: WebSocket, player_input: str | None = None, mode: str = 
     try:
         result = await loop.run_in_executor(None, _invoke)
 
-        narrative = result.get("narrative", "")
-        game_over = result.get("game_over", False)
-        ending = result.get("ending")
+        # The CLI-bypass engine emits suggested_actions inline (no extra call).
+        # The LangGraph path does not, so generate them here as a fallback.
+        if (not _is_cli_bypass and not result.get("suggested_actions")
+                and not result.get("game_over") and not result.get("is_warning")):
+            try:
+                feats = read_features(_active_session_dir)
+                if feats["suggested_actions"]:
+                    suggestions = await loop.run_in_executor(
+                        None,
+                        lambda: generate_suggested_actions(
+                            _game_state,
+                            result.get("narrative", ""),
+                            _session_language(_active_session_dir),
+                            get_fast_llm(),
+                            feats["suggested_actions_count"],
+                        ),
+                    )
+                    result["suggested_actions"] = suggestions
+            except Exception:
+                pass
 
-        # Determine message role
-        if mode == "resume":
-            msg_role = "system"
-        elif result.get("is_warning"):
-            msg_role = "warning"
-        else:
-            msg_role = "agent"
+        await _finish_turn(ws, result, mode, _turn_start)
 
-        turn_usage = result.get("turn_usage") or {}
-        elapsed = result.get("elapsed_seconds") or round(_time.time() - _turn_start, 1)
-        await ws.send_json({
-            "type": "narrative",
-            "text": narrative,
-            "game_over": game_over,
-            "ending": ending,
-            "role": msg_role,
-            "elapsed_seconds": elapsed,
-            "usage": {
-                "input": turn_usage.get("input_tokens", 0),
-                "output": turn_usage.get("output_tokens", 0),
-                "total": turn_usage.get("total_tokens", 0),
-                "cost": round(turn_usage.get("cost", 0), 6),
-            } if turn_usage.get("total_tokens") else None,
-        })
-
-        # Send discovery notifications (ephemeral trace alerts)
-        discoveries = result.get("discovery_notifications", [])
-        if discoveries:
-            for d in discoveries:
-                await ws.send_json({
-                    "type": "discovery",
-                    "trace_id": d["trace_id"],
-                    "layer": d["layer"],
-                    "layer_name": d.get("layer_name", ""),
-                    "description": d["description"],
-                })
-
-        # Send knowledge-added notifications (brief bottom-right toast)
-        knowledge_notifs = result.get("knowledge_notifications", [])
-        for kn in knowledge_notifs:
-            await ws.send_json({
-                "type": "knowledge_added",
-                "entry_type": kn.get("entry_type", "fact"),
-            })
-
-        await ws.send_json({
-            "type": "session_update",
-            "session": _get_session_data(),
-        })
-
-        if game_over:
-            await ws.send_json({
-                "type": "game_over",
-                "ending": ending,
-                "narrative": narrative,
-            })
-            # Stop world sim on game over
-            if _world_sim_scheduler:
-                _world_sim_scheduler.stop()
-        elif mode == "play" and _world_sim_scheduler:
-            # Schedule background world simulation after player turn
-            _world_sim_scheduler.on_player_input()
-
+    except WebSocketDisconnect:
+        # Client closed/reloaded the tab mid-turn — not an error. Let the
+        # endpoint's disconnect handler do the cleanup (stop world sim, cancel
+        # predictions). Don't try to send on the dead socket.
+        raise
     except Exception as e:
         import traceback
         traceback.print_exc()
-        await ws.send_json({"type": "error", "message": f"Engine error: {e}"})
+        try:
+            await ws.send_json({"type": "error", "message": f"Engine error: {e}"})
+        except Exception:
+            pass  # socket may already be gone
