@@ -363,7 +363,7 @@ Tracks all NPCs the player has encountered. Update when NPC disposition changes,
 **Key NPCs (may be encountered during play):**
 - Mira / 米拉 — Noodle shop owner in The Sprawl. Listener sympathizer. First friendly face.
 - Ghost / 幽灵 — Legendary hacker. Location unknown. Will only meet if player proves worthy.
-- Director Orin / 奥林局长 — Head of NEXUS Project Division. Antagonist with complex motives.
+- Director Orin / 欧林主管 — Head of NEXUS Project Division. Antagonist with complex motives.
 - Wei Lin / 韦琳 — Founder of the Listeners. In hiding. Holds critical Layer 4 knowledge.
 - Kai / 凯 — Street runner and small-time info broker. Found in the Neon Quarter.
 - Dr. Shen / 沈医生 — Back-alley neural surgeon in The Sprawl.

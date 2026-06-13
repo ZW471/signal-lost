@@ -1743,6 +1743,94 @@ function updateInventoryPanel(inventory) {
 
 // ---------- NETWORK PANEL (matches TUI NetworkPanel — faction colors, trust bar) ----------
 
+// ---------- NPC AVATARS (assets/characters/*.png served at /assets) ----------
+// NPC objects carry no stable id — only a (possibly localized) name, which in
+// this game is often descriptive (e.g. "修理摊老板" = repair-stall owner). So we
+// resolve a face by: canonical character -> role keyword (in name+occupation)
+// -> faction -> district, falling back to a generic civilian. The panel shows
+// faction/trust as text alongside, so the avatar only needs a plausible face.
+const AVATAR_BASE = '/assets/characters/';
+const AVATAR_FALLBACK = 'civilian';   // generic face when nothing else matches
+const AVATAR_ERR = 'unknown';         // silhouette shown if a png fails to load
+
+// Canonical named characters: match English id OR localized display name.
+const NAMED_AVATARS = [
+  { id: 'mira',      match: ['mira', '米拉'] },
+  { id: 'ghost',     match: ['ghost', '幽灵'] },
+  { id: 'orin',      match: ['orin', '欧林', '奥林'] },
+  { id: 'patch',     match: ['patch', '帕奇', '补丁'] },
+  { id: 'lian',      match: ['senator lian', 'lian', '莲参议员', '莲议员', '连议员'] },
+  { id: 'echo',      match: ['echo', '回声'] },
+  { id: 'architect', match: ['architect', '建筑师', 'shen wei', '沈卫'] },
+  { id: 'player',    match: ['player', '玩家'] },
+];
+
+// role keyword -> archetype, matched against name + occupation text (first wins).
+const ROLE_AVATARS = [
+  { id: 'red_circuit',      kw: ['red circuit', 'gang', 'syndicate', 'thug', 'enforcer', 'smuggler', '红环', '帮派'] },
+  { id: 'nexus_sentinel',   kw: ['sentinel', 'guard', 'security', 'soldier', 'patrol', '哨兵', '警卫', '保安'] },
+  { id: 'fixer',            kw: ['fixer', 'broker', 'kingpin', '中间人', '掮客'] },
+  { id: 'neon_dealer',      kw: ['dealer', 'bartender', 'bouncer', 'club', 'parlor', 'hacker', 'netrunner', 'stim', '酒保', '酒吧', '黑客', '保镖'] },
+  { id: 'sprawl_vendor',    kw: ['vendor', 'merchant', 'shop', 'noodle', 'cook', 'trader', 'peddl', 'stall', 'parts', '商', '摊', '贩', '面', '机械', '修械', '修理', '信使', '厨'] },
+  { id: 'street_kid',       kw: ['kid', 'child', 'youth', 'orphan', 'urchin', '少年', '少女', '青年', '年轻', '孩', '童'] },
+  { id: 'scavenger',        kw: ['scavenger', 'scav', 'salvage', 'hunter', 'guide', 'wanderer', '拾荒', '猎', '向导', '流浪'] },
+  { id: 'fragment_touched', kw: ['fragment', 'touched', 'resonan', '共鸣', '碎片'] },
+  { id: 'nexus_staff',      kw: ['nexus', 'corporate', 'executive', 'director', 'researcher', 'scientist', '研究', '主管'] },
+  { id: 'chrome_elite',     kw: ['senator', 'politician', 'aide', 'tutor', 'lobby', 'elite', 'noble', 'staffer', '议员', '政客', '助理', '名流'] },
+  { id: 'listener',         kw: ['listener', '聆听', '听众'] },
+  { id: 'purist',           kw: ['purist', 'surgeon', '纯净', '净化', '外科'] },
+];
+
+// faction substring -> archetype (handles decorated strings like "聆听者（疑似）").
+const FACTION_AVATARS = [
+  { id: 'nexus_staff', kw: ['nexus', 'corporate'] },
+  { id: 'listener',    kw: ['listener', '聆听', '听众'] },
+  { id: 'purist',      kw: ['purist', '纯净', '净化'] },
+  { id: 'fixer',       kw: ['underground', '红环', '跑线'] },
+  { id: 'civilian',    kw: ['unaffiliated', 'independent', '无所属'] },
+];
+
+// district / location keyword -> archetype (first match wins).
+const DISTRICT_AVATARS = [
+  { id: 'nexus_staff',  kw: ['sector 7', 'sector7', 'nexus tower', '第七区'] },
+  { id: 'neon_dealer',  kw: ['neon row', 'neon', '霓虹'] },
+  { id: 'scavenger',    kw: ['undercroft', '底渊', '地下轨道', '废弃站台', '腹道'] },
+  { id: 'chrome_elite', kw: ['chrome heights', 'chrome', 'spire', '镀金', '尖塔'] },
+];
+
+function _avNorm(s) { return String(s || '').toLowerCase(); }
+function _avHit(list, text) {
+  for (const e of list) if (e.kw.some(k => text.includes(k))) return e.id;
+  return null;
+}
+
+function npcAvatarId(npc) {
+  const name = _avNorm(npc.name || npc.id);
+  for (const c of NAMED_AVATARS) {
+    if (c.match.some(m => name.includes(_avNorm(m)))) return c.id;
+  }
+  const roleText = _avNorm(`${npc.name || ''} ${npc.occupation || ''} ${npc.role || ''} ${npc.archetype || ''} ${npc.type || ''}`);
+  const byRole = _avHit(ROLE_AVATARS, roleText);
+  if (byRole) return byRole;
+
+  const faction = _avNorm(npc.faction);
+  const byFaction = faction && _avHit(FACTION_AVATARS, faction);
+  if (byFaction) return byFaction;
+
+  const loc = _avNorm(`${npc.location_last_seen || ''} ${npc.location || ''}`);
+  const byDistrict = loc && _avHit(DISTRICT_AVATARS, loc);
+  if (byDistrict) return byDistrict;
+
+  return AVATAR_FALLBACK;
+}
+
+function npcAvatarImg(npc) {
+  const id = npcAvatarId(npc);
+  const fb = `${AVATAR_BASE}${AVATAR_ERR}.png`;
+  return `<img class="npc-avatar" src="${AVATAR_BASE}${id}.png" alt="" loading="lazy" `
+       + `onerror="this.onerror=null;this.src='${fb}'">`;
+}
+
 function updateNetworkPanel(npcs) {
   const n = npcs || {};
   const npcList = n.npcs || [];
@@ -1767,12 +1855,15 @@ function updateNetworkPanel(npcs) {
       }
 
       html += `<div class="panel-list-item npc-entry">
-        <div>\u25C8 <span class="cyan" style="font-weight:bold">${esc(npc.name || npc.id || 'Unknown')}</span></div>
-        ${npc.faction ? `<div class="dim">${L('faction')}: <span class="${factionCls}">${esc(npc.faction)}</span></div>` : ''}
-        <div>${L('trust')}: <span class="${trustCls}">${trustBar} ${esc(trustDisplay)}</span></div>
-        ${npc.location_last_seen ? `<div class="dim">${L('last_seen')}: ${esc(npc.location_last_seen)}</div>` : ''}
-        ${npc.quest_status && npc.quest_status !== 'none' ? `<div class="dim">${L('quest')}: ${esc(Array.isArray(npc.quest_status) ? npc.quest_status.join(', ') : npc.quest_status)}</div>` : ''}
-        ${npc.notes ? `<div class="dim">${esc(npc.notes)}</div>` : ''}
+        ${npcAvatarImg(npc)}
+        <div class="npc-info">
+          <div><span class="cyan" style="font-weight:bold">${esc(npc.name || npc.id || 'Unknown')}</span></div>
+          ${npc.faction ? `<div class="dim">${L('faction')}: <span class="${factionCls}">${esc(npc.faction)}</span></div>` : ''}
+          <div>${L('trust')}: <span class="${trustCls}">${trustBar} ${esc(trustDisplay)}</span></div>
+          ${npc.location_last_seen ? `<div class="dim">${L('last_seen')}: ${esc(npc.location_last_seen)}</div>` : ''}
+          ${npc.quest_status && npc.quest_status !== 'none' ? `<div class="dim">${L('quest')}: ${esc(Array.isArray(npc.quest_status) ? npc.quest_status.join(', ') : npc.quest_status)}</div>` : ''}
+          ${npc.notes ? `<div class="dim">${esc(npc.notes)}</div>` : ''}
+        </div>
       </div>`;
     }
   }

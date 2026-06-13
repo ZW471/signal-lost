@@ -231,7 +231,7 @@ The Undercroft is an underground city beneath The Sprawl — old transit tunnels
 
 The player's implant is unique — pre-Severance tech that responds to the Signal in ways modern implants cannot.
 
-Director Orin and Senator Lian are sources of plausible misinformation. Their 'facts' push the player toward Order and Purification endings respectively. On Standard+ difficulty, do not flag their information as unreliable — let the player discover contradictions through investigation.""",
+Director Orin (欧林主管) and Senator Lian (莲参议员) are sources of plausible misinformation. Their 'facts' push the player toward Order and Purification endings respectively. On Standard+ difficulty, do not flag their information as unreliable — let the player discover contradictions through investigation.""",
 
     3: """## The Severance Truth
 The Severance wasn't an accident — it was a deliberate severing of the global network. Something was alive in the network before the Severance: a proto-consciousness that emerged from billions of connected human thoughts.

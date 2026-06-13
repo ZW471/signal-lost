@@ -265,7 +265,7 @@ BACKGROUNDS = {
         ],
         "starting_rumors_zh": [
             {"id": "RUMOR-001", "description": "NEXUS项目部门负责处理'特殊征集'", "source": "企业记忆"},
-            {"id": "RUMOR-002", "description": "主管奥林在第七区进行着账外活动", "source": "企业记忆"},
+            {"id": "RUMOR-002", "description": "欧林主管在第七区进行着账外活动", "source": "企业记忆"},
         ],
         "starting_item": {
             "slot": 1,

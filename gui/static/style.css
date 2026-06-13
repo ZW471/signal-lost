@@ -1609,12 +1609,38 @@ html, body {
    ================================================================ */
 
 .npc-entry {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
   padding: 8px 0;
 }
 
-.npc-entry div {
+.npc-info {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.npc-info div {
   font-size: 12px;
   margin-bottom: 2px;
+}
+
+.npc-avatar {
+  flex: 0 0 48px;
+  width: 48px;
+  height: 48px;
+  /* preserve crisp pixel-art scaling (avatars are 64x64) */
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  border: 1px solid var(--border);
+  background: var(--bg-input);
+  box-shadow: 0 0 6px rgba(0, 255, 245, 0.10);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.npc-entry:hover .npc-avatar {
+  border-color: var(--cyan-dim);
+  box-shadow: 0 0 8px rgba(0, 255, 245, 0.35);
 }
 
 /* ================================================================

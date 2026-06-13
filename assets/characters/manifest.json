@@ -1,0 +1,29 @@
+{
+  "size": 64,
+  "named": [
+    "player",
+    "mira",
+    "ghost",
+    "orin",
+    "patch",
+    "lian",
+    "echo",
+    "architect"
+  ],
+  "generic": [
+    "nexus_sentinel",
+    "nexus_staff",
+    "listener",
+    "purist",
+    "red_circuit",
+    "sprawl_vendor",
+    "street_kid",
+    "neon_dealer",
+    "scavenger",
+    "fragment_touched",
+    "chrome_elite",
+    "fixer",
+    "civilian",
+    "unknown"
+  ]
+}
