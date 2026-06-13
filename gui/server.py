@@ -50,6 +50,8 @@ from engine.llm_factory import (
     _read_json,
     GAME_ROOT,
     SETTINGS_DIR,
+    ZERO_COST_PROVIDERS,
+    OAUTH_CLI_PROVIDERS,
 )
 
 # ---------------------------------------------------------------------------
@@ -110,14 +112,14 @@ _active_session_dir: str | None = None
 _world_sim_scheduler: WorldSimScheduler | None = None
 
 
-_is_claude_code: bool = False
+_is_cli_bypass: bool = False
 
 
 def _setup_fast_llm(provider: str):
     """Set up a fast (haiku-class) LLM for lightweight tasks.
 
     Uses Anthropic haiku when the main provider has an Anthropic API key.
-    Falls back to the main LLM otherwise (claude-code, local, etc.).
+    Falls back to the main LLM otherwise (claude-code, codex, local, etc.).
     """
     if provider == "anthropic" and os.environ.get("ANTHROPIC_API_KEY"):
         try:
@@ -126,6 +128,54 @@ def _setup_fast_llm(provider: str):
         except Exception:
             pass  # Fall back to main LLM
     # For other providers, fast_llm stays None → get_fast_llm() returns main LLM
+
+
+def _env_var_for_provider(provider: str) -> str | None:
+    """Return the env var name an API key should be written to for *provider*."""
+    return {
+        "anthropic": "ANTHROPIC_API_KEY",
+        "openai": "OPENAI_API_KEY",
+        "openrouter": "OPENROUTER_API_KEY",
+    }.get(provider)
+
+
+def _build_llm_from_config(provider_cfg: dict):
+    """Resolve a provider config dict into a live LLM + side-effects.
+
+    - Stashes the API key into the right env var (and .env where relevant).
+    - Builds the LLM via create_llm.
+    - Registers it with the engine as the main + fast LLM.
+    - Returns (provider, model, temperature) for the caller to persist.
+
+    Mutates module globals: _is_cli_bypass.
+    """
+    global _is_cli_bypass
+
+    provider = provider_cfg.get("provider", "openai")
+    model = provider_cfg.get("model", default_model_for(provider))
+    temperature = provider_cfg.get("temperature", 0.7)
+
+    api_key = provider_cfg.get("api_key")
+    if api_key and provider not in OAUTH_CLI_PROVIDERS and provider not in ("local", "lmstudio"):
+        env_var = _env_var_for_provider(provider)
+        if env_var:
+            os.environ[env_var] = api_key
+
+    extra: dict = {}
+    if provider in ("lmstudio", "local"):
+        extra["base_url"] = provider_cfg.get("base_url", "http://localhost:1234/v1")
+    if provider == "openrouter":
+        if provider_cfg.get("base_url"):
+            extra["base_url"] = provider_cfg["base_url"]
+    if provider not in OAUTH_CLI_PROVIDERS:
+        extra["temperature"] = temperature
+
+    llm = create_llm(provider, model, **extra)
+    set_llm(llm, zero_cost=provider in ZERO_COST_PROVIDERS)
+    _is_cli_bypass = provider in OAUTH_CLI_PROVIDERS
+    _setup_fast_llm(provider)
+
+    return provider, model, temperature
 
 
 def _start_world_sim_scheduler(session_dir: str):
@@ -246,7 +296,7 @@ async def session_data():
 
 @app.websocket("/ws")
 async def websocket_endpoint(ws: WebSocket):
-    global _game_graph, _game_state, _active_session_dir, _is_claude_code
+    global _game_graph, _game_state, _active_session_dir
 
     await ws.accept()
 
@@ -271,39 +321,22 @@ async def websocket_endpoint(ws: WebSocket):
                 config = msg.get("config", {})
                 provider_cfg = msg.get("provider", {})
 
-                provider = provider_cfg.get("provider", "openai")
-                model = provider_cfg.get("model", default_model_for(provider))
-                temperature = provider_cfg.get("temperature", 0.7)
-
-                api_key = provider_cfg.get("api_key")
-                if api_key and provider not in ("claude-code", "local", "lmstudio"):
-                    if provider == "anthropic":
-                        os.environ["ANTHROPIC_API_KEY"] = api_key
-                    elif provider == "openai":
-                        os.environ["OPENAI_API_KEY"] = api_key
-
-                extra = {}
-                if provider in ("lmstudio", "local"):
-                    extra["base_url"] = provider_cfg.get("base_url", "http://localhost:1234/v1")
-                if provider != "claude-code":
-                    extra["temperature"] = temperature
-
                 try:
-                    llm = create_llm(provider, model, **extra)
-                    set_llm(llm, zero_cost=provider in ("claude-code", "local", "lmstudio"))
-                    _is_claude_code = provider == "claude-code"
-                    _setup_fast_llm(provider)
+                    provider, model, temperature = _build_llm_from_config(provider_cfg)
                 except Exception as e:
                     await ws.send_json({"type": "error", "message": f"Failed to create LLM: {e}"})
                     continue
 
                 # Save provider config (global)
+                cfg_to_save = {
+                    "provider": provider,
+                    "model": model,
+                    "temperature": temperature,
+                }
+                if provider_cfg.get("base_url") and provider in ("local", "lmstudio", "openrouter"):
+                    cfg_to_save["base_url"] = provider_cfg["base_url"]
                 with open(os.path.join(SETTINGS_DIR, "provider.json"), "w", encoding="utf-8") as f:
-                    json.dump({
-                        "provider": provider,
-                        "model": model,
-                        "temperature": temperature,
-                    }, f, indent=2)
+                    json.dump(cfg_to_save, f, indent=2)
 
                 lang = config.get("language", "en")
                 diff = config.get("difficulty", "standard")
@@ -345,28 +378,9 @@ async def websocket_endpoint(ws: WebSocket):
                     continue
 
                 provider_cfg = msg.get("provider", load_provider_config())
-                provider = provider_cfg.get("provider", "openai")
-                model = provider_cfg.get("model", default_model_for(provider))
-                temperature = provider_cfg.get("temperature", 0.7)
-
-                api_key = provider_cfg.get("api_key")
-                if api_key and provider not in ("claude-code", "local", "lmstudio"):
-                    if provider == "anthropic":
-                        os.environ["ANTHROPIC_API_KEY"] = api_key
-                    elif provider == "openai":
-                        os.environ["OPENAI_API_KEY"] = api_key
-
-                extra = {}
-                if provider in ("lmstudio", "local"):
-                    extra["base_url"] = provider_cfg.get("base_url", "http://localhost:1234/v1")
-                if provider != "claude-code":
-                    extra["temperature"] = temperature
 
                 try:
-                    llm = create_llm(provider, model, **extra)
-                    set_llm(llm, zero_cost=provider in ("claude-code", "local", "lmstudio"))
-                    _is_claude_code = provider == "claude-code"
-                    _setup_fast_llm(provider)
+                    _build_llm_from_config(provider_cfg)
                 except Exception as e:
                     await ws.send_json({"type": "error", "message": f"Failed to create LLM: {e}"})
                     continue
@@ -391,28 +405,9 @@ async def websocket_endpoint(ws: WebSocket):
                     continue
 
                 provider_cfg = msg.get("provider", load_provider_config())
-                provider = provider_cfg.get("provider", "openai")
-                model = provider_cfg.get("model", default_model_for(provider))
-                temperature = provider_cfg.get("temperature", 0.7)
-
-                api_key = provider_cfg.get("api_key")
-                if api_key and provider not in ("claude-code", "local", "lmstudio"):
-                    if provider == "anthropic":
-                        os.environ["ANTHROPIC_API_KEY"] = api_key
-                    elif provider == "openai":
-                        os.environ["OPENAI_API_KEY"] = api_key
-
-                extra = {}
-                if provider in ("lmstudio", "local"):
-                    extra["base_url"] = provider_cfg.get("base_url", "http://localhost:1234/v1")
-                if provider != "claude-code":
-                    extra["temperature"] = temperature
 
                 try:
-                    llm = create_llm(provider, model, **extra)
-                    set_llm(llm, zero_cost=provider in ("claude-code", "local", "lmstudio"))
-                    _is_claude_code = provider == "claude-code"
-                    _setup_fast_llm(provider)
+                    _build_llm_from_config(provider_cfg)
                 except Exception as e:
                     await ws.send_json({"type": "error", "message": f"Failed to create LLM: {e}"})
                     continue
@@ -461,12 +456,13 @@ async def websocket_endpoint(ws: WebSocket):
             elif action == "save_provider":
                 provider_cfg = msg.get("provider", {})
                 os.makedirs(SETTINGS_DIR, exist_ok=True)
+                prov = provider_cfg.get("provider", "openai")
                 cfg_to_save = {
-                    "provider": provider_cfg.get("provider", "openai"),
-                    "model": provider_cfg.get("model", default_model_for(provider_cfg.get("provider", "openai"))),
+                    "provider": prov,
+                    "model": provider_cfg.get("model", default_model_for(prov)),
                     "temperature": provider_cfg.get("temperature", 0.7),
                 }
-                if provider_cfg.get("base_url"):
+                if provider_cfg.get("base_url") and prov in ("local", "lmstudio", "openrouter"):
                     cfg_to_save["base_url"] = provider_cfg["base_url"]
                 with open(os.path.join(SETTINGS_DIR, "provider.json"), "w", encoding="utf-8") as f:
                     json.dump(cfg_to_save, f, indent=2)
@@ -490,11 +486,11 @@ async def websocket_endpoint(ws: WebSocket):
                         json.dump(custom, f, ensure_ascii=False, indent=2)
 
                 api_key = provider_cfg.get("api_key")
-                prov = provider_cfg.get("provider", "openai")
-                if api_key and prov not in ("claude-code", "local", "lmstudio"):
-                    env_var = "ANTHROPIC_API_KEY" if prov == "anthropic" else "OPENAI_API_KEY"
-                    os.environ[env_var] = api_key
-                    save_env_key(env_var, api_key)
+                if api_key and prov not in OAUTH_CLI_PROVIDERS and prov not in ("local", "lmstudio"):
+                    env_var = _env_var_for_provider(prov)
+                    if env_var:
+                        os.environ[env_var] = api_key
+                        save_env_key(env_var, api_key)
 
                 langsmith_cfg = msg.get("langsmith")
                 if langsmith_cfg:
@@ -530,16 +526,18 @@ async def _run_turn(ws: WebSocket, player_input: str | None = None, mode: str = 
     def _invoke():
         global _game_state
         with _game_lock:
-            # --- Claude-code bypass: single LLM call, pure Python post-processing ---
-            # Re-check provider from the actual LLM instance to avoid stale flag
+            # --- CLI-bypass: single LLM call, pure Python post-processing ---
+            # The same fast path is used by both Claude Code CLI and Codex CLI;
+            # any LLM exposing _call_claude(system, user) -> str can plug in.
+            # Re-check from the live LLM instance to avoid a stale flag.
             from engine.graph import get_llm as _get_current_llm
             _current_llm = _get_current_llm()
-            _actually_claude_code = (
-                _is_claude_code
+            _use_bypass = (
+                _is_cli_bypass
                 and _active_session_dir
-                and hasattr(_current_llm, '_call_claude')  # ClaudeCodeLLM signature
+                and hasattr(_current_llm, '_call_claude')
             )
-            if _actually_claude_code:
+            if _use_bypass:
                 return cc_run_turn(
                     session_dir=_active_session_dir,
                     player_input=player_input or "",

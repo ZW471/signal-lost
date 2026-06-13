@@ -890,20 +890,46 @@ function _updateUsageStats() {
 const DEFAULT_MODELS = {
   anthropic: 'claude-sonnet-4-6-20250514',
   'claude-code': 'sonnet',
+  codex: 'gpt-5-codex',
   openai: 'gpt-5.4',
+  openrouter: 'openai/gpt-5.4',
   local: '[model]',
   lmstudio: '[model]',
 };
+
+// Providers that authenticate via a CLI's own OAuth flow — no API-key field needed.
+const OAUTH_CLI_PROVIDERS = new Set(['claude-code', 'codex']);
 
 let _lastProvider = null; // tracks provider to detect actual switches
 
 function onProviderChange() {
   const p = document.getElementById('selectProvider').value;
-  document.getElementById('apiKeyGroup').style.display = (p === 'local' || p === 'claude-code') ? 'none' : '';
-  document.getElementById('baseUrlGroup').style.display = p === 'local' ? '' : 'none';
+  const hideApiKey = (p === 'local' || OAUTH_CLI_PROVIDERS.has(p));
+  document.getElementById('apiKeyGroup').style.display = hideApiKey ? 'none' : '';
+  document.getElementById('baseUrlGroup').style.display = (p === 'local' || p === 'openrouter') ? '' : 'none';
   // Only update model when the provider actually changes (not on initial load)
   if (_lastProvider !== null && _lastProvider !== p) {
     document.getElementById('inputModel').value = DEFAULT_MODELS[p] || '';
+  }
+  // Refresh the base-url placeholder/default for this provider
+  const baseUrlInput = document.getElementById('inputBaseUrl');
+  if (p === 'openrouter') {
+    baseUrlInput.placeholder = 'https://openrouter.ai/api/v1';
+    if (!baseUrlInput.value || baseUrlInput.value === 'http://localhost:1234/v1') {
+      baseUrlInput.value = 'https://openrouter.ai/api/v1';
+    }
+  } else if (p === 'local') {
+    baseUrlInput.placeholder = 'http://localhost:1234/v1';
+    if (!baseUrlInput.value || baseUrlInput.value === 'https://openrouter.ai/api/v1') {
+      baseUrlInput.value = 'http://localhost:1234/v1';
+    }
+  }
+  // Refresh the API-key placeholder for this provider
+  const apiKeyInput = document.getElementById('inputApiKey');
+  if (apiKeyInput) {
+    if (p === 'openrouter') apiKeyInput.placeholder = 'sk-or-...';
+    else if (p === 'anthropic') apiKeyInput.placeholder = 'sk-ant-...';
+    else apiKeyInput.placeholder = 'sk-...';
   }
   _lastProvider = p;
 }
@@ -914,10 +940,22 @@ document.getElementById('inputTemp').addEventListener('input', function() {
 
 function getProviderConfig() {
   const provider = document.getElementById('selectProvider').value;
-  const config = { provider, model: document.getElementById('inputModel').value || DEFAULT_MODELS[provider] || 'gpt-5.4',
-    temperature: parseFloat(document.getElementById('inputTemp').value) };
-  if (provider === 'local') config.base_url = document.getElementById('inputBaseUrl').value;
-  else { const k = document.getElementById('inputApiKey').value; if (k) config.api_key = k; }
+  const config = {
+    provider,
+    model: document.getElementById('inputModel').value || DEFAULT_MODELS[provider] || 'gpt-5.4',
+    temperature: parseFloat(document.getElementById('inputTemp').value),
+  };
+  if (provider === 'local') {
+    config.base_url = document.getElementById('inputBaseUrl').value;
+  } else if (provider === 'openrouter') {
+    const baseUrl = document.getElementById('inputBaseUrl').value;
+    if (baseUrl) config.base_url = baseUrl;
+    const k = document.getElementById('inputApiKey').value;
+    if (k) config.api_key = k;
+  } else if (!OAUTH_CLI_PROVIDERS.has(provider)) {
+    const k = document.getElementById('inputApiKey').value;
+    if (k) config.api_key = k;
+  }
   return config;
 }
 

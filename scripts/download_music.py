@@ -17,18 +17,23 @@ import urllib.request
 # ---------------------------------------------------------------------------
 # Google Drive file IDs (shared publicly)
 # Folder: agentic_games/signal_lost/assets/music/
+#
+# Files are saved with opaque names (track_NN.mp3) to avoid spoiling the
+# district names before the player discovers them in-game. The display label
+# shown during download is also generic for the same reason.
 # ---------------------------------------------------------------------------
 
-MUSIC_FILES = {
-    "Menu.mp3":            "1U_CUaXvxwLPOlVOX4BI5hpsF04r7KDtH",
-    "The Sprawl.mp3":      "18NGjT_ZjIQcegnYV-ARks5hxLNf2WJhf",
-    "Neon Row.mp3":        "1LhumbmF7aHl3ItwtsiNnI6f3y_4pLl_G",
-    "The Undercroft.mp3":  "1fnVxCqlqR8DBpU8w7bZCIJsSvaIeKGWL",
-    "Sector7.mp3":         "1KFtkjv4zhwcGLcfbfnwRSWc-6sHxi6ih",
-    "The Resonance .mp3":  "1L6Ft6z5bA0Stq_k8oKjuegkxP_BB2s7q",
-    "Chrome Heights.mp3":  "1Lx_21HLsFQv2VBxcJTrXPWtWpaM4RnTr",
-    "The Spire.mp3":       "1DLkmpz9PFymGQ_-5lCqUfaIvavnPcfJh",
-}
+MUSIC_FILES = [
+    # (destination filename, display label, google drive file id)
+    ("menu.mp3",     "Menu",     "1U_CUaXvxwLPOlVOX4BI5hpsF04r7KDtH"),
+    ("track_01.mp3", "Track 01", "18NGjT_ZjIQcegnYV-ARks5hxLNf2WJhf"),
+    ("track_02.mp3", "Track 02", "1LhumbmF7aHl3ItwtsiNnI6f3y_4pLl_G"),
+    ("track_03.mp3", "Track 03", "1fnVxCqlqR8DBpU8w7bZCIJsSvaIeKGWL"),
+    ("track_04.mp3", "Track 04", "1KFtkjv4zhwcGLcfbfnwRSWc-6sHxi6ih"),
+    ("track_05.mp3", "Track 05", "1L6Ft6z5bA0Stq_k8oKjuegkxP_BB2s7q"),
+    ("track_06.mp3", "Track 06", "1Lx_21HLsFQv2VBxcJTrXPWtWpaM4RnTr"),
+    ("track_07.mp3", "Track 07", "1DLkmpz9PFymGQ_-5lCqUfaIvavnPcfJh"),
+]
 
 # ---------------------------------------------------------------------------
 # Progress bar
@@ -120,14 +125,14 @@ def main():
     print()
 
     # Check which files already exist
-    to_download = {}
+    to_download = []
     already_have = 0
-    for filename, file_id in MUSIC_FILES.items():
+    for filename, label, file_id in MUSIC_FILES:
         dest = os.path.join(music_dir, filename)
         if os.path.exists(dest) and os.path.getsize(dest) > 100_000:
             already_have += 1
         else:
-            to_download[filename] = file_id
+            to_download.append((filename, label, file_id))
 
     if not to_download:
         print(f"  All {len(MUSIC_FILES)} music files already present.")
@@ -145,10 +150,10 @@ def main():
     success = 0
     failed = 0
 
-    for i, (filename, file_id) in enumerate(to_download.items(), 1):
+    for i, (filename, label, file_id) in enumerate(to_download, 1):
         dest = os.path.join(music_dir, filename)
-        print(f"  [{i}/{len(to_download)}] {filename}")
-        if download_gdrive_file(file_id, dest, filename):
+        print(f"  [{i}/{len(to_download)}] {label}")
+        if download_gdrive_file(file_id, dest, label):
             success += 1
         else:
             failed += 1

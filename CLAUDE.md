@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Signal Lost is a cyberpunk knowledge-roguelike text RPG. The game engine is a LangGraph state machine with a browser-based GUI (FastAPI + WebSocket). It supports multiple LLM providers (Anthropic, OpenAI, LM Studio, Claude Code CLI) and is bilingual (English/中文).
+Signal Lost is a cyberpunk knowledge-roguelike text RPG. The game engine is a LangGraph state machine with a browser-based GUI (FastAPI + WebSocket). It supports multiple LLM providers (Anthropic, OpenAI, OpenRouter, LM Studio, Claude Code CLI, Codex CLI) and is bilingual (English/中文).
 
 ## Running the Game
 
@@ -73,7 +73,7 @@ Signal Lost/
 │   └── static/            # Frontend (HTML/JS/CSS)
 ├── tools/                 # Game mechanic tools (dice, cipher, signal, etc.)
 ├── tests/                 # Agentic testing framework
-│   ├── scripts/           # Headless engine + Claude CLI wrapper
+│   ├── scripts/           # Headless engine + Claude/Codex CLI wrappers
 │   ├── scenarios/         # Smoke, playthrough, regression tests
 │   └── reviews/           # Test output
 ├── game_specification/    # Reference-only design docs
@@ -99,6 +99,7 @@ Signal Lost/
 | `gui/server.py` | FastAPI + WebSocket backend |
 | `tests/scripts/play_headless.py` | File-polling headless engine for agentic testing |
 | `tests/scripts/claude_llm.py` | Claude Code CLI LLM wrapper (BaseChatModel) |
+| `tests/scripts/codex_llm.py` | OpenAI Codex CLI LLM wrapper (BaseChatModel) |
 
 ### Game State (`engine/state.py`)
 
@@ -127,4 +128,12 @@ Conversation is logged to JSONL (`session/conversation.jsonl`). Each line must b
 
 `settings/custom.json` overrides `settings/default.json`. Key settings: `difficulty` (paranoid/cautious/standard/reckless), `language` (display + tui), `narrative` (verbosity/tone), gameplay tuning.
 
-`settings/provider.json` configures the LLM provider: `provider` (anthropic/openai/lmstudio/claude-code), `model`, `temperature`.
+`settings/provider.json` configures the LLM provider: `provider` (anthropic/openai/openrouter/lmstudio/claude-code/codex), `model`, `temperature`.
+
+### CLI-bypass providers (claude-code / codex)
+
+`claude-code` and `codex` both authenticate via their own CLI's OAuth flow (`claude /login` and `codex login` respectively — no API key needed in `settings/provider.json`). Both expose a `_call_claude(system, user) -> str` method, so they share the same fast-path bypass in `engine/claude_code_engine.py` — a single CLI invocation per turn instead of the full 11-node LangGraph loop. The bypass kicks in automatically when the active LLM has `_call_claude` and the provider is in `OAUTH_CLI_PROVIDERS` (see `engine/llm_factory.py`).
+
+### OpenRouter
+
+`openrouter` is an OpenAI-API-compatible gateway. The factory points `langchain_openai.ChatOpenAI` at `https://openrouter.ai/api/v1` and reads `OPENROUTER_API_KEY` (or `OPENAI_API_KEY` as fallback) from the environment. Model names use the `vendor/model` format, e.g. `openai/gpt-5.4`, `anthropic/claude-sonnet-4`, `deepseek/deepseek-chat`.

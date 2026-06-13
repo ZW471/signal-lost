@@ -31,10 +31,12 @@ def _ensure_music_assets():
     if not os.path.isfile(script_path):
         return  # No download script available
 
-    # Check if any music files are missing
+    # Check if any music files are missing. Names are opaque (track_NN.mp3)
+    # to avoid revealing district names before the player discovers them.
     expected = [
-        "Menu.mp3", "The Sprawl.mp3", "Neon Row.mp3", "The Undercroft.mp3",
-        "Sector7.mp3", "The Resonance .mp3", "Chrome Heights.mp3", "The Spire.mp3",
+        "menu.mp3",
+        "track_01.mp3", "track_02.mp3", "track_03.mp3", "track_04.mp3",
+        "track_05.mp3", "track_06.mp3", "track_07.mp3",
     ]
     missing = [f for f in expected if not os.path.isfile(os.path.join(music_dir, f))]
 

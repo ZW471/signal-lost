@@ -16,16 +16,16 @@ const MusicEngine = (() => {
   let _fadeOutTimer = null;
   let _fadeInTimer = null;
 
-  // MP3 file mapping: track name → URL path
+  // MP3 file mapping: track name → URL path (opaque filenames to avoid spoilers)
   const TRACK_FILES = {
-    'menu':            '/assets/music/Menu.mp3',
-    'The Sprawl':      '/assets/music/The%20Sprawl.mp3',
-    'Neon Row':        '/assets/music/Neon%20Row.mp3',
-    'The Undercroft':  '/assets/music/The%20Undercroft.mp3',
-    'Sector 7':        '/assets/music/Sector7.mp3',
-    'The Resonance':   '/assets/music/The%20Resonance%20.mp3',
-    'Chrome Heights':  '/assets/music/Chrome%20Heights.mp3',
-    'The Spire':       '/assets/music/The%20Spire.mp3',
+    'menu':            '/assets/music/menu.mp3',
+    'The Sprawl':      '/assets/music/track_01.mp3',
+    'Neon Row':        '/assets/music/track_02.mp3',
+    'The Undercroft':  '/assets/music/track_03.mp3',
+    'Sector 7':        '/assets/music/track_04.mp3',
+    'The Resonance':   '/assets/music/track_05.mp3',
+    'Chrome Heights':  '/assets/music/track_06.mp3',
+    'The Spire':       '/assets/music/track_07.mp3',
   };
 
   // Aliases for Chinese district names
