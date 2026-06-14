@@ -1,105 +1,100 @@
-# Signal Lost / 信号遗失
+<div align="center">
 
-*The network died thirty years ago. Something inside it didn't.*
+# SIGNAL LOST
+### 信号遗失
 
----
+<img src="assets/readme/hero.png" width="820" alt="Neo-Kowloon at night" />
 
-## Background
+***The network died thirty years ago. Something inside it didn't.***
 
-Rain falls on Neo-Kowloon like it always has — relentless, neon-stained, indifferent. Thirty years ago, the global network collapsed in what they call the Severance. Billions died. The megacorporation NEXUS rebuilt the city from the ashes, and now controls everything: water, power, data, truth.
+`Cyberpunk` · `Detective RPG` · `Story Rich` · `Choices Matter` · `No Combat` · `Atmospheric` · `Singleplayer`
 
-You wake in an alley with no memory and a neural implant humming behind your left ear. The implant is old — pre-Severance tech that shouldn't exist anymore. It whispers to you in frequencies that have no name. Sometimes, in the static, you hear something that sounds almost like a voice.
-
-They call it the Signal. Most people can't hear it. Those who can tend to disappear.
-
-This is not a story about saving the world. This is a story about understanding it — and what you find may change what you think it means to be human.
+</div>
 
 ---
 
-## How to Play
+## About This Game
 
-### Browser GUI (Recommended)
+Rain never stops falling on **Neo-Kowloon**. Thirty years ago the global network collapsed in a single night they now call the Severance, and the megacorporation **NEXUS** rebuilt the city out of the wreckage — water, power, data, and truth, all of it theirs.
 
-The GUI provides a real-time game interface in your browser with a chat panel and live game state dashboard.
+You wake in an alley with no name, no memory, and an old neural implant humming behind your left ear. It shouldn't exist. It whispers in frequencies that don't have names, and sometimes, buried in the static, you hear something that sounds almost like a voice.
+
+They call it **the Signal**. Most people can't hear it. The ones who can tend to disappear.
+
+This is a knowledge-roguelike: a detective story where the only thing that levels up is **what you understand**. There are no stat bars to grind and no monsters to kill — only a city full of lies, a handful of people who might help you or sell you out, and a truth that gets stranger the deeper you dig. Every run is narrated live, so no two descents into Neo-Kowloon are ever quite the same.
+
+> **How far will you follow the Signal before it costs you something you can't get back?**
+
+---
+
+## The City
+
+<table>
+  <tr>
+    <td align="center"><img src="assets/readme/loc_the_sprawl.png" width="250" /><br/><b>The Sprawl</b><br/><sub>neon slums &amp; rain-slick alleys</sub></td>
+    <td align="center"><img src="assets/readme/loc_neon_row.png" width="250" /><br/><b>Neon Row</b><br/><sub>where the city sells its dreams</sub></td>
+    <td align="center"><img src="assets/readme/loc_rain_alley.png" width="250" /><br/><b>Rain Alley</b><br/><sub>the place you woke up</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="assets/readme/loc_wet_market.png" width="250" /><br/><b>The Wet Market</b><br/><sub>everything has a price</sub></td>
+    <td align="center"><img src="assets/readme/loc_the_pagoda.png" width="250" /><br/><b>The Pagoda</b><br/><sub>light, music, and worse</sub></td>
+    <td align="center"><img src="assets/readme/loc_chrome_heights.png" width="250" /><br/><b>Chrome Heights</b><br/><sub>where the rich stay dry</sub></td>
+  </tr>
+</table>
+
+<div align="center"><sub>Climb from the flooded undercity to the glass towers — every district gated by what you know, who you've convinced, and what you're willing to risk.</sub></div>
+
+---
+
+## Why You'll Want to Play
+
+- **Knowledge *is* progression.** No XP, no levels. You grow stronger by discovering facts, verifying rumors, decoding ciphers, and connecting clues. What you know is literally what you can *do*.
+- **No combat. Real stakes.** You are fragile and the city is not. Pull a weapon and you will probably die. Survive with cunning, leverage, and the right words at the right moment.
+- **Talk like your life depends on it — it does.** Every major character runs on **trust, loyalty, and knowledge gates**. They can guide you, betray you, or quietly feed you exactly the wrong thing.
+- **The Theorize mechanic.** Stitch your discoveries into theories. Land a true one and new paths, doors, and conversations crack open. Guess wrong and you tip your hand.
+- **A living world.** NPCs and factions act on their own schedule whether you're watching or not. The clock keeps moving; the city doesn't wait for you.
+- **Many endings, most of them lies you tell yourself.** Plenty of conclusions *look* like victory. Very few actually are — and the real ones can't be stumbled into by luck.
+- **Choose your way in.** Start as a **Street Runner**, a **Corporate Exile**, or a **Netrunner** — each opening with different knowledge, contacts, and gear.
+- **Endlessly re-narrated.** The story is generated by a live language model, so the prose, the side-roads, and the texture of each run shift every time you play.
+- **Bilingual by design.** Play in **English** or **中文**, switchable mid-game.
+- **Tune the noir.** Difficulty from forgiving to brutal; verbosity, tone, and atmosphere all adjustable in settings.
+
+---
+
+## People You'll Meet
+
+<table>
+  <tr>
+    <td align="center"><img src="assets/readme/char_player.png" width="92" /><br/><sub>You</sub></td>
+    <td align="center"><img src="assets/readme/char_ghost.png" width="92" /><br/><sub>A voice in the static</sub></td>
+    <td align="center"><img src="assets/readme/char_fixer.png" width="92" /><br/><sub>The fixer</sub></td>
+    <td align="center"><img src="assets/readme/char_neon_dealer.png" width="92" /><br/><sub>A dealer on the Row</sub></td>
+    <td align="center"><img src="assets/readme/char_street_kid.png" width="92" /><br/><sub>A street kid</sub></td>
+    <td align="center"><img src="assets/readme/char_scavenger.png" width="92" /><br/><sub>A scavenger</sub></td>
+  </tr>
+</table>
+
+<div align="center"><sub>Trust no one completely. Trust no one too little. The city eats people who get that balance wrong.</sub></div>
+
+---
+
+## Getting Started
+
+Signal Lost runs in your browser, with a live chat panel and a real-time dashboard of your knowledge, traces, inventory, and the world around you.
+
+### 1. Prerequisites
+
+- **Python 3.13+**
+- **[uv](https://docs.astral.sh/uv/)** — the package manager used by this project
 
 ```bash
-uv run gui/run_gui.py
-uv run gui/run_gui.py --port 8080
-uv run gui/run_gui.py --no-open   # don't auto-open browser
+uv sync   # install dependencies
 ```
 
-The GUI supports: New Game, Resume, Load Game, Save Game, and provider configuration — all from the browser.
+### 2. Pick a narrator (LLM provider)
 
-### With an AI Agent (Headless Testing)
+The story is told by a language model. Configure one in `settings/provider.json`:
 
-For automated playthroughs or agentic testing:
-
-```bash
-uv run tests/scripts/play_headless.py
-```
-
-The headless engine uses file-polling (`session/headless/player_action.json`) for communication, making it compatible with Claude Code and other AI agents.
-
----
-
-## Game Features
-
-- **Knowledge-Based Progression** — No levels, no XP. You grow by discovering facts, verifying rumors, collecting evidence, and forming theories. What you know determines what paths open.
-- **5 Layers of Truth** — The city hides its secrets in layers. Surface reality is just the beginning. Each layer reveals a deeper, stranger truth about Neo-Kowloon, the Severance, and what the Signal really is.
-- **16 Traces** — Key discoveries that gate new content. Track your progress toward the full truth.
-- **12+ Endings** — Most look like victories but carry hidden costs. Only 2 endings are truly good — and they require deep understanding, not just luck.
-- **3 Backgrounds** — Street Runner, Corporate Exile, or Netrunner. Each starts with different knowledge and items.
-- **7 Major NPCs** — Each with trust mechanics, knowledge gates, faction loyalties, and the capacity to help, betray, or mislead you.
-- **6 Districts** — From the neon slums of The Sprawl to the hidden depths of The Resonance. Access is gated by knowledge, disguises, and world state.
-- **The Theorize Mechanic** — Propose theories connecting your knowledge. Valid theories unlock new paths and dialogue.
-- **No Combat** — You are fragile. Violence is almost always fatal. Survive through knowledge, cunning, and the right words.
-- **Bilingual Support** — Play in English or 中文. Switch languages mid-game via settings.
-- **6 Python Tools** — Dice roller, cipher decoder, Signal analyzer, district map, NPC generator, atmospheric glitch generator.
-- **Multi-Provider** — Anthropic, OpenAI, LM Studio, or Claude Code CLI.
-
----
-
-## Settings
-
-Edit `settings/custom.json` to customize:
-
-- **Difficulty**: `paranoid` (forgiving) → `cautious` → `standard` → `reckless` (brutal)
-- **Language**: `display` for agent narration, `tui` for UI labels
-- **Narrative**: Verbosity (terse/standard/immersive), tone (noir/clinical/poetic), death description level
-- **Gameplay**: Auto-save frequency, Signal manifestation toggle, inventory slots
-
-Edit `settings/provider.json` to configure the LLM provider.
-
----
-
-## Testing
-
-```bash
-uv run tests/scenarios/smoke_test.py       # Quick validation (no LLM)
-uv run tests/scenarios/regression.py       # Bug regression tests (no LLM)
-uv run tests/scenarios/full_playthrough.py # Automated playthrough (requires LLM)
-```
-
-See `tests/README.md` for details.
-
----
-
-## Prerequisites
-
-This project uses [uv](https://docs.astral.sh/uv/) as its package manager. Install it first, then:
-
-```bash
-uv sync
-```
-
-**LLM Provider** — You need at least one of the following:
-
-- **Anthropic** — Get an API key at https://console.anthropic.com and set `ANTHROPIC_API_KEY` in `.env`.
-- **OpenAI** — Get an API key at https://platform.openai.com/api-keys and set `OPENAI_API_KEY` in `.env`.
-- **Local LLM** — Run a local model via LM Studio, Ollama, or vLLM to avoid API costs entirely. Set `"provider": "local"` in `settings/provider.json`.
-- **Claude Code** — Use the Claude Code CLI as the LLM backend (no API key needed). Set `"provider": "claude-code"` in `settings/provider.json`. Great for saving cost!
-
-Configure your chosen provider in `settings/provider.json`:
 ```json
 {
   "provider": "anthropic",
@@ -108,10 +103,47 @@ Configure your chosen provider in `settings/provider.json`:
 }
 ```
 
-**Optional: LangSmith** — To track token usage, cost, and detailed agentic workflow traces, set `LANGCHAIN_API_KEY` in `.env`. Entirely optional but useful for debugging and monitoring. Sign up at https://smith.langchain.com.
+Supported providers — including **free, no-API-key options**:
+
+| Provider | Notes |
+|----------|-------|
+| `anthropic` | API key via `ANTHROPIC_API_KEY` in `.env` |
+| `openai` | API key via `OPENAI_API_KEY` in `.env` |
+| `openrouter` | One gateway, many models (`OPENROUTER_API_KEY`) |
+| `lmstudio` | Run a local model — **no API cost at all** |
+| `claude-code` | Use the Claude Code CLI as the backend — **no API key needed** |
+| `codex` | Use the OpenAI Codex CLI as the backend — **no API key needed** |
+
+### 3. Play
+
+```bash
+uv run gui/run_gui.py              # launches in your browser
+uv run gui/run_gui.py --port 8080  # custom port
+uv run gui/run_gui.py --no-open    # don't auto-open the browser
+```
+
+New Game, Resume, Load, Save, and provider settings are all available from the browser. That's it — the rain is already falling.
+
+<details>
+<summary>Optional: headless mode &amp; testing</summary>
+
+```bash
+# Headless engine (file-polling; great for AI-agent playthroughs)
+uv run tests/scripts/play_headless.py
+
+# Test suites
+uv run tests/scenarios/smoke_test.py        # quick validation (no LLM)
+uv run tests/scenarios/regression.py        # regression tests (no LLM)
+uv run tests/scenarios/full_playthrough.py  # automated playthrough (requires LLM)
+```
+
+</details>
 
 ---
 
-## The Signal is waiting. Will you listen?
+<div align="center">
 
+### The Signal is waiting. Will you listen?
 *信号在等待。你愿意聆听吗？*
+
+</div>
