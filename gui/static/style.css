@@ -2270,6 +2270,17 @@ mark.search-hl {
   /* No horizontal page scroll on phones. */
   html, body { overflow-x: hidden; }
 
+  /* Dialog/form action buttons stack full-width instead of overflowing — the
+     280px min-width on .cyber-btn blows past a phone screen when placed in a row. */
+  .form-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .form-actions .cyber-btn {
+    min-width: 0;
+    width: 100%;
+  }
+
   /* ---- Status bar: wrap / scroll so it never spills off-screen. ---- */
   .status-bar {
     flex-wrap: wrap;
