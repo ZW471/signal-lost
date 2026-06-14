@@ -1877,9 +1877,95 @@ function updateTracesPanel(traces) {
   document.getElementById('panel-traces').innerHTML = html;
 }
 
+// ---------- LOCATION IMAGES (assets/locations/*.png served at /assets) ----------
+// The live location carries a fixed `district` (one of the 8 canonical districts)
+// but a free-text `area` authored by the LLM, so we resolve cover art from the
+// bundled manifest: prefer a specific landmark named in the area (scoped to the
+// district), else the district establishing shot, else the Neo-Kowloon world shot.
+// Names are matched in either language. Art is optional — the panel works without it.
+const LOCATION_IMG_BASE = '/assets/locations/';
+let LOCATION_MANIFEST = null;          // { locations: [...] } once loaded
+let _locationManifestPending = false;
+
+function loadLocationManifest() {
+  if (LOCATION_MANIFEST || _locationManifestPending) return;
+  _locationManifestPending = true;
+  fetch(`${LOCATION_IMG_BASE}manifest.json`)
+    .then(r => (r.ok ? r.json() : null))
+    .then(m => {
+      LOCATION_MANIFEST = (m && Array.isArray(m.locations)) ? m : null;
+      // Re-render now that art is available (first render likely had none yet).
+      if (LOCATION_MANIFEST && cachedSession && cachedSession.location) {
+        updateDistrictPanel(cachedSession.location);
+      }
+    })
+    .catch(() => { /* art is optional */ })
+    .finally(() => { _locationManifestPending = false; });
+}
+
+// Strip whitespace/punctuation so free text and manifest names compare cleanly.
+function _locNorm(s) {
+  return String(s || '').toLowerCase()
+    .replace(/[\s’'"“”·・.,，、。—–\-_/\\|()（）【】「」\[\]]/g, '');
+}
+
+// True when `hay` contains this entry's canonical name (either language). Used for
+// the canonical `district` field, which is curated (and may be an "EN / 中文" pair),
+// so a plain substring test is safe there.
+function _locNameInText(entry, hay) {
+  if (!hay) return false;
+  for (const raw of [entry.name, entry.name_zh]) {
+    const n = _locNorm(raw);
+    if (n.length >= 2 && hay.includes(n)) return true;
+  }
+  return false;
+}
+
+// True when the free-text `area` actually names this place — ANCHORED so that a short
+// generic word (e.g. 盲区 "blind spot", 中庭 "atrium") used descriptively mid-sentence
+// does NOT resolve to a specific landmark the player isn't at. The area must lead with
+// the name (the usual phrasing when you're at a place, e.g. "雨巷的尽头", "The Void back
+// booth"); a plain substring match is only trusted for long, specific names (>=5 norm
+// chars: e.g. 子午线俱乐部, publicterminal) that are unlikely to appear by coincidence.
+function _areaNamesPlace(entry, areaN) {
+  if (!areaN) return false;
+  for (const raw of [entry.name, entry.name_zh]) {
+    const n = _locNorm(raw);
+    if (n.length < 2) continue;
+    if (areaN.startsWith(n)) return true;
+    if (n.length >= 5 && areaN.includes(n)) return true;
+  }
+  return false;
+}
+
+function locationImageEntry(location) {
+  if (!LOCATION_MANIFEST) return null;
+  const l = location || {};
+  const areaN = _locNorm(l.area);
+  const districtN = _locNorm(l.district);
+  const entries = LOCATION_MANIFEST.locations;
+
+  // Resolve the district entry (canonical field, then a mention in the area text).
+  let districtEntry = entries.find(e => e.category === 'district' && _locNameInText(e, districtN))
+    || (areaN ? entries.find(e => e.category === 'district' && _areaNamesPlace(e, areaN)) : null);
+
+  // Prefer a landmark named in the free-text area, scoped to the resolved district
+  // to avoid cross-district name collisions.
+  if (areaN) {
+    const scoped = entries.filter(e => e.category === 'landmark'
+      && (!districtEntry || e.district === districtEntry.district));
+    const landmark = scoped.find(e => _areaNamesPlace(e, areaN));
+    if (landmark) return landmark;
+  }
+
+  if (districtEntry) return districtEntry;
+  return entries.find(e => e.category === 'world') || null;
+}
+
 // ---------- DISTRICT PANEL (matches TUI DistrictPanel — no zone) ----------
 
 function updateDistrictPanel(location) {
+  loadLocationManifest();
   const l = location || {};
   const dangerCls = dangerColor(l.danger_level);
 
@@ -1913,9 +1999,21 @@ function updateDistrictPanel(location) {
 
   html += `</div>`;
 
-  if (l.description) {
-    html += `<div class="panel-section"><div class="panel-section-title">${L('description')}</div>
-      <div class="panel-description">${esc(l.description)}</div></div>`;
+  const imgEntry = locationImageEntry(l);
+  if (l.description || imgEntry) {
+    html += `<div class="panel-section"><div class="panel-section-title">${L('description')}</div>`;
+    if (imgEntry) {
+      const cap = currentLang === 'zh' && imgEntry.name_zh ? imgEntry.name_zh : imgEntry.name;
+      html += `<div class="location-image-frame">
+        <img class="location-image" src="${LOCATION_IMG_BASE}${esc(imgEntry.file)}" alt="${esc(cap)}" loading="lazy"
+             onerror="this.closest('.location-image-frame').style.display='none'">
+        <div class="location-image-caption">${esc(cap)}</div>
+      </div>`;
+    }
+    if (l.description) {
+      html += `<div class="panel-description">${esc(l.description)}</div>`;
+    }
+    html += `</div>`;
   }
 
   if (l.exits) {
