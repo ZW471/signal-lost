@@ -2604,14 +2604,19 @@ mark.search-hl {
     height: 72vh;
     max-height: calc(100vh - 80px);
   }
-  /* FAB: park it above the chat input row (left side) so it never overlaps the
-     input, the send button, or the info-panel toggle in the status bar. */
+  /* FAB: park it above the chat input row (right side, stacked over the send
+     button) so it never overlaps the input or the info-panel toggle. The
+     suggested-actions row reserves right padding below so its buttons don't
+     slide under the FAB. */
   .companion-fab {
-    right: auto;
-    left: max(14px, env(safe-area-inset-left));
-    bottom: calc(72px + env(safe-area-inset-bottom));
+    left: auto;
+    right: max(12px, env(safe-area-inset-right));
+    bottom: calc(64px + env(safe-area-inset-bottom));
     width: 48px;
     height: 48px;
+  }
+  .suggested-actions:not(:empty) {
+    padding-right: 60px;
   }
   .companion-fab-icon { width: 24px; height: 24px; }
   /* While the drawer is open, tuck the FAB out of the way. */

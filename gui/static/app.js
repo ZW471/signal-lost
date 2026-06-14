@@ -508,10 +508,15 @@ function setLanguage(lang) {
   const reconnectBtn = document.querySelector('#gameOverOverlay .cyber-btn-text');
   if (reconnectBtn) reconnectBtn.textContent = L('game_over_reconnect');
 
-  // Status bar button titles
-  const statusBtns = document.querySelectorAll('.status-btn');
-  const btnTitles = lang === 'zh' ? ['音乐', '保存', '设置', '菜单'] : ['Music', 'Save Game', 'Settings', 'Menu'];
-  statusBtns.forEach((btn, i) => { if (btnTitles[i]) btn.title = btnTitles[i]; });
+  // Status bar button titles — mapped by identity (id or onclick) so the
+  // button order can change without misaligning the localized tooltips.
+  const btnTitleMap = lang === 'zh'
+    ? { btnInfoPanels: '信息面板', btnTutorial: '教程', btnMusicToggle: '音乐', 'saveGame()': '保存', 'openSettings()': '设置', 'showMenu()': '菜单' }
+    : { btnInfoPanels: 'Info Panels', btnTutorial: 'Tutorial', btnMusicToggle: 'Music', 'saveGame()': 'Save Game', 'openSettings()': 'Settings', 'showMenu()': 'Menu' };
+  document.querySelectorAll('.status-item.actions .status-btn').forEach(btn => {
+    const key = btn.id || (btn.getAttribute('onclick') || '').trim();
+    if (btnTitleMap[key]) btn.title = btnTitleMap[key];
+  });
 
   // Re-render all panels if we have cached session
   if (cachedSession) updateAllPanels(cachedSession);
