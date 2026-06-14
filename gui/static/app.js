@@ -1901,27 +1901,43 @@ function showTutorialStep() {
   const infoPanel = document.getElementById('infoPanels');
   let isResizing = false;
 
-  handle.addEventListener('mousedown', (e) => {
+  function startResize(e) {
     isResizing = true;
     document.body.style.cursor = 'col-resize';
     document.body.style.userSelect = 'none';
     e.preventDefault();
-  });
+  }
 
-  document.addEventListener('mousemove', (e) => {
+  function moveResize(clientX) {
     if (!isResizing) return;
     const layoutRect = layout.getBoundingClientRect();
-    const pct = ((e.clientX - layoutRect.left) / layoutRect.width) * 100;
+    const pct = ((clientX - layoutRect.left) / layoutRect.width) * 100;
     const clamped = Math.max(25, Math.min(80, pct));
     chatPanel.style.flex = 'none';
     chatPanel.style.width = clamped + '%';
     infoPanel.style.flex = 'none';
     infoPanel.style.width = (100 - clamped) + '%';
-  });
+  }
 
-  document.addEventListener('mouseup', () => {
+  function endResize() {
     if (isResizing) { isResizing = false; document.body.style.cursor = ''; document.body.style.userSelect = ''; }
-  });
+  }
+
+  // Mouse (desktop)
+  handle.addEventListener('mousedown', startResize);
+  document.addEventListener('mousemove', (e) => moveResize(e.clientX));
+  document.addEventListener('mouseup', endResize);
+
+  // Touch (iPad / touchscreens) — mirror the mouse flow. passive:false so we can
+  // preventDefault and stop the page from scrolling mid-drag.
+  handle.addEventListener('touchstart', startResize, { passive: false });
+  document.addEventListener('touchmove', (e) => {
+    if (!isResizing) return;
+    if (e.touches[0]) moveResize(e.touches[0].clientX);
+    e.preventDefault();
+  }, { passive: false });
+  document.addEventListener('touchend', endResize);
+  document.addEventListener('touchcancel', endResize);
 })();
 
 // ================================================================
@@ -2868,10 +2884,14 @@ document.addEventListener('keydown', (e) => {
     // Block all other keybindings when an overlay is open
     if (overlayOpen) return;
 
-    // Don't let game shortcuts fire while typing in the chat OR the companion.
+    // Don't let game shortcuts fire while typing in ANY field (chat, companion,
+    // or the panel search bars) — number keys must type, not switch tabs.
     const active = document.activeElement;
-    const isInput = active === document.getElementById('chatInput')
-                 || active === document.getElementById('companionInput');
+    const isInput = !!active && (
+      active.tagName === 'INPUT' ||
+      active.tagName === 'TEXTAREA' ||
+      active.isContentEditable
+    );
     const num = parseInt(e.key);
     if (num >= 1 && num <= 9 && !e.ctrlKey && !e.metaKey && !isInput) {
       const tabs = document.querySelectorAll('.panel-tab');

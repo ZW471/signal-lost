@@ -1782,6 +1782,17 @@ mark.search-hl {
   flex-shrink: 0;
   transition: background 0.2s ease;
   position: relative;
+  touch-action: none; /* let JS handle the drag instead of scrolling on touch */
+}
+
+/* Wider invisible grab zone so the handle is easy to drag with a finger/pen. */
+.resize-handle::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -8px;
+  right: -8px;
 }
 
 .resize-handle:hover,
