@@ -1,0 +1,19 @@
+{
+  "language": "en",
+  "background": "street_runner",
+  "narrative": "Rain needles down through the stacked fire escapes of The Sprawl, turning the alley into a black mirror of neon and trash-water. You wake on cold concrete with no memory, fifty credits in your pocket, a lockpick set under your coat, and an old neural implant humming behind your left ear like it recognizes the city before you do.\n\nEast, warm steam spills from Mira's Noodle Shop. A woman behind the counter watches you over the glow of boiling broth. North, the main street breathes traffic, vendors, and the hard blue eye of a public NEXUS terminal.",
+  "suggested_actions": [
+    {
+      "id": "sa-1",
+      "text": "Enter Mira's noodle shop"
+    },
+    {
+      "id": "sa-2",
+      "text": "Check the public terminal"
+    },
+    {
+      "id": "sa-3",
+      "text": "Head toward market square"
+    }
+  ]
+}

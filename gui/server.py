@@ -33,6 +33,7 @@ from engine.graph import compile_graph, set_llm, set_fast_llm, get_llm, get_fast
 from engine.world_sim_scheduler import WorldSimScheduler
 from engine.claude_code_engine import run_turn as cc_run_turn
 from engine import action_cache
+from engine import opening_cache
 from engine.suggestions import read_features, generate_suggested_actions
 from engine.state import (
     create_new_session,
@@ -383,7 +384,7 @@ async def websocket_endpoint(ws: WebSocket):
                     "session": _get_session_data(),
                 })
 
-                await _run_turn(ws, mode="resume")
+                await _run_opening(ws, lang, config.get("background", "street_runner"))
 
             elif action == "resume":
                 _reset_prediction()  # cancel/clear any prior session's predictions
@@ -813,8 +814,40 @@ async def _finish_turn(ws: WebSocket, result: dict, mode: str, turn_start: float
     _maybe_schedule_prediction(result, ws)
 
 
-async def _run_turn(ws: WebSocket, player_input: str | None = None, mode: str = "play"):
-    """Run a single game turn in a background thread."""
+async def _run_opening(ws: WebSocket, language: str, background: str) -> None:
+    """Present a new game's opening scene.
+
+    Serves the persistent opening cache instantly (no LLM) when warm; on a cache
+    miss it runs the turn-1 ``resume`` generation once and persists the result so
+    every later new game of this ``(language, background)`` is instant.
+    """
+    import time as _time
+    cached = opening_cache.load(language, background)
+    if cached:
+        result = {
+            "narrative": cached["narrative"],
+            "suggested_actions": cached.get("suggested_actions") or [],
+            "game_over": False,
+            "ending": None,
+            "is_warning": False,
+            "discovery_notifications": [],
+            "knowledge_notifications": [],
+            "turn_usage": {},
+            "elapsed_seconds": 0.0,
+        }
+        await _finish_turn(ws, result, "resume", _time.time())
+        return
+    # Miss: generate the opening once and write it through to the cache.
+    await _run_turn(ws, mode="resume", opening_key=(language, background))
+
+
+async def _run_turn(ws: WebSocket, player_input: str | None = None, mode: str = "play",
+                    opening_key: tuple[str, str] | None = None):
+    """Run a single game turn in a background thread.
+
+    When *opening_key* is set (new-game turn-1 only), the resulting opening scene
+    is written to the persistent opening cache so subsequent new games skip it.
+    """
     global _game_state
 
     await ws.send_json({"type": "thinking"})
@@ -868,12 +901,24 @@ async def _run_turn(ws: WebSocket, player_input: str | None = None, mode: str = 
             if mode == "resume":
                 player = _game_state.get("player", {})
                 location = _game_state.get("location", {})
-                resume_text = (
-                    f"[SYSTEM: Session resumed. The player is {player.get('name', 'unknown')} "
-                    f"(alias: {player.get('alias', '?')}), a {player.get('background', '?')}. "
-                    f"Currently at {location.get('area', '?')} in {location.get('district', '?')}. "
-                    f"Turn {player.get('turn', 1)}. Provide a brief scene-setting narrative.]"
-                )
+                if player.get("turn", 1) == 1:
+                    # Fresh new-game opening — name-agnostic so it can be cached
+                    # and reused for every new player of this (language, background).
+                    resume_text = (
+                        f"[SYSTEM: New game — opening scene. The player is a "
+                        f"{player.get('background', '?')} at {location.get('area', '?')} in "
+                        f"{location.get('district', '?')}. Turn 1. Write a brief, atmospheric "
+                        f"second-person ('you') scene-setting opening. Do NOT use the player's "
+                        f"name or alias or invent any proper name for them — this exact opening "
+                        f"is shown to every new player of this background.]"
+                    )
+                else:
+                    resume_text = (
+                        f"[SYSTEM: Session resumed. The player is {player.get('name', 'unknown')} "
+                        f"(alias: {player.get('alias', '?')}), a {player.get('background', '?')}. "
+                        f"Currently at {location.get('area', '?')} in {location.get('district', '?')}. "
+                        f"Turn {player.get('turn', 1)}. Provide a brief scene-setting narrative.]"
+                    )
                 _game_state["messages"].append(HumanMessage(content=resume_text))
                 _game_state["skip_conversation_log"] = True
                 _game_state["skip_turn_increment"] = True
@@ -908,6 +953,25 @@ async def _run_turn(ws: WebSocket, player_input: str | None = None, mode: str = 
                     result["suggested_actions"] = suggestions
             except Exception:
                 pass
+
+        # Write-through the freshly generated opening so future new games of this
+        # (language, background) are served instantly from cache. The cache is
+        # shared across all future players of that combo, so never persist an
+        # opening that embedded THIS player's name/alias. The bypass engine
+        # already strips identity from the opening prompt; this is a cross-engine
+        # safety net (covers the LangGraph path / any residual leak).
+        if (opening_key and result.get("narrative")
+                and not result.get("game_over") and not result.get("is_warning")):
+            ply = (_game_state or {}).get("player", {}) if isinstance(_game_state, dict) else {}
+            narr_lower = result["narrative"].lower()
+            ident = [str(ply.get("name", "")).strip(), str(ply.get("alias", "")).strip()]
+            leaked = any(len(tok) >= 3 and tok.lower() in narr_lower for tok in ident)
+            if not leaked:
+                try:
+                    opening_cache.save(opening_key[0], opening_key[1],
+                                       result["narrative"], result.get("suggested_actions") or [])
+                except Exception:
+                    pass
 
         await _finish_turn(ws, result, mode, _turn_start)
 
