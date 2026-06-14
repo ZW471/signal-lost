@@ -1152,7 +1152,7 @@ function _updateUsageStats() {
 const DEFAULT_MODELS = {
   anthropic: 'claude-sonnet-4-6-20250514',
   'claude-code': 'sonnet',
-  codex: 'gpt-5-codex',
+  codex: 'gpt-5.5',
   openai: 'gpt-5.4',
   openrouter: 'openai/gpt-5.4',
   local: '[model]',
@@ -1929,6 +1929,33 @@ function switchPanel(btn) {
   btn.classList.add('active');
   document.getElementById('panel-' + btn.dataset.panel).classList.add('active');
   playBeep(900, 0.02);
+}
+
+// ---------- MOBILE INFO-PANEL DRAWER ----------
+// On phones the info panels collapse into a slide-in drawer. These toggle a
+// `.panels-open` class on #gameLayout; the CSS only reacts to it at mobile
+// widths, so the desktop two-column layout is untouched.
+function toggleInfoPanels() {
+  const layout = document.getElementById('gameLayout');
+  if (!layout) return;
+  layout.classList.contains('panels-open') ? closeInfoPanels() : openInfoPanels();
+}
+
+function openInfoPanels() {
+  const layout = document.getElementById('gameLayout');
+  const btn = document.getElementById('btnInfoPanels');
+  if (!layout) return;
+  layout.classList.add('panels-open');
+  if (btn) btn.classList.add('active');
+  playBeep(700, 0.02);
+}
+
+function closeInfoPanels() {
+  const layout = document.getElementById('gameLayout');
+  const btn = document.getElementById('btnInfoPanels');
+  if (!layout) return;
+  layout.classList.remove('panels-open');
+  if (btn) btn.classList.remove('active');
 }
 
 function updateAllPanels(session) {

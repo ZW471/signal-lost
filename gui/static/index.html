@@ -2,10 +2,10 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, viewport-fit=cover">
   <title>SIGNAL LOST</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='4' fill='%230a0a0f'/><text x='16' y='22' text-anchor='middle' font-size='18' fill='%2300ff88'>S</text></svg>">
-  <link rel="stylesheet" href="/static/style.css?v=companion2">
+  <link rel="stylesheet" href="/static/style.css?v=mobile1">
   <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
@@ -155,6 +155,14 @@
   <div id="gameScreen" class="screen">
     <!-- Status bar -->
     <div class="status-bar" id="statusBar">
+      <!-- Compact brand wordmark, top-left corner -->
+      <div class="game-logo" id="gameLogo" title="SIGNAL LOST" aria-label="Signal Lost">
+        <svg class="game-logo-glyph" viewBox="0 0 32 32" aria-hidden="true">
+          <rect width="32" height="32" rx="4" fill="#0a0a0f"></rect>
+          <text x="16" y="23" text-anchor="middle" font-size="20" font-family="Orbitron, sans-serif" font-weight="900" fill="#00ff88">S</text>
+        </svg>
+        <span class="game-logo-text" data-text="SIGNAL LOST">SIGNAL LOST</span>
+      </div>
       <div class="status-item">
         <span class="status-label" id="statLabelAlias">ALIAS</span>
         <span class="status-value cyan-bright" id="statAlias">—</span>
@@ -176,6 +184,7 @@
         <span class="status-value" id="statTime">—</span>
       </div>
       <div class="status-item actions">
+        <button class="status-btn status-btn-panels" onclick="toggleInfoPanels()" title="Show panels" aria-label="Toggle info panels" id="btnInfoPanels">▤</button>
         <button class="status-btn" onclick="startTutorial()" title="Tutorial" id="btnTutorial">❓</button>
         <button class="status-btn" onclick="toggleMusic()" title="Music" id="btnMusicToggle">🔊</button>
         <button class="status-btn" onclick="saveGame()" title="Save Game">💾</button>
@@ -209,8 +218,16 @@
       <!-- Resize handle -->
       <div class="resize-handle" id="resizeHandle" title="Drag to resize"></div>
 
-      <!-- Info panels (right) -->
+      <!-- Backdrop for the mobile info-panel drawer (tap to dismiss) -->
+      <div class="info-panels-backdrop" id="infoPanelsBackdrop" onclick="closeInfoPanels()"></div>
+
+      <!-- Info panels (right; slide-in drawer on mobile) -->
       <div class="info-panels" id="infoPanels">
+        <!-- Drawer handle: visible only on mobile, lets the user collapse the drawer -->
+        <div class="info-panels-drawer-head">
+          <span class="info-panels-drawer-title">// DATA PANELS</span>
+          <button class="info-panels-close" onclick="closeInfoPanels()" title="Close panels" aria-label="Close info panels">✕</button>
+        </div>
         <div class="panel-tabs">
           <button class="panel-tab active" data-panel="identity" onclick="switchPanel(this)">ID</button>
           <button class="panel-tab" data-panel="knowledge" onclick="switchPanel(this)">KNOW</button>
@@ -454,7 +471,7 @@
   <!-- ========== NOTIFICATION ========== -->
   <div id="notification" class="notification"></div>
 
-  <script src="/static/music.js"></script>
-  <script src="/static/app.js?v=companion2"></script>
+  <script src="/static/music.js?v=mobile1"></script>
+  <script src="/static/app.js?v=mobile1"></script>
 </body>
 </html>

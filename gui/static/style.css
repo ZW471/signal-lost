@@ -32,8 +32,13 @@ html, body {
   color: var(--text);
   font-family: var(--font-mono);
   overflow: hidden;
+  overflow-x: hidden;
   -webkit-font-smoothing: antialiased;
 }
+
+/* Remove the blue/grey tap-highlight flash on touch devices; keep our own
+   :active / :focus states for feedback instead. */
+* { -webkit-tap-highlight-color: transparent; }
 
 /* ================================================================
    SCANLINES OVERLAY
@@ -1809,6 +1814,12 @@ mark.search-hl {
   display: block;
   width: 100%;
   height: auto;
+  /* Cap the height so the 128px pixel-art can't dominate the panel on wide
+     phones / narrow panels. object-fit keeps the crisp art centered without
+     ugly letterboxing (the frame background fills any remainder). */
+  max-height: 280px;
+  object-fit: cover;
+  object-position: center;
   image-rendering: pixelated;
   image-rendering: crisp-edges;
 }
@@ -2104,6 +2115,67 @@ mark.search-hl {
 }
 
 /* ================================================================
+   BRAND WORDMARK (in-game, top-left of the status bar)
+   ================================================================ */
+
+.game-logo {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 2px 12px 2px 2px;
+  border-right: 1px solid var(--border);
+  flex-shrink: 0;
+  user-select: none;
+}
+
+.game-logo-glyph {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  filter: drop-shadow(0 0 4px rgba(0, 255, 136, 0.5));
+}
+
+.game-logo-text {
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: 13px;
+  letter-spacing: 2px;
+  color: var(--text-bright);
+  text-shadow: 0 0 8px rgba(0, 255, 245, 0.35);
+  white-space: nowrap;
+}
+
+/* ================================================================
+   MOBILE INFO-PANEL DRAWER scaffolding
+   Hidden on desktop; activated inside the mobile media queries below.
+   ================================================================ */
+
+/* Toggle button lives in the status-bar actions group but only matters on
+   mobile (on desktop the panels are always visible alongside the chat). */
+.status-btn-panels { display: none; }
+.status-btn.active {
+  border-color: var(--cyan);
+  color: var(--cyan);
+  background: rgba(0, 255, 245, 0.08);
+}
+
+/* Drawer header (close affordance) — hidden until the drawer mode kicks in. */
+.info-panels-drawer-head { display: none; }
+
+/* Dimmed backdrop behind the drawer; tap to dismiss. Hidden on desktop. */
+.info-panels-backdrop {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 39;
+  background: rgba(5, 5, 10, 0.55);
+  backdrop-filter: blur(2px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.22s ease;
+}
+
+/* ================================================================
    RESPONSIVE
    ================================================================ */
 
@@ -2114,23 +2186,143 @@ mark.search-hl {
 }
 
 @media (max-width: 700px) {
+  /* No horizontal page scroll on phones. */
+  html, body { overflow-x: hidden; }
+
+  /* ---- Status bar: wrap / scroll so it never spills off-screen. ---- */
+  .status-bar {
+    flex-wrap: wrap;
+    row-gap: 4px;
+    padding: 6px 10px;
+    padding-left: max(10px, env(safe-area-inset-left));
+    padding-right: max(10px, env(safe-area-inset-right));
+    padding-top: max(6px, env(safe-area-inset-top));
+  }
+  .status-item {
+    padding: 2px 8px;
+  }
+  .status-value { font-size: 13px; }
+  .status-value.truncate { max-width: 90px; }
+  /* AREA is the least essential — drop its label/value crowding on small screens. */
+  .status-bar .status-item:nth-child(5) { display: none; }
+
+  /* Compact the wordmark so it doesn't crowd the bar. */
+  .game-logo { padding: 2px 8px 2px 0; gap: 5px; }
+  .game-logo-glyph { width: 18px; height: 18px; }
+  .game-logo-text { font-size: 11px; letter-spacing: 1px; }
+
+  /* Actions group stays on the right; allow wrapping. */
+  .status-item.actions {
+    gap: 6px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+  .status-btn {
+    min-width: 44px;
+    min-height: 36px;
+    padding: 6px 10px;
+  }
+  .status-btn-panels { display: inline-block; }
+
+  /* ---- Chat takes the full screen; the info panel becomes a drawer. ---- */
   .game-layout {
     flex-direction: column;
-  }
-
-  .info-panels {
-    width: 100% !important;
-    height: 40vh;
-    border-top: 1px solid var(--border);
+    position: relative;
   }
 
   .chat-panel {
     border-right: none;
     width: 100% !important;
+    flex: 1;
   }
 
-  .resize-handle {
-    display: none;
+  .resize-handle { display: none; }
+
+  /* Info panels: off-canvas slide-in drawer from the right, collapsed by default. */
+  .info-panels {
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: min(86vw, 380px);
+    height: 100%;
+    max-width: 380px;
+    z-index: 40;
+    border-left: 1px solid var(--cyan);
+    border-top: none;
+    box-shadow: -8px 0 30px rgba(0, 0, 0, 0.6);
+    transform: translateX(100%);
+    transition: transform 0.26s cubic-bezier(0.3, 0.8, 0.3, 1);
+    padding-right: env(safe-area-inset-right);
+  }
+
+  /* Open state (toggled by toggleInfoPanels via #gameLayout.panels-open). */
+  .game-layout.panels-open .info-panels {
+    transform: translateX(0);
+  }
+  .game-layout.panels-open .info-panels-backdrop {
+    display: block;
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  /* Drawer header with the close affordance. */
+  .info-panels-drawer-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .info-panels-drawer-title {
+    font-family: var(--font-display);
+    font-size: 11px;
+    letter-spacing: 2px;
+    color: var(--cyan);
+  }
+  .info-panels-close {
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    color: var(--text);
+    min-width: 36px;
+    min-height: 36px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    line-height: 1;
+  }
+  .info-panels-close:active { border-color: var(--cyan); color: var(--cyan); }
+
+  /* ---- Overflow / wrapping hygiene inside content. ---- */
+  .chat-messages { padding: 14px 12px; }
+  .chat-msg { overflow-wrap: anywhere; }
+  .chat-msg pre, .panel pre, .panel-body pre {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    max-width: 100%;
+  }
+  .panel { padding: 14px 12px; }
+  .panel, .panel-body { overflow-wrap: anywhere; }
+
+  /* iOS: 16px inputs prevent focus auto-zoom. */
+  .chat-input, .companion-input, .cyber-input,
+  .panel-search-input {
+    font-size: 16px;
+  }
+
+  /* Bottom safe-area for the input row + comfortable touch target. */
+  .chat-input-container {
+    padding-bottom: max(10px, env(safe-area-inset-bottom));
+  }
+  .send-btn { min-width: 48px; min-height: 44px; }
+
+  /* ---- Modals fit small screens and scroll vertically. ---- */
+  .save-dialog, .settings-dialog {
+    width: 92vw;
+    max-height: 88vh;
+    overflow-y: auto;
+    padding: 22px 18px;
   }
 }
 
@@ -2402,14 +2594,40 @@ mark.search-hl {
 }
 
 @media (max-width: 700px) {
+  /* Companion panel: full-width sheet that respects safe areas and never overflows. */
   .companion-panel {
-    right: 12px;
-    bottom: 12px;
-    width: calc(100vw - 24px);
-    height: 70vh;
+    left: 8px;
+    right: 8px;
+    bottom: max(8px, env(safe-area-inset-bottom));
+    width: auto;
+    max-width: none;
+    height: 72vh;
+    max-height: calc(100vh - 80px);
   }
+  /* FAB: park it above the chat input row (left side) so it never overlaps the
+     input, the send button, or the info-panel toggle in the status bar. */
   .companion-fab {
-    right: 16px;
-    bottom: 16px;
+    right: auto;
+    left: max(14px, env(safe-area-inset-left));
+    bottom: calc(72px + env(safe-area-inset-bottom));
+    width: 48px;
+    height: 48px;
   }
+  .companion-fab-icon { width: 24px; height: 24px; }
+  /* While the drawer is open, tuck the FAB out of the way. */
+  .game-layout.panels-open ~ .companion-fab {
+    opacity: 0;
+    pointer-events: none;
+  }
+}
+
+/* Finer phone tuning for very narrow devices. */
+@media (max-width: 480px) {
+  .game-logo-text { display: none; } /* glyph-only on tiny screens */
+  .status-value.truncate { max-width: 72px; }
+  .status-bar .status-item:nth-child(4) .status-label,
+  .status-bar .status-item:nth-child(6) .status-label {
+    font-size: 8px;
+  }
+  .panel-tab { padding: 9px 10px; font-size: 10px; }
 }
