@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>SIGNAL LOST</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='4' fill='%230a0a0f'/><text x='16' y='22' text-anchor='middle' font-size='18' fill='%2300ff88'>S</text></svg>">
-  <link rel="stylesheet" href="/static/style.css?v=locimg1">
+  <link rel="stylesheet" href="/static/style.css?v=companion2">
   <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
@@ -224,15 +224,80 @@
         </div>
         <div class="panel-content" id="panelContent">
           <div class="panel active" id="panel-identity"></div>
-          <div class="panel" id="panel-knowledge"></div>
-          <div class="panel" id="panel-traces"></div>
+          <div class="panel has-search" id="panel-knowledge">
+            <div class="panel-search">
+              <span class="panel-search-icon">⌕</span>
+              <input type="text" class="panel-search-input" id="search-knowledge" placeholder="Search…" autocomplete="off" oninput="onPanelSearch('knowledge')">
+              <button type="button" class="panel-search-clear" id="search-knowledge-clear" onclick="clearPanelSearch('knowledge')" title="Clear" aria-label="Clear search">✕</button>
+            </div>
+            <div class="panel-body" id="panel-knowledge-body"></div>
+          </div>
+          <div class="panel has-search" id="panel-traces">
+            <div class="panel-search">
+              <span class="panel-search-icon">⌕</span>
+              <input type="text" class="panel-search-input" id="search-traces" placeholder="Search…" autocomplete="off" oninput="onPanelSearch('traces')">
+              <button type="button" class="panel-search-clear" id="search-traces-clear" onclick="clearPanelSearch('traces')" title="Clear" aria-label="Clear search">✕</button>
+            </div>
+            <div class="panel-body" id="panel-traces-body"></div>
+          </div>
           <div class="panel" id="panel-district"></div>
           <div class="panel" id="panel-inventory"></div>
           <div class="panel" id="panel-network"></div>
           <div class="panel" id="panel-world"></div>
-          <div class="panel" id="panel-log"></div>
-          <div class="panel" id="panel-conversation"></div>
+          <div class="panel has-search" id="panel-log">
+            <div class="panel-search">
+              <span class="panel-search-icon">⌕</span>
+              <input type="text" class="panel-search-input" id="search-log" placeholder="Search…" autocomplete="off" oninput="onPanelSearch('log')">
+              <button type="button" class="panel-search-clear" id="search-log-clear" onclick="clearPanelSearch('log')" title="Clear" aria-label="Clear search">✕</button>
+            </div>
+            <div class="panel-body" id="panel-log-body"></div>
+          </div>
+          <div class="panel has-search" id="panel-conversation">
+            <div class="panel-search">
+              <span class="panel-search-icon">⌕</span>
+              <input type="text" class="panel-search-input" id="search-conversation" placeholder="Search…" autocomplete="off" oninput="onPanelSearch('conversation')">
+              <button type="button" class="panel-search-clear" id="search-conversation-clear" onclick="clearPanelSearch('conversation')" title="Clear" aria-label="Clear search">✕</button>
+            </div>
+            <div class="panel-body" id="panel-conversation-body"></div>
+          </div>
         </div>
+      </div>
+    </div>
+
+    <!-- ========== IMPLANT COMPANION (side-channel Q&A) ========== -->
+    <!-- A private inner channel to the neural implant. Read-only: nothing said
+         here touches the world, and the transcript is never saved. -->
+    <button class="companion-fab" id="companionFab" onclick="toggleCompanion()" title="Neural Link" aria-label="Open neural link">
+      <svg class="companion-fab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <!-- Two hemispheres form the brain; a central fold + a synapse node give it the neural-implant feel -->
+        <path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z"/>
+        <path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z"/>
+        <path d="M15 13a4.5 4.5 0 0 1-3-4 4.5 4.5 0 0 1-3 4"/>
+        <circle cx="12" cy="6.6" r="0.85" fill="currentColor" stroke="none"/>
+      </svg>
+      <span class="companion-fab-pulse"></span>
+    </button>
+
+    <div class="companion-panel" id="companionPanel" aria-hidden="true">
+      <div class="companion-header">
+        <div class="companion-title-wrap">
+          <span class="companion-glyph">◈</span>
+          <div>
+            <div class="companion-title" id="companionTitle">NEURAL LINK</div>
+            <div class="companion-tagline" id="companionTagline">// private channel · changes nothing</div>
+          </div>
+        </div>
+        <button class="companion-close" id="companionClose" onclick="closeCompanion()" title="Close" aria-label="Close neural link">✕</button>
+      </div>
+      <div class="companion-messages" id="companionMessages"></div>
+      <div class="companion-thinking" id="companionThinking" style="display:none">
+        <div class="thinking-dots"><span></span><span></span><span></span></div>
+        <span class="companion-thinking-text" id="companionThinkingText">listening…</span>
+      </div>
+      <div class="companion-input-row">
+        <div class="companion-input-prefix">▶</div>
+        <input type="text" class="companion-input" id="companionInput" placeholder="Ask, or think out loud…" autocomplete="off" maxlength="500" onkeydown="if(event.key==='Enter')sendCompanionMessage()">
+        <button class="companion-send" id="companionSend" onclick="sendCompanionMessage()" title="Send">⟩</button>
       </div>
     </div>
   </div>
@@ -390,6 +455,6 @@
   <div id="notification" class="notification"></div>
 
   <script src="/static/music.js"></script>
-  <script src="/static/app.js?v=locimg1"></script>
+  <script src="/static/app.js?v=companion2"></script>
 </body>
 </html>

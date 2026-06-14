@@ -82,7 +82,7 @@ Call tools when needed:
 After resolving the player's action, call state mutation tools to record all changes:
 - `update_player` — integrity, credits, neural_implant, disguise, status_effects
 - `add_knowledge` — new facts, rumors, evidence, theories, connections
-- `update_npc` — trust changes, new encounters, location updates
+- `update_npc` — trust changes, new encounters, location updates. Keep a short `description` (≤10 words) of who the player believes the NPC is, gated to the player's current knowledge — vague at first, sharper as they learn more. Refresh it whenever the player's understanding of the NPC changes.
 - `update_location` — when player moves
 - `update_inventory` — items gained/lost/used, credit changes
 - `update_world_state` — alert changes, decay changes, district discoveries, events, events_update
@@ -406,7 +406,13 @@ def build_npc_context(npcs: dict, knowledge: dict | None = None, deepest_layer: 
         else:
             faction_display = "unknown"
 
-        lines.append(f"- **{name}** | Trust: {trust} | Faction: {faction_display} | Last seen: {last_seen}")
+        # Short player-facing impression (what the player believes about this NPC)
+        desc = npc.get("description", "")
+
+        line = f"- **{name}** | Trust: {trust} | Faction: {faction_display} | Last seen: {last_seen}"
+        if desc:
+            line += f" | Player's read: {desc}"
+        lines.append(line)
 
     return "\n".join(lines)
 

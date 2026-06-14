@@ -88,6 +88,8 @@ const LABELS = {
     // Conversation
     conversation_history: 'CONVERSATION HISTORY', no_conversation: 'No conversation yet',
     player_label: 'PLAYER', agent_label: 'AGENT',
+    // Search
+    search_placeholder: 'Search…', no_search_results: 'No matches',
     // Status bar
     location: 'LOCATION',
     // Chat
@@ -155,6 +157,18 @@ const LABELS = {
     connection_lost: 'Connection lost. Reconnecting...',
     // Tutorial
     tutorial_step: 'STEP', tutorial_skip: 'SKIP', tutorial_next: 'NEXT', tutorial_finish: 'GOT IT',
+    // Companion (implant side-channel Q&A)
+    companion_title: 'NEURAL LINK',
+    companion_tagline: '// private channel · changes nothing',
+    companion_placeholder: 'Ask, or think out loud…',
+    companion_open: 'Neural Link — ask the implant',
+    companion_close: 'Close',
+    companion_you: '▶ YOU',
+    companion_implant: '◈ IMPLANT',
+    companion_thinking: 'listening…',
+    companion_intro: 'A quiet channel opens behind your left ear. Ask what you like, or just think out loud — this stays in your head. Nothing said here touches the world.',
+    companion_error: 'Static. The link drops for a moment — try again.',
+    companion_no_session: 'The implant has nothing to hold onto yet. Begin a session first.',
     // Boot
     boot_sub: '// NEURAL INTERFACE v3.7.1',
   },
@@ -188,6 +202,7 @@ const LABELS = {
     session_log: '事件日志', no_log: '无日志条目',
     conversation_history: '对话记录', no_conversation: '尚无对话',
     player_label: '玩家', agent_label: '引擎',
+    search_placeholder: '搜索…', no_search_results: '无匹配项',
     location: '位置',
     chat_placeholder: '你想做什么？', processing: '正在处理神经输入',
     thinking_hint: '// 链路解析中 —— 可在等待时查看右侧情报面板',
@@ -252,6 +267,18 @@ const LABELS = {
     connection_lost: '连接已断开，正在重连...',
     // Tutorial
     tutorial_step: '步骤', tutorial_skip: '跳过', tutorial_next: '下一步', tutorial_finish: '知道了',
+    // Companion (implant side-channel Q&A)
+    companion_title: '神经链接',
+    companion_tagline: '// 私密信道 · 不影响世界',
+    companion_placeholder: '提问，或自言自语…',
+    companion_open: '神经链接 —— 询问植入体',
+    companion_close: '关闭',
+    companion_you: '▶ 你',
+    companion_implant: '◈ 植入体',
+    companion_thinking: '聆听中…',
+    companion_intro: '左耳后方，一道安静的信道接通了。想问什么都行，或只是自言自语——这只停留在你的脑海里，不会影响外面的世界。',
+    companion_error: '一阵杂讯，链接短暂中断——再试一次。',
+    companion_no_session: '植入体还没有可依凭的记忆，请先开始一局游戏。',
     // Boot
     boot_sub: '// 神经接口 v3.7.1',
   },
@@ -330,6 +357,13 @@ function setLanguage(lang) {
   // Chat
   const chatInput = document.getElementById('chatInput');
   if (chatInput) chatInput.placeholder = L('chat_placeholder');
+  // Implant companion chrome
+  applyCompanionLanguage();
+  // Panel search inputs
+  ['knowledge', 'traces', 'log', 'conversation'].forEach(k => {
+    const si = document.getElementById('search-' + k);
+    if (si) si.placeholder = L('search_placeholder');
+  });
   const thinkingText = document.querySelector('.thinking-text');
   // If the wait ticker is mid-cycle, re-render its current line in the new
   // language; otherwise fall back to the resting label.
@@ -681,6 +715,7 @@ async function runBootSequence() {
   await sleep(500);
   switchScreen('menuScreen');
   connectWebSocket();
+  connectCompanionWS();
 }
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
@@ -704,6 +739,157 @@ function connectWebSocket() {
 function sendWS(data) {
   if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(data));
   else notify(L('connection_lost'), true);
+}
+
+// ================================================================
+// IMPLANT COMPANION — side-channel "ask the implant" Q&A
+// A private inner channel to the neural implant, the in-game cousin of
+// `btw`. It runs over its OWN WebSocket so it never blocks (or is blocked
+// by) the main game turn. The transcript lives only here, in memory — it
+// is never persisted server-side and is wiped on a new session or reload,
+// and nothing asked here ever affects the world state.
+// ================================================================
+
+let companionWS = null, companionWSTimer = null;
+let companionOpen = false;
+let companionPending = false;       // an answer is in flight
+let companionHistory = [];          // [{role:'user'|'implant', content}], in-memory only
+let companionIntroShown = false;
+
+function connectCompanionWS() {
+  const protocol = location.protocol === 'https:' ? 'wss' : 'ws';
+  companionWS = new WebSocket(`${protocol}://${location.host}/ws/companion`);
+  companionWS.onmessage = (event) => {
+    let msg; try { msg = JSON.parse(event.data); } catch (e) { return; }
+    if (msg.type === 'companion_reply') handleCompanionReply(msg);
+  };
+  companionWS.onclose = () => {
+    if (!companionWSTimer) companionWSTimer = setTimeout(() => { companionWSTimer = null; connectCompanionWS(); }, 3000);
+  };
+  companionWS.onerror = () => {};
+}
+
+/** Wipe the aside transcript — called when a new session begins. */
+function resetCompanion() {
+  companionHistory = [];
+  companionIntroShown = false;
+  companionPending = false;
+  const box = document.getElementById('companionMessages');
+  if (box) box.innerHTML = '';
+  hideCompanionThinking();
+  const send = document.getElementById('companionSend');
+  if (send) send.disabled = false;
+  if (companionOpen) closeCompanion();
+}
+
+function toggleCompanion() { companionOpen ? closeCompanion() : openCompanion(); }
+
+function openCompanion() {
+  const panel = document.getElementById('companionPanel');
+  const fab = document.getElementById('companionFab');
+  if (!panel) return;
+  companionOpen = true;
+  panel.classList.add('open');
+  panel.setAttribute('aria-hidden', 'false');
+  if (fab) fab.classList.add('hidden');
+  if (!companionIntroShown) {
+    addCompanionMessage(L('companion_intro'), 'system');
+    companionIntroShown = true;
+  }
+  setTimeout(() => { const i = document.getElementById('companionInput'); if (i) i.focus(); }, 60);
+}
+
+function closeCompanion() {
+  const panel = document.getElementById('companionPanel');
+  const fab = document.getElementById('companionFab');
+  companionOpen = false;
+  if (panel) { panel.classList.remove('open'); panel.setAttribute('aria-hidden', 'true'); }
+  if (fab) fab.classList.remove('hidden');
+}
+
+function addCompanionMessage(text, role) {
+  const box = document.getElementById('companionMessages');
+  if (!box) return null;
+  const prefixes = { user: L('companion_you'), implant: L('companion_implant'), system: '◈', error: '◈' };
+  const el = document.createElement('div');
+  el.className = `companion-msg ${role}`;
+  el.innerHTML = `<div class="companion-msg-prefix">${esc(prefixes[role] || '')}</div>` +
+                 `<div class="companion-msg-body">${esc(text)}</div>`;
+  box.appendChild(el);
+  box.scrollTop = box.scrollHeight;
+  return el;
+}
+
+function showCompanionThinking() {
+  const t = document.getElementById('companionThinking');
+  if (t) {
+    const label = t.querySelector('#companionThinkingText');
+    if (label) label.textContent = L('companion_thinking');
+    t.style.display = 'flex';
+  }
+  const box = document.getElementById('companionMessages');
+  if (box) box.scrollTop = box.scrollHeight;
+}
+
+function hideCompanionThinking() {
+  const t = document.getElementById('companionThinking');
+  if (t) t.style.display = 'none';
+}
+
+function sendCompanionMessage() {
+  const input = document.getElementById('companionInput');
+  if (!input || companionPending) return;
+  const text = input.value.trim();
+  if (!text) return;
+
+  // Send only PRIOR turns as context (server caps too); the new question is
+  // passed separately, so slice before pushing to avoid duplicating it.
+  const history = companionHistory.slice(-8);
+
+  addCompanionMessage(text, 'user');
+  companionHistory.push({ role: 'user', content: text });
+  input.value = '';
+  companionPending = true;
+  const send = document.getElementById('companionSend');
+  if (send) send.disabled = true;
+  showCompanionThinking();
+
+  if (companionWS && companionWS.readyState === WebSocket.OPEN) {
+    companionWS.send(JSON.stringify({ action: 'ask', text, history }));
+  } else {
+    hideCompanionThinking();
+    companionPending = false;
+    if (send) send.disabled = false;
+    addCompanionMessage(L('companion_error'), 'error');
+  }
+}
+
+function handleCompanionReply(msg) {
+  hideCompanionThinking();
+  companionPending = false;
+  const send = document.getElementById('companionSend');
+  if (send) send.disabled = false;
+  if (msg.error) {
+    addCompanionMessage(msg.code === 'no_session' ? L('companion_no_session') : L('companion_error'), 'error');
+    return;
+  }
+  const text = (msg.text || '').trim() || L('companion_error');
+  addCompanionMessage(text, 'implant');
+  companionHistory.push({ role: 'implant', content: text });
+}
+
+/** Refresh the companion's static chrome when the UI language changes. */
+function applyCompanionLanguage() {
+  const set = (id, prop, val) => { const el = document.getElementById(id); if (el) el[prop] = val; };
+  set('companionTitle', 'textContent', L('companion_title'));
+  set('companionTagline', 'textContent', L('companion_tagline'));
+  set('companionThinkingText', 'textContent', L('companion_thinking'));
+  const input = document.getElementById('companionInput');
+  if (input) input.placeholder = L('companion_placeholder');
+  const fab = document.getElementById('companionFab');
+  if (fab) fab.title = L('companion_open');
+  const closeBtn = document.getElementById('companionClose');
+  if (closeBtn) closeBtn.title = L('companion_close');
 }
 
 // ================================================================
@@ -749,6 +935,7 @@ function handleServerMessage(msg) {
     case 'game_started':
       switchScreen('gameScreen');
       MusicEngine.preloadAll();
+      resetCompanion();  // fresh session → wipe any prior aside transcript
       if (msg.session) updateAllPanels(msg.session);
       if (pendingTutorial) { pendingTutorial = false; setTimeout(startTutorial, 600); }
       break;
@@ -1309,6 +1496,12 @@ function clearSuggestedActions() {
 function renderSuggestedActions(actions) {
   const c = document.getElementById('suggestedActions');
   if (!c) return;
+  // The suggested-action buttons live below the scrollable chat and shrink it
+  // when they appear, which would otherwise clip the tail of the just-typed
+  // message. Note whether the chat was pinned to the bottom BEFORE the buttons
+  // render, so we can re-pin it afterward (but never yank a user who scrolled up).
+  const chat = document.getElementById('chatMessages');
+  const wasPinned = chat ? (chat.scrollHeight - chat.scrollTop - chat.clientHeight < 120) : false;
   c.innerHTML = '';
   // Respect the feature flag, in case it was disabled mid-turn.
   if (_cachedFeatures && _cachedFeatures.suggested_actions === false) return;
@@ -1331,6 +1524,11 @@ function renderSuggestedActions(actions) {
     btn.onclick = () => chooseSuggestedAction(text);
     c.appendChild(btn);
   });
+  // Re-pin to the bottom now that the buttons have taken their space, so the
+  // end of the latest message stays visible above them.
+  if (wasPinned && chat) {
+    requestAnimationFrame(() => { chat.scrollTop = chat.scrollHeight; });
+  }
 }
 
 function markPredictionReady(text) {
@@ -1557,6 +1755,7 @@ const TUTORIAL_STEPS = {
     { target: '[data-panel="world"]', text: '<b>WORLD</b> — Global state: NEXUS alert level, fragment decay, and district access status.', pos: 'below', activateTab: 'world' },
     { target: '[data-panel="log"]', text: '<b>LOG</b> — Session log of key events: discoveries, encounters, and world changes. A quick recap of what happened.', pos: 'below', activateTab: 'log' },
     { target: '[data-panel="conversation"]', text: '<b>CONV</b> — Full conversation history. Scroll back through everything you and the system have said.', pos: 'below', activateTab: 'conversation' },
+    { target: '#companionFab', text: '<b>NEURAL LINK</b> — Tap your implant anytime to ask questions or just think out loud. It only knows what you already know — no spoilers — and nothing you say here touches the world or gets saved. It won\'t interrupt the game.', pos: 'above' },
     { target: '#chatInput', text: 'You\'re ready. Type your first action and press Enter. Explore, investigate, and survive. Good luck, operative.', pos: 'above' },
   ],
   zh: [
@@ -1571,6 +1770,7 @@ const TUTORIAL_STEPS = {
     { target: '[data-panel="world"]', text: '<b>世界</b> — 全局状态：连结警报等级、碎片衰变和区域通行状况。', pos: 'below', activateTab: 'world' },
     { target: '[data-panel="log"]', text: '<b>日志</b> — 关键事件记录：发现、遭遇和世界变化。快速回顾发生的一切。', pos: 'below', activateTab: 'log' },
     { target: '[data-panel="conversation"]', text: '<b>对话</b> — 完整对话记录。回顾你和系统之间的所有交流。', pos: 'below', activateTab: 'conversation' },
+    { target: '#companionFab', text: '<b>神经链接</b> — 随时点击植入体提问，或只是自言自语。它只知道你已知的事——不会剧透——你在这里说的一切都不会影响世界，也不会被保存。它也不会打断游戏进程。', pos: 'above' },
     { target: '#chatInput', text: '准备就绪。输入你的第一个行动并按回车。探索、调查、生存。祝你好运，特工。', pos: 'above' },
   ],
 };
@@ -1678,7 +1878,9 @@ function showTutorialStep() {
     tooltip.style.left = Math.max(margin, Math.min(rect.left, window.innerWidth - tooltipW - margin)) + 'px';
     tooltip.style.top = rect.bottom + margin + 'px';
   } else if (step.pos === 'above') {
-    tooltip.style.left = Math.max(margin, rect.left) + 'px';
+    // Clamp horizontally so the tooltip stays on-screen even for a target near
+    // the right edge (e.g. the bottom-right companion button).
+    tooltip.style.left = Math.max(margin, Math.min(rect.left, window.innerWidth - tooltipW - margin)) + 'px';
     tooltip.style.bottom = (window.innerHeight - rect.top + margin) + 'px';
   }
 }
@@ -1886,7 +2088,8 @@ function updateKnowledgePanel(knowledge) {
     }
     html += `</div>`;
   }
-  document.getElementById('panel-knowledge').innerHTML = html;
+  document.getElementById('panel-knowledge-body').innerHTML = html;
+  applyPanelSearch('knowledge');
 }
 
 // ---------- TRACES PANEL (matches TUI TracesPanel — ONLY discovered) ----------
@@ -1915,7 +2118,8 @@ function updateTracesPanel(traces) {
     }
     html += `</div>`;
   }
-  document.getElementById('panel-traces').innerHTML = html;
+  document.getElementById('panel-traces-body').innerHTML = html;
+  applyPanelSearch('traces');
 }
 
 // ---------- LOCATION IMAGES (assets/locations/*.png served at /assets) ----------
@@ -2234,10 +2438,16 @@ function updateNetworkPanel(npcs) {
         trustBar += i < trustVal ? '\u2588' : '\u2591';
       }
 
+      // Short identity the player has formed — may be inaccurate, gated to what
+      // they've learned. Falls back to occupation/role for legacy saves that
+      // predate the LLM-maintained `description` field.
+      const npcIdentity = npc.description || npc.occupation || npc.role || '';
+
       html += `<div class="panel-list-item npc-entry">
         ${npcAvatarImg(npc)}
         <div class="npc-info">
           <div><span class="cyan" style="font-weight:bold">${esc(npc.name || npc.id || 'Unknown')}</span></div>
+          ${npcIdentity ? `<div class="npc-identity">${esc(npcIdentity)}</div>` : ''}
           ${npc.faction ? `<div class="dim">${L('faction')}: <span class="${factionCls}">${esc(npc.faction)}</span></div>` : ''}
           <div>${L('trust')}: <span class="${trustCls}">${trustBar} ${esc(trustDisplay)}</span></div>
           ${npc.location_last_seen ? `<div class="dim">${L('last_seen')}: ${esc(npc.location_last_seen)}</div>` : ''}
@@ -2377,7 +2587,8 @@ function updateLogPanel(log) {
     }
   }
   html += `</div>`;
-  document.getElementById('panel-log').innerHTML = html;
+  document.getElementById('panel-log-body').innerHTML = html;
+  applyPanelSearch('log');
 }
 
 // ---------- CONVERSATION PANEL (matches TUI ConversationPanel) ----------
@@ -2406,7 +2617,139 @@ function updateConversationPanel(conversation) {
     }
   }
   html += `</div>`;
-  document.getElementById('panel-conversation').innerHTML = html;
+  document.getElementById('panel-conversation-body').innerHTML = html;
+  applyPanelSearch('conversation');
+}
+
+// ================================================================
+// PANEL SEARCH — filter + highlight in KNOW / TRACE / LOG / CONV
+// ================================================================
+
+// Each searchable panel maps to the record element it filters and the section
+// wrapper that should collapse when none of its records survive the filter.
+const PANEL_SEARCH_RECORDS = {
+  knowledge:    '.panel-list-item',
+  traces:       '.trace-item',
+  log:          '.log-entry',
+  conversation: '.conv-entry',
+};
+
+function onPanelSearch(key) {
+  applyPanelSearch(key);
+}
+
+function clearPanelSearch(key) {
+  const input = document.getElementById('search-' + key);
+  if (input) input.value = '';
+  applyPanelSearch(key);
+  if (input) input.focus();
+}
+
+// Re-run the active query against the freshly rendered body. Called after every
+// panel re-render (so highlighting/filtering survives session updates) and on
+// every keystroke. Reads the live input value as the source of truth.
+function applyPanelSearch(key) {
+  const sel = PANEL_SEARCH_RECORDS[key];
+  const body = document.getElementById('panel-' + key + '-body');
+  const input = document.getElementById('search-' + key);
+  if (!sel || !body) return;
+  const query = (input ? input.value : '').trim().toLowerCase();
+
+  // Toggle the clear (✕) button visibility.
+  const wrap = input && input.closest('.panel-search');
+  if (wrap) wrap.classList.toggle('has-query', !!query);
+
+  // Reset: drop old highlights, un-hide everything, collapse any entries WE
+  // auto-expanded for a prior search (manual expands have no marker), remove
+  // old "no results".
+  _clearHighlights(body);
+  body.querySelectorAll('.search-expanded').forEach(el => el.classList.remove('expanded', 'search-expanded'));
+  body.querySelectorAll(sel).forEach(el => { el.style.display = ''; });
+  body.querySelectorAll('.panel-section, .panel-empty').forEach(el => { el.style.display = ''; });
+  const oldMsg = body.querySelector('.search-no-results');
+  if (oldMsg) oldMsg.remove();
+
+  if (!query) return;  // empty query → default full view
+
+  // Filter records and highlight matches in the survivors.
+  let visible = 0;
+  body.querySelectorAll(sel).forEach(rec => {
+    if (rec.textContent.toLowerCase().includes(query)) {
+      rec.style.display = '';
+      // Log entries hide their matched text in a collapsed body — open it so
+      // the highlight is visible (tag it so we can collapse it again on reset).
+      if (key === 'log' && !rec.classList.contains('expanded')) {
+        rec.classList.add('expanded', 'search-expanded');
+      }
+      _highlightTextNodes(rec, query);
+      visible++;
+    } else {
+      rec.style.display = 'none';
+    }
+  });
+
+  // Empty-state placeholders ("None discovered") are noise during a search.
+  body.querySelectorAll('.panel-empty').forEach(el => { el.style.display = 'none'; });
+
+  // Collapse category sections that now show no records (including ones that
+  // were always empty), but leave summary headers — sections with neither
+  // records nor an empty-state placeholder, e.g. the traces "Discovered N" row.
+  body.querySelectorAll('.panel-section').forEach(section => {
+    const recs = section.querySelectorAll(sel);
+    const hasEmpty = section.querySelector('.panel-empty');
+    const anyVisible = Array.from(recs).some(r => r.style.display !== 'none');
+    if ((recs.length || hasEmpty) && !anyVisible) {
+      section.style.display = 'none';
+    }
+  });
+
+  if (visible === 0) {
+    const msg = document.createElement('div');
+    msg.className = 'search-no-results';
+    msg.textContent = L('no_search_results');
+    body.appendChild(msg);
+  }
+}
+
+// Wrap case-insensitive occurrences of `query` in <mark> within an element's
+// text nodes only — never touches element tags, so escaped HTML stays intact.
+function _highlightTextNodes(root, query) {
+  if (!query) return;
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+    acceptNode(node) {
+      if (!node.nodeValue || !node.nodeValue.toLowerCase().includes(query)) return NodeFilter.FILTER_REJECT;
+      if (node.parentNode && node.parentNode.nodeName === 'MARK') return NodeFilter.FILTER_REJECT;
+      return NodeFilter.FILTER_ACCEPT;
+    }
+  });
+  const targets = [];
+  while (walker.nextNode()) targets.push(walker.currentNode);
+  for (const node of targets) {
+    const text = node.nodeValue;
+    const lower = text.toLowerCase();
+    const frag = document.createDocumentFragment();
+    let i = 0, idx;
+    while ((idx = lower.indexOf(query, i)) !== -1) {
+      if (idx > i) frag.appendChild(document.createTextNode(text.slice(i, idx)));
+      const mark = document.createElement('mark');
+      mark.className = 'search-hl';
+      mark.textContent = text.slice(idx, idx + query.length);
+      frag.appendChild(mark);
+      i = idx + query.length;
+    }
+    if (i < text.length) frag.appendChild(document.createTextNode(text.slice(i)));
+    node.parentNode.replaceChild(frag, node);
+  }
+}
+
+// Unwrap every highlight back to plain text and re-merge split text nodes.
+function _clearHighlights(root) {
+  root.querySelectorAll('mark.search-hl').forEach(m => {
+    const parent = m.parentNode;
+    if (!parent) return;
+    parent.replaceChild(document.createTextNode(m.textContent), m);
+    parent.normalize();
+  });
 }
 
 // ================================================================
@@ -2461,11 +2804,17 @@ document.addEventListener('keydown', (e) => {
     const overlayOpen = ['settingsOverlay', 'confirmMenuDialog', 'saveDialog'].some(
       id => { const el = document.getElementById(id); return el && el.style.display !== 'none' && el.style.display !== ''; }
     );
-    if (e.key === 'Escape') { closeSaveDialog(); closeSettings(); closeConfirmMenu(); return; }
+    if (e.key === 'Escape') {
+      if (companionOpen) { closeCompanion(); return; }
+      closeSaveDialog(); closeSettings(); closeConfirmMenu(); return;
+    }
     // Block all other keybindings when an overlay is open
     if (overlayOpen) return;
 
-    const isInput = document.activeElement === document.getElementById('chatInput');
+    // Don't let game shortcuts fire while typing in the chat OR the companion.
+    const active = document.activeElement;
+    const isInput = active === document.getElementById('chatInput')
+                 || active === document.getElementById('companionInput');
     const num = parseInt(e.key);
     if (num >= 1 && num <= 9 && !e.ctrlKey && !e.metaKey && !isInput) {
       const tabs = document.querySelectorAll('.panel-tab');

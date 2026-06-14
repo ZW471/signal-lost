@@ -34,6 +34,7 @@ from engine.world_sim_scheduler import WorldSimScheduler
 from engine.claude_code_engine import run_turn as cc_run_turn
 from engine import action_cache
 from engine import opening_cache
+from engine import companion
 from engine.suggestions import read_features, generate_suggested_actions
 from engine.state import (
     create_new_session,
@@ -568,6 +569,66 @@ async def websocket_endpoint(ws: WebSocket):
             await ws.send_json({"type": "error", "message": str(e)})
         except Exception:
             pass
+
+
+# ---------------------------------------------------------------------------
+# WebSocket — implant companion (side-channel "ask the implant" Q&A)
+# ---------------------------------------------------------------------------
+
+@app.websocket("/ws/companion")
+async def companion_endpoint(ws: WebSocket):
+    """Side-channel for the player to ask questions without advancing the game.
+
+    Deliberately a SEPARATE socket from ``/ws`` so it runs truly concurrently:
+    while the main game loop is blocked awaiting a turn, this loop keeps
+    receiving and can answer immediately. It is strictly read-only — it never
+    takes ``_game_lock``, never mutates session state, never advances the turn,
+    and never writes to the conversation log. The LLM call runs in the executor
+    so it doesn't stall the event loop. Nothing is persisted server-side; the
+    transcript lives only in the browser and is gone on reload.
+    """
+    await ws.accept()
+    loop = asyncio.get_event_loop()
+    try:
+        while True:
+            raw = await ws.receive_text()
+            try:
+                msg = json.loads(raw)
+            except json.JSONDecodeError:
+                continue
+            if msg.get("action") != "ask":
+                continue
+
+            question = (msg.get("text") or "").strip()
+            if not question:
+                continue
+
+            session_dir = _active_session_dir
+            if not session_dir:
+                await ws.send_json({"type": "companion_reply", "error": True, "code": "no_session"})
+                continue
+
+            llm = get_llm()
+            if llm is None:
+                await ws.send_json({"type": "companion_reply", "error": True, "code": "no_session"})
+                continue
+
+            history = msg.get("history") or []
+            try:
+                answer = await loop.run_in_executor(
+                    None, lambda: companion.ask(session_dir, question, history, llm)
+                )
+            except Exception as e:
+                import logging
+                logging.getLogger(__name__).warning("companion ask failed: %s", e)
+                await ws.send_json({"type": "companion_reply", "error": True, "code": "failed"})
+                continue
+
+            await ws.send_json({"type": "companion_reply", "text": answer or ""})
+    except WebSocketDisconnect:
+        pass
+    except Exception:
+        pass
 
 
 # ---------------------------------------------------------------------------

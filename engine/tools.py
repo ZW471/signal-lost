@@ -285,6 +285,12 @@ def update_npc(name: str, changes: str) -> str:
         changes: JSON string of changes.
             To update: {"trust_level": "cautious_ally", "location_last_seen": "..."}
             To add new: {"name": "Mira", "faction": "...", "trust_level": "neutral", ...}
+            Always include/refresh a short `description` (≤10 words) capturing who
+            the player BELIEVES this NPC is, based only on what the player has
+            learned so far — it may be vague or wrong early on ("noodle-stall
+            owner who hears things") and sharpen as trust and knowledge grow.
+            This is the impression shown in the player's NPC tracker, NOT the
+            objective truth.
     """
     parsed = _parse_json_arg(changes, "description")
     return json.dumps({"type": "update_npc", "name": name, "changes": parsed})
