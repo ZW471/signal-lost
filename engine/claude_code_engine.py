@@ -111,7 +111,8 @@ Return ONLY a single JSON object. No prose, no markdown, no explanation outside 
     {"name": "tool_name", "args": { ... }},
     ...
   ],
-  "location_update": null
+  "location_update": null,
+  "suggested_actions": ["short next action", "a different next action"]
 }
 ```
 
@@ -155,6 +156,16 @@ moves OR when NPCs arrive/leave OR when time shifts significantly (period change
 Not just on movement — atmosphere and people change over time too. If you called \
 `update_location` in tool_calls, also provide the full new location description:
 `{"description": "...", "exits": {"north": "Place", ...}, "points_of_interest": ["..."], "npcs_present": ["..."]}`
+
+**suggested_actions** (required): An array of 1-3 SHORT, simple, distinct next \
+actions the player could take, written as direct commands in the player's language \
+(at most 12 words each). Ground them ONLY in what the player can currently SEE and \
+has ALREADY discovered (the scene, exits, points of interest, present/known NPCs, \
+inventory, and discovered knowledge). NEVER reference undiscovered people, places, \
+items, secrets, or deeper-layer lore — these options must not spoil anything. Keep \
+them mundane and obvious — things a player would naturally try next — not clever or \
+cryptic. Make each option meaningfully different from the others. Use `[]` only when \
+the game is ending.
 
 ### Validation context:
 {validator_context}
@@ -372,6 +383,7 @@ def _parse_response(raw: str) -> dict:
             "narrative": narrative,
             "tool_calls": tool_calls if isinstance(tool_calls, list) else [],
             "location_update": None,
+            "suggested_actions": [],
         }
 
     # Fallback: treat entire response as narrative
@@ -389,6 +401,7 @@ def _try_json(text: str) -> dict | None:
                 "narrative": str(data.get("narrative", "")),
                 "tool_calls": data.get("tool_calls", []) if isinstance(data.get("tool_calls"), list) else [],
                 "location_update": data.get("location_update") if isinstance(data.get("location_update"), dict) else None,
+                "suggested_actions": data.get("suggested_actions", []) if isinstance(data.get("suggested_actions"), list) else [],
             }
     except (json.JSONDecodeError, TypeError, ValueError):
         pass
@@ -404,6 +417,7 @@ def _fallback(text: str) -> dict:
         "narrative": text,
         "tool_calls": [],
         "location_update": None,
+        "suggested_actions": [],
     }
 
 
@@ -1065,6 +1079,18 @@ def run_turn(session_dir: str, player_input: str, mode: str = "play") -> dict:
         append_conversation(session_dir, "user", player_input, player.get("turn", 1))
         append_conversation(session_dir, "assistant", narrative, player.get("turn", 1))
 
+    # ── Step 14: Suggested actions ───────────────────────────────────
+    # The model emits these inline (see _OUTPUT_FORMAT_SPEC) so there is no
+    # extra LLM call. Spoiler-safety is enforced by the prompt rules.
+    from engine.suggestions import read_features, normalize_actions
+    features = read_features(session_dir)
+    suggested_actions: list[dict] = []
+    if features["suggested_actions"] and not game_over:
+        suggested_actions = normalize_actions(
+            parsed.get("suggested_actions", []),
+            features["suggested_actions_count"],
+        )
+
     return {
         "narrative": narrative,
         "game_over": game_over,
@@ -1073,5 +1099,6 @@ def run_turn(session_dir: str, player_input: str, mode: str = "play") -> dict:
         "discovery_notifications": discovery_notifications,
         "turn_usage": {},
         "knowledge_notifications": knowledge_notifications,
+        "suggested_actions": suggested_actions,
         "elapsed_seconds": round(_time.time() - _turn_start, 1),
     }

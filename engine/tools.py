@@ -12,36 +12,42 @@ import json
 import os
 import random
 import sys
+import threading
 
 import importlib.util
 
 from langchain_core.tools import tool
 
 # ---------------------------------------------------------------------------
-# Session directory (set by input_gate each turn for file-access tools)
+# Per-turn tool context (session dir + inventory for file-access/item tools).
+#
+# Stored thread-locally so that speculative suggested-action turns (which run
+# concurrently in background executor threads) and the live turn never clobber
+# each other's context. Each turn calls set_session_dir/set_current_inventory at
+# its start, and any tools it invokes run on the same thread, so the values are
+# always consistent within a turn.
 # ---------------------------------------------------------------------------
 
-_current_session_dir: str | None = None
+_tls = threading.local()
 
 
 def set_session_dir(session_dir: str) -> None:
-    """Set the active session directory. Called by input_gate at the start of each turn."""
-    global _current_session_dir
-    _current_session_dir = session_dir
+    """Set the active session directory for this thread's turn."""
+    _tls.session_dir = session_dir
 
 
-_current_inventory: list[dict] = []
+def _get_session_dir() -> str | None:
+    return getattr(_tls, "session_dir", None)
 
 
 def set_current_inventory(items: list[dict]) -> None:
-    """Set the current inventory for tool-level item checks."""
-    global _current_inventory
-    _current_inventory = items
+    """Set the current inventory for tool-level item checks (this thread)."""
+    _tls.inventory = items
 
 
 def _has_item(keyword: str) -> bool:
     """Check if the current inventory contains an item matching the keyword."""
-    for item in _current_inventory:
+    for item in getattr(_tls, "inventory", []):
         name = (item.get("name", "") + " " + item.get("item", "")).lower()
         if keyword.lower() in name:
             return True
@@ -398,10 +404,11 @@ def recall_conversation(last_n: int = 20, search: str | None = None) -> dict:
         last_n: Number of most recent exchanges to retrieve (default 20, max 100)
         search: Optional keyword to filter entries by content (case-insensitive)
     """
-    if not _current_session_dir:
+    _session_dir = _get_session_dir()
+    if not _session_dir:
         return {"entries": [], "count": 0, "error": "Session not initialized"}
 
-    path = os.path.join(_current_session_dir, "conversation.jsonl")
+    path = os.path.join(_session_dir, "conversation.jsonl")
     try:
         entries = []
         with open(path, "r", encoding="utf-8") as f:

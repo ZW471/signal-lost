@@ -1,0 +1,272 @@
+{
+  "size": 128,
+  "style": "cyberpunk noir pixel-art location thumbnails",
+  "generated_with": "built-in image_gen, resized with sips",
+  "contact_sheet": "_contact_sheet.png",
+  "locations": [
+    {
+      "id": "neo_kowloon",
+      "name": "Neo-Kowloon",
+      "name_zh": "新九龙",
+      "category": "world",
+      "district": null,
+      "file": "neo_kowloon.png"
+    },
+    {
+      "id": "the_sprawl",
+      "name": "The Sprawl",
+      "name_zh": "蔓城",
+      "category": "district",
+      "district": "The Sprawl",
+      "file": "the_sprawl.png"
+    },
+    {
+      "id": "rain_alley",
+      "name": "Rain Alley",
+      "name_zh": "雨巷",
+      "category": "landmark",
+      "district": "The Sprawl",
+      "file": "rain_alley.png"
+    },
+    {
+      "id": "lucky_bowl",
+      "name": "The Lucky Bowl",
+      "name_zh": "幸运碗",
+      "category": "landmark",
+      "district": "The Sprawl",
+      "file": "lucky_bowl.png"
+    },
+    {
+      "id": "wet_market",
+      "name": "The Wet Market",
+      "name_zh": "湿市场",
+      "category": "landmark",
+      "district": "The Sprawl",
+      "file": "wet_market.png"
+    },
+    {
+      "id": "old_gate_station",
+      "name": "Old Gate Station",
+      "name_zh": "旧门站",
+      "category": "landmark",
+      "district": "The Sprawl",
+      "file": "old_gate_station.png"
+    },
+    {
+      "id": "public_terminal",
+      "name": "Public Terminal",
+      "name_zh": "公共终端",
+      "category": "landmark",
+      "district": "The Sprawl",
+      "file": "public_terminal.png"
+    },
+    {
+      "id": "neon_row",
+      "name": "Neon Row",
+      "name_zh": "霓虹街",
+      "category": "district",
+      "district": "Neon Row",
+      "file": "neon_row.png"
+    },
+    {
+      "id": "the_void",
+      "name": "The Void",
+      "name_zh": "虚空",
+      "category": "landmark",
+      "district": "Neon Row",
+      "file": "the_void.png"
+    },
+    {
+      "id": "the_pagoda",
+      "name": "The Pagoda",
+      "name_zh": "宝塔",
+      "category": "landmark",
+      "district": "Neon Row",
+      "file": "the_pagoda.png"
+    },
+    {
+      "id": "memory_lane",
+      "name": "Memory Lane",
+      "name_zh": "记忆巷",
+      "category": "landmark",
+      "district": "Neon Row",
+      "file": "memory_lane.png"
+    },
+    {
+      "id": "the_blind_spot",
+      "name": "The Blind Spot",
+      "name_zh": "盲区",
+      "category": "landmark",
+      "district": "Neon Row",
+      "file": "the_blind_spot.png"
+    },
+    {
+      "id": "sector_7",
+      "name": "Sector 7",
+      "name_zh": "第七区",
+      "category": "district",
+      "district": "Sector 7",
+      "file": "sector_7.png"
+    },
+    {
+      "id": "the_atrium",
+      "name": "The Atrium",
+      "name_zh": "中庭",
+      "category": "landmark",
+      "district": "Sector 7",
+      "file": "the_atrium.png"
+    },
+    {
+      "id": "nexcore",
+      "name": "NexCore",
+      "name_zh": "灵核",
+      "category": "landmark",
+      "district": "Sector 7",
+      "file": "nexcore.png"
+    },
+    {
+      "id": "harvest_chambers",
+      "name": "Harvest Chambers",
+      "name_zh": "收割室",
+      "category": "landmark",
+      "district": "Sector 7",
+      "file": "harvest_chambers.png"
+    },
+    {
+      "id": "the_undercroft",
+      "name": "The Undercroft",
+      "name_zh": "底渊",
+      "category": "district",
+      "district": "The Undercroft",
+      "file": "the_undercroft.png"
+    },
+    {
+      "id": "old_server_cathedral",
+      "name": "The Old Server Cathedral",
+      "name_zh": "旧伺服圣堂",
+      "category": "landmark",
+      "district": "The Undercroft",
+      "file": "old_server_cathedral.png"
+    },
+    {
+      "id": "drowned_market",
+      "name": "The Drowned Market",
+      "name_zh": "沉市",
+      "category": "landmark",
+      "district": "The Undercroft",
+      "file": "drowned_market.png"
+    },
+    {
+      "id": "whispering_gallery",
+      "name": "The Whispering Gallery",
+      "name_zh": "回声廊",
+      "category": "landmark",
+      "district": "The Undercroft",
+      "file": "whispering_gallery.png"
+    },
+    {
+      "id": "architect_bunker",
+      "name": "The Architect's Bunker",
+      "name_zh": "建筑师地堡",
+      "category": "landmark",
+      "district": "The Undercroft",
+      "file": "architect_bunker.png"
+    },
+    {
+      "id": "chrome_heights",
+      "name": "Chrome Heights",
+      "name_zh": "镀金台",
+      "category": "district",
+      "district": "Chrome Heights",
+      "file": "chrome_heights.png"
+    },
+    {
+      "id": "meridian_club",
+      "name": "The Meridian Club",
+      "name_zh": "子午线俱乐部",
+      "category": "landmark",
+      "district": "Chrome Heights",
+      "file": "meridian_club.png"
+    },
+    {
+      "id": "chen_estate",
+      "name": "The Chen Estate",
+      "name_zh": "陈宅",
+      "category": "landmark",
+      "district": "Chrome Heights",
+      "file": "chen_estate.png"
+    },
+    {
+      "id": "orlov_foundation",
+      "name": "The Orlov Foundation",
+      "name_zh": "奥尔洛夫基金会",
+      "category": "landmark",
+      "district": "Chrome Heights",
+      "file": "orlov_foundation.png"
+    },
+    {
+      "id": "lian_residence",
+      "name": "Lian Residence",
+      "name_zh": "莲宅",
+      "category": "landmark",
+      "district": "Chrome Heights",
+      "file": "lian_residence.png"
+    },
+    {
+      "id": "senate_building",
+      "name": "Senate Building",
+      "name_zh": "议会大楼",
+      "category": "landmark",
+      "district": "Chrome Heights",
+      "file": "senate_building.png"
+    },
+    {
+      "id": "the_spire",
+      "name": "The Spire",
+      "name_zh": "尖塔",
+      "category": "district",
+      "district": "The Spire",
+      "file": "the_spire.png"
+    },
+    {
+      "id": "the_pinnacle",
+      "name": "The Pinnacle",
+      "name_zh": "巅峰塔",
+      "category": "landmark",
+      "district": "The Spire",
+      "file": "the_pinnacle.png"
+    },
+    {
+      "id": "archive_tower",
+      "name": "Archive Tower",
+      "name_zh": "档案塔",
+      "category": "landmark",
+      "district": "The Spire",
+      "file": "archive_tower.png"
+    },
+    {
+      "id": "observatory",
+      "name": "The Observatory",
+      "name_zh": "观测台",
+      "category": "landmark",
+      "district": "The Spire",
+      "file": "observatory.png"
+    },
+    {
+      "id": "severance_trigger_room",
+      "name": "Severance Trigger Room",
+      "name_zh": "断离触发室",
+      "category": "landmark",
+      "district": "The Spire",
+      "file": "severance_trigger_room.png"
+    },
+    {
+      "id": "the_resonance",
+      "name": "The Resonance",
+      "name_zh": "共鸣所",
+      "category": "district",
+      "district": "The Resonance",
+      "file": "the_resonance.png"
+    }
+  ]
+}

@@ -632,7 +632,8 @@ def copy_save_to_session(save_dir: str, session_dir: str) -> None:
     """
     if os.path.exists(session_dir):
         shutil.rmtree(session_dir)
-    shutil.copytree(save_dir, session_dir)
+    # Never carry the speculative suggested-action cache between sessions.
+    shutil.copytree(save_dir, session_dir, ignore=shutil.ignore_patterns(".action_cache"))
 
 
 def list_active_sessions(sessions_root: str) -> list[dict]:
@@ -670,5 +671,6 @@ def save_game_to_slot(session_dir: str, save_name: str, saves_dir: str) -> str:
     dest = os.path.join(saves_dir, save_name)
     if os.path.exists(dest):
         shutil.rmtree(dest)
-    shutil.copytree(session_dir, dest)
+    # Exclude the speculative suggested-action cache from saves.
+    shutil.copytree(session_dir, dest, ignore=shutil.ignore_patterns(".action_cache"))
     return dest

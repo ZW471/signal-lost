@@ -92,6 +92,16 @@ const LABELS = {
     location: 'LOCATION',
     // Chat
     chat_placeholder: 'What do you do?', processing: 'PROCESSING NEURAL INPUT',
+    thinking_hint: '// link resolving — review your INTEL panels while you wait',
+    thinking_lines: [
+      'PARSING NEURAL INPUT…',
+      'CROSS-REFERENCING THE GRID…',
+      'ROUTING THROUGH DEAD CHANNELS…',
+      'THE CITY LISTENS…',
+      'DECRYPTING SIGNAL FRAGMENTS…',
+      'COMPILING RESPONSE…',
+      'STILL TRACING — DEEP LINK…',
+    ],
     // Danger
     safe: 'Safe', low: 'Low', moderate: 'Moderate', high: 'High', extreme: 'Extreme',
     // Menu & UI
@@ -132,6 +142,9 @@ const LABELS = {
     label_langsmith_key: 'API KEY', label_langsmith_project: 'PROJECT NAME',
     settings_usage_title: '// USAGE TRACKING', label_show_tokens: 'Show token usage in conversation',
     settings_audio_title: '// AUDIO', label_music_volume: 'MUSIC VOLUME',
+    settings_gameplay_title: '// GAMEPLAY',
+    label_suggested_actions: 'Suggest actions each turn',
+    label_predict_outcome: 'Pre-compute suggested actions (instant replies, extra LLM calls)',
     btn_close: 'CLOSE',
     settings_saved: 'Settings saved', saving: 'Saving...', saved: 'Saved',
     // Chat prefixes
@@ -177,6 +190,16 @@ const LABELS = {
     player_label: '玩家', agent_label: '引擎',
     location: '位置',
     chat_placeholder: '你想做什么？', processing: '正在处理神经输入',
+    thinking_hint: '// 链路解析中 —— 可在等待时查看右侧情报面板',
+    thinking_lines: [
+      '解析神经输入…',
+      '比对城市网格…',
+      '穿行废弃信道…',
+      '城市正在倾听…',
+      '解密信号碎片…',
+      '编译回应…',
+      '深度追踪中…',
+    ],
     safe: '安全', low: '低', moderate: '中', high: '高', extreme: '极端',
     // Menu & UI
     game_title: '信号遗失',
@@ -216,6 +239,9 @@ const LABELS = {
     label_langsmith_key: 'API密钥', label_langsmith_project: '项目名称',
     settings_usage_title: '// 用量追踪', label_show_tokens: '在对话中显示令牌用量',
     settings_audio_title: '// 音频', label_music_volume: '音乐音量',
+    settings_gameplay_title: '// 玩法',
+    label_suggested_actions: '每回合推荐行动',
+    label_predict_outcome: '预计算推荐行动（点击即时响应，但会增加 LLM 调用）',
     btn_close: '关闭',
     settings_saved: '设置已保存', saving: '保存中...', saved: '已保存',
     // Chat prefixes
@@ -305,7 +331,11 @@ function setLanguage(lang) {
   const chatInput = document.getElementById('chatInput');
   if (chatInput) chatInput.placeholder = L('chat_placeholder');
   const thinkingText = document.querySelector('.thinking-text');
-  if (thinkingText) thinkingText.textContent = L('processing');
+  // If the wait ticker is mid-cycle, re-render its current line in the new
+  // language; otherwise fall back to the resting label.
+  if (thinkingText) thinkingText.textContent = (_thinkingTimer || _thinkingLineIdx > 0) ? _thinkingLineText() : L('processing');
+  const thinkingHint = document.getElementById('thinkingHint');
+  if (thinkingHint) thinkingHint.textContent = L('thinking_hint');
 
   // Game title (boot logo, menu h1, game over h1)
   const title = L('game_title');
@@ -423,6 +453,7 @@ function setLanguage(lang) {
   if (subtitles[1]) subtitles[1].textContent = L('settings_langsmith_title');
   if (subtitles[2]) subtitles[2].textContent = L('settings_usage_title');
   if (subtitles[3]) subtitles[3].textContent = L('settings_audio_title');
+  if (subtitles[4]) subtitles[4].textContent = L('settings_gameplay_title');
   // Localize checkbox label (preserve the <input> inside)
   const chkLabel = document.querySelector('#chkShowTokens');
   if (chkLabel && chkLabel.parentNode) {
@@ -430,6 +461,11 @@ function setLanguage(lang) {
     // Keep checkbox, replace text
     lbl.childNodes.forEach(n => { if (n.nodeType === 3) n.textContent = ' ' + L('label_show_tokens'); });
   }
+  // Gameplay feature toggle labels (translated by id, not index)
+  const lblSA = document.getElementById('lblSuggestedActions');
+  if (lblSA) lblSA.textContent = L('label_suggested_actions');
+  const lblPO = document.getElementById('lblPredictOutcome');
+  if (lblPO) lblPO.textContent = L('label_predict_outcome');
   const settingsBtns = document.querySelectorAll('#settingsOverlay .cyber-btn-text');
   if (settingsBtns[0]) settingsBtns[0].textContent = L('btn_save');
   if (settingsBtns[1]) settingsBtns[1].textContent = L('btn_close');
@@ -681,6 +717,7 @@ let isFirstInput = true; // Track if first input after resume (to remove system 
 let pendingTutorial = false; // Show tutorial after new game starts
 let resumeMessageEl = null; // Reference to the resume system message element
 let discoveryEls = []; // Track discovery notification elements (ephemeral)
+let _cachedFeatures = null; // Latest gameplay feature flags from the server
 
 // ================================================================
 // SERVER MESSAGE HANDLER
@@ -698,6 +735,7 @@ function handleServerMessage(msg) {
       }
       if (msg.provider) prefillProviderSettings(msg.provider);
       if (msg.langsmith) prefillLangsmithSettings(msg.langsmith);
+      if (msg.settings && msg.settings.features) _cachedFeatures = msg.settings.features;
       // Read language from settings
       if (msg.settings && msg.settings.language) {
         const lang = msg.settings.language.display || msg.settings.language.tui || 'en';
@@ -714,6 +752,7 @@ function handleServerMessage(msg) {
       break;
 
     case 'thinking':
+      clearSuggestedActions();
       showThinking();
       break;
 
@@ -722,15 +761,19 @@ function handleServerMessage(msg) {
       const role = msg.role || 'agent';
       if (role === 'system') {
         // Resume message — will be removed after first player input
-        resumeMessageEl = addTypingMessage(msg.text, role, null, msg.elapsed_seconds);
+        resumeMessageEl = addTypingMessage(msg.text, role, null, msg.elapsed_seconds, msg.suggested_actions);
         isFirstInput = true;
       } else {
-        addTypingMessage(msg.text, role, msg.usage, msg.elapsed_seconds);
+        addTypingMessage(msg.text, role, msg.usage, msg.elapsed_seconds, msg.suggested_actions);
       }
       break;
 
     case 'session_update':
       if (msg.session) updateAllPanels(msg.session);
+      break;
+
+    case 'prediction_ready':
+      markPredictionReady(msg.text);
       break;
 
     case 'discovery':
@@ -742,6 +785,7 @@ function handleServerMessage(msg) {
       break;
 
     case 'game_over':
+      clearSuggestedActions();
       setTimeout(() => showGameOver(msg.ending, msg.narrative), 2000);
       break;
 
@@ -754,6 +798,7 @@ function handleServerMessage(msg) {
       notify(L('settings_saved'));
       if (msg.provider) prefillProviderSettings(msg.provider);
       if (msg.langsmith) prefillLangsmithSettings(msg.langsmith);
+      if (msg.features) _cachedFeatures = msg.features;
       document.getElementById('settingsStatus').textContent = L('saved');
       setTimeout(() => { document.getElementById('settingsStatus').textContent = ''; }, 2000);
       break;
@@ -826,6 +871,17 @@ function openSettings() {
   };
   // Sync token tracking checkbox
   document.getElementById('chkShowTokens').checked = _showTokens();
+  // Sync gameplay feature checkboxes from the latest server-known flags.
+  // Both default ON to match settings/default.json — so the boxes reflect the
+  // real default even if the server flags haven't been received yet (a value is
+  // only treated as off when the server explicitly reports false).
+  const _feats = _cachedFeatures || {};
+  const _sa = _feats.suggested_actions !== false;
+  const _po = _feats.predict_outcome !== false;
+  document.getElementById('chkSuggestedActions').checked = _sa;
+  document.getElementById('chkPredictOutcome').checked = _po;
+  _settingsSnapshot.suggestedActions = _sa;
+  _settingsSnapshot.predictOutcome = _po;
   // Show cumulative usage stats if available
   _updateUsageStats();
   playBeep(1000, 0.04);
@@ -844,6 +900,8 @@ function closeSettings() {
     document.getElementById('inputLangsmithKey').value = _settingsSnapshot.langsmithKey;
     document.getElementById('inputLangsmithProject').value = _settingsSnapshot.langsmithProject;
     document.getElementById('chkShowTokens').checked = _settingsSnapshot.showTokens;
+    document.getElementById('chkSuggestedActions').checked = _settingsSnapshot.suggestedActions;
+    document.getElementById('chkPredictOutcome').checked = _settingsSnapshot.predictOutcome;
     onProviderChange(); // re-sync field visibility for restored provider
     _settingsSnapshot = null;
   }
@@ -862,6 +920,12 @@ function saveSettings() {
   // Save token display preference
   localStorage.setItem('signal_lost_show_tokens',
     document.getElementById('chkShowTokens').checked ? '1' : '0');
+  // Gameplay feature toggles (persisted server-side in custom.json + session)
+  payload.features = {
+    suggested_actions: document.getElementById('chkSuggestedActions').checked,
+    predict_outcome: document.getElementById('chkPredictOutcome').checked,
+  };
+  _cachedFeatures = Object.assign({}, _cachedFeatures || {}, payload.features);
   sendWS(payload);
   _settingsSnapshot = null;  // Mark as saved so close doesn't revert
   document.getElementById('settingsStatus').textContent = L('saving');
@@ -1156,7 +1220,7 @@ function addChatMessage(text, role = 'agent') {
   return msg;
 }
 
-function addTypingMessage(text, role = 'agent', usage = null, elapsedSeconds = null) {
+function addTypingMessage(text, role = 'agent', usage = null, elapsedSeconds = null, suggestedActions = null) {
   const container = document.getElementById('chatMessages');
   const msg = document.createElement('div');
   msg.className = `chat-msg ${role}`;
@@ -1198,10 +1262,87 @@ function addTypingMessage(text, role = 'agent', usage = null, elapsedSeconds = n
         msg.appendChild(infoEl);
       }
       enableInput();
+      // Render quick-pick action buttons once the narration finishes typing.
+      renderSuggestedActions(suggestedActions);
     }
   }
-  typeNext();
+  // Agent narration gets a brief "incoming transmission" decrypt flash first;
+  // resume/system messages type out plainly.
+  if (role === 'agent') {
+    _decryptReveal(msg, contentEl, typeNext);
+  } else {
+    typeNext();
+  }
   return msg;
+}
+
+// ----------------------------------------------------------------------------
+// Suggested actions (quick-pick buttons)
+// ----------------------------------------------------------------------------
+
+function clearSuggestedActions() {
+  const c = document.getElementById('suggestedActions');
+  if (c) c.innerHTML = '';
+}
+
+function renderSuggestedActions(actions) {
+  const c = document.getElementById('suggestedActions');
+  if (!c) return;
+  c.innerHTML = '';
+  // Respect the feature flag, in case it was disabled mid-turn.
+  if (_cachedFeatures && _cachedFeatures.suggested_actions === false) return;
+  if (!Array.isArray(actions) || actions.length === 0) return;
+  // When outcome pre-computation is on, buttons start "pending" and brighten to
+  // "ready" (instant reply) once their prediction lands (prediction_ready msg).
+  const predicting = !!(_cachedFeatures && _cachedFeatures.predict_outcome);
+  actions.slice(0, 3).forEach((a, idx) => {
+    const text = (a && (a.text || a)) ? (a.text || a) : '';
+    if (!text) return;
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'suggested-action-btn' + (predicting ? ' pending' : '');
+    btn.dataset.action = text;
+    btn.textContent = text;
+    btn.title = predicting ? (text + ' — pre-computing…') : text;
+    btn.onclick = () => chooseSuggestedAction(text);
+    c.appendChild(btn);
+  });
+}
+
+function markPredictionReady(text) {
+  if (!text) return;
+  document.querySelectorAll('#suggestedActions .suggested-action-btn').forEach(btn => {
+    if (btn.dataset.action === text) {
+      btn.classList.remove('pending');
+      btn.classList.add('ready');
+      btn.title = text + ' — ready (instant)';
+    }
+  });
+}
+
+function chooseSuggestedAction(text) {
+  const input = document.getElementById('chatInput');
+  if (input.disabled) return;
+  text = (text || '').trim();
+  if (!text) return;
+
+  // Mirror sendMessage()'s cleanup of ephemeral UI.
+  if (isFirstInput && resumeMessageEl) {
+    resumeMessageEl.classList.add('fade-out');
+    setTimeout(() => { if (resumeMessageEl && resumeMessageEl.parentNode) resumeMessageEl.parentNode.removeChild(resumeMessageEl); resumeMessageEl = null; }, 500);
+    isFirstInput = false;
+  }
+  discoveryEls.forEach(el => {
+    el.classList.add('fade-out');
+    setTimeout(() => { if (el.parentNode) el.parentNode.removeChild(el); }, 500);
+  });
+  discoveryEls = [];
+
+  clearSuggestedActions();
+  _setPendingPlayer(addChatMessage(text, 'player'));
+  input.value = '';
+  disableInput();
+  sendWS({ action: 'player_input', text });
 }
 
 function sendMessage() {
@@ -1224,19 +1365,119 @@ function sendMessage() {
   });
   discoveryEls = [];
 
-  addChatMessage(text, 'player');
+  clearSuggestedActions();
+  _setPendingPlayer(addChatMessage(text, 'player'));
   input.value = '';
   disableInput();
   sendWS({ action: 'player_input', text });
 }
 
+// ----------------------------------------------------------------------------
+// Wait experience: status ticker, ambient audio, optimistic echo
+// Custom (typed) input can't be pre-computed, so it always pays the full LLM
+// wait. These keep the screen alive during it. All are cleared in hideThinking,
+// the single chokepoint hit by both the 'narrative' and 'error' handlers, so a
+// cached instant reply simply flashes through them harmlessly.
+// ----------------------------------------------------------------------------
+let _thinkingTimer = null;     // ticker interval (null once parked or stopped)
+let _thinkingLineIdx = 0;      // current ticker line
+let _ambientTimer = null;      // ambient-beep interval
+let _pendingPlayerEl = null;   // the in-flight player command line
+
+function _thinkingLineList() {
+  return (LABELS[currentLang] && LABELS[currentLang].thinking_lines) || LABELS.en.thinking_lines || [];
+}
+function _thinkingLineText() {
+  const lines = _thinkingLineList();
+  if (!lines.length) return L('processing');
+  return lines[Math.min(_thinkingLineIdx, lines.length - 1)];
+}
+function _renderThinkingLine() {
+  const el = document.querySelector('.thinking-text');
+  if (el) el.textContent = _thinkingLineText();
+}
+function _startThinkingTicker() {
+  _stopThinkingTicker();
+  _thinkingLineIdx = 0;
+  _renderThinkingLine();
+  const hint = document.getElementById('thinkingHint');
+  if (hint) hint.textContent = L('thinking_hint');
+  _thinkingTimer = setInterval(() => {
+    const lines = _thinkingLineList();
+    if (_thinkingLineIdx >= lines.length - 1) {
+      // Reached the final "still tracing" line — park there (CSS keeps it
+      // pulsing) and stop ticking so a long wait never looks frozen.
+      clearInterval(_thinkingTimer); _thinkingTimer = null;
+      return;
+    }
+    _thinkingLineIdx++;
+    _renderThinkingLine();
+  }, 2600);
+}
+function _stopThinkingTicker() {
+  if (_thinkingTimer) { clearInterval(_thinkingTimer); _thinkingTimer = null; }
+  _thinkingLineIdx = 0;
+}
+
+function _startAmbient() {
+  _stopAmbient();
+  _ambientTimer = setInterval(() => {
+    // Honour the music mute toggle (isMuted is a function — call it).
+    if (typeof MusicEngine !== 'undefined' && typeof MusicEngine.isMuted === 'function' && MusicEngine.isMuted()) return;
+    if (Math.random() < 0.5) playBeep(150 + Math.random() * 130, 0.05 + Math.random() * 0.05, 0.006);
+  }, 650);
+}
+function _stopAmbient() {
+  if (_ambientTimer) { clearInterval(_ambientTimer); _ambientTimer = null; }
+}
+
+function _setPendingPlayer(el) {
+  _clearPendingPlayer();
+  if (el) { el.classList.add('pending'); _pendingPlayerEl = el; }
+}
+function _clearPendingPlayer() {
+  if (_pendingPlayerEl) { _pendingPlayerEl.classList.remove('pending'); _pendingPlayerEl = null; }
+}
+
+const _DECRYPT_GLYPHS = '▓▒░#@%&/\\|<>=+*01';
+/** Brief "signal locking in" scramble before an agent message types out. */
+function _decryptReveal(msg, contentEl, done) {
+  msg.classList.add('decrypting');
+  playBeep(420, 0.05, 0.02);
+  setTimeout(() => playBeep(900, 0.06, 0.02), 90); // two-tone lock-in
+  const width = 14;
+  let frames = 0;
+  const t = setInterval(() => {
+    let s = '';
+    for (let k = 0; k < width; k++) s += _DECRYPT_GLYPHS[Math.floor(Math.random() * _DECRYPT_GLYPHS.length)];
+    contentEl.textContent = s;
+    if (++frames >= 6) { // ~6 * 50ms ≈ 300ms
+      clearInterval(t);
+      contentEl.textContent = '';
+      msg.classList.remove('decrypting');
+      done();
+    }
+  }, 50);
+}
+
 function showThinking() {
   document.getElementById('thinkingIndicator').style.display = 'flex';
   document.getElementById('chatMessages').scrollTop = document.getElementById('chatMessages').scrollHeight;
+  _startThinkingTicker();
+  _startAmbient();
+  const tabs = document.querySelector('.panel-tabs');
+  if (tabs) tabs.classList.add('hint-pulse');
 }
-function hideThinking() { document.getElementById('thinkingIndicator').style.display = 'none'; }
-function enableInput() { const i = document.getElementById('chatInput'); i.disabled = false; i.focus(); document.querySelector('.send-btn').disabled = false; }
-function disableInput() { document.getElementById('chatInput').disabled = true; document.querySelector('.send-btn').disabled = true; }
+function hideThinking() {
+  document.getElementById('thinkingIndicator').style.display = 'none';
+  _stopThinkingTicker();
+  _stopAmbient();
+  _clearPendingPlayer();
+  const tabs = document.querySelector('.panel-tabs');
+  if (tabs) tabs.classList.remove('hint-pulse');
+}
+function enableInput() { const i = document.getElementById('chatInput'); i.disabled = false; i.focus(); document.querySelector('.send-btn').disabled = false; document.querySelectorAll('.suggested-action-btn').forEach(b => b.disabled = false); }
+function disableInput() { document.getElementById('chatInput').disabled = true; document.querySelector('.send-btn').disabled = true; document.querySelectorAll('.suggested-action-btn').forEach(b => b.disabled = true); }
 
 // ================================================================
 // SAVE / LOAD
@@ -1636,9 +1877,95 @@ function updateTracesPanel(traces) {
   document.getElementById('panel-traces').innerHTML = html;
 }
 
+// ---------- LOCATION IMAGES (assets/locations/*.png served at /assets) ----------
+// The live location carries a fixed `district` (one of the 8 canonical districts)
+// but a free-text `area` authored by the LLM, so we resolve cover art from the
+// bundled manifest: prefer a specific landmark named in the area (scoped to the
+// district), else the district establishing shot, else the Neo-Kowloon world shot.
+// Names are matched in either language. Art is optional — the panel works without it.
+const LOCATION_IMG_BASE = '/assets/locations/';
+let LOCATION_MANIFEST = null;          // { locations: [...] } once loaded
+let _locationManifestPending = false;
+
+function loadLocationManifest() {
+  if (LOCATION_MANIFEST || _locationManifestPending) return;
+  _locationManifestPending = true;
+  fetch(`${LOCATION_IMG_BASE}manifest.json`)
+    .then(r => (r.ok ? r.json() : null))
+    .then(m => {
+      LOCATION_MANIFEST = (m && Array.isArray(m.locations)) ? m : null;
+      // Re-render now that art is available (first render likely had none yet).
+      if (LOCATION_MANIFEST && cachedSession && cachedSession.location) {
+        updateDistrictPanel(cachedSession.location);
+      }
+    })
+    .catch(() => { /* art is optional */ })
+    .finally(() => { _locationManifestPending = false; });
+}
+
+// Strip whitespace/punctuation so free text and manifest names compare cleanly.
+function _locNorm(s) {
+  return String(s || '').toLowerCase()
+    .replace(/[\s’'"“”·・.,，、。—–\-_/\\|()（）【】「」\[\]]/g, '');
+}
+
+// True when `hay` contains this entry's canonical name (either language). Used for
+// the canonical `district` field, which is curated (and may be an "EN / 中文" pair),
+// so a plain substring test is safe there.
+function _locNameInText(entry, hay) {
+  if (!hay) return false;
+  for (const raw of [entry.name, entry.name_zh]) {
+    const n = _locNorm(raw);
+    if (n.length >= 2 && hay.includes(n)) return true;
+  }
+  return false;
+}
+
+// True when the free-text `area` actually names this place — ANCHORED so that a short
+// generic word (e.g. 盲区 "blind spot", 中庭 "atrium") used descriptively mid-sentence
+// does NOT resolve to a specific landmark the player isn't at. The area must lead with
+// the name (the usual phrasing when you're at a place, e.g. "雨巷的尽头", "The Void back
+// booth"); a plain substring match is only trusted for long, specific names (>=5 norm
+// chars: e.g. 子午线俱乐部, publicterminal) that are unlikely to appear by coincidence.
+function _areaNamesPlace(entry, areaN) {
+  if (!areaN) return false;
+  for (const raw of [entry.name, entry.name_zh]) {
+    const n = _locNorm(raw);
+    if (n.length < 2) continue;
+    if (areaN.startsWith(n)) return true;
+    if (n.length >= 5 && areaN.includes(n)) return true;
+  }
+  return false;
+}
+
+function locationImageEntry(location) {
+  if (!LOCATION_MANIFEST) return null;
+  const l = location || {};
+  const areaN = _locNorm(l.area);
+  const districtN = _locNorm(l.district);
+  const entries = LOCATION_MANIFEST.locations;
+
+  // Resolve the district entry (canonical field, then a mention in the area text).
+  let districtEntry = entries.find(e => e.category === 'district' && _locNameInText(e, districtN))
+    || (areaN ? entries.find(e => e.category === 'district' && _areaNamesPlace(e, areaN)) : null);
+
+  // Prefer a landmark named in the free-text area, scoped to the resolved district
+  // to avoid cross-district name collisions.
+  if (areaN) {
+    const scoped = entries.filter(e => e.category === 'landmark'
+      && (!districtEntry || e.district === districtEntry.district));
+    const landmark = scoped.find(e => _areaNamesPlace(e, areaN));
+    if (landmark) return landmark;
+  }
+
+  if (districtEntry) return districtEntry;
+  return entries.find(e => e.category === 'world') || null;
+}
+
 // ---------- DISTRICT PANEL (matches TUI DistrictPanel — no zone) ----------
 
 function updateDistrictPanel(location) {
+  loadLocationManifest();
   const l = location || {};
   const dangerCls = dangerColor(l.danger_level);
 
@@ -1672,9 +1999,21 @@ function updateDistrictPanel(location) {
 
   html += `</div>`;
 
-  if (l.description) {
-    html += `<div class="panel-section"><div class="panel-section-title">${L('description')}</div>
-      <div class="panel-description">${esc(l.description)}</div></div>`;
+  const imgEntry = locationImageEntry(l);
+  if (l.description || imgEntry) {
+    html += `<div class="panel-section"><div class="panel-section-title">${L('description')}</div>`;
+    if (imgEntry) {
+      const cap = currentLang === 'zh' && imgEntry.name_zh ? imgEntry.name_zh : imgEntry.name;
+      html += `<div class="location-image-frame">
+        <img class="location-image" src="${LOCATION_IMG_BASE}${esc(imgEntry.file)}" alt="${esc(cap)}" loading="lazy"
+             onerror="this.closest('.location-image-frame').style.display='none'">
+        <div class="location-image-caption">${esc(cap)}</div>
+      </div>`;
+    }
+    if (l.description) {
+      html += `<div class="panel-description">${esc(l.description)}</div>`;
+    }
+    html += `</div>`;
   }
 
   if (l.exits) {

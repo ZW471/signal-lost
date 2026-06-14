@@ -918,13 +918,65 @@ html, body {
   50% { opacity: 0; }
 }
 
+/* Optimistic echo: the just-sent player command, awaiting the world's response */
+.chat-msg.player.pending {
+  animation: player-pending-pulse 1.2s ease-in-out infinite;
+}
+.chat-msg.player.pending .msg-content::after {
+  content: '▌';
+  margin-left: 4px;
+  color: var(--cyan);
+  opacity: 0.8;
+  animation: cursor-blink 0.6s step-end infinite;
+}
+@keyframes player-pending-pulse {
+  0%, 100% { box-shadow: -2px 0 0 var(--cyan); }
+  50% { box-shadow: -2px 0 0 var(--cyan), -7px 0 14px rgba(0, 255, 245, 0.28); }
+}
+
+/* "Incoming transmission" decrypt flash before an agent message types out */
+.chat-msg.decrypting .msg-content {
+  color: var(--cyan);
+  text-shadow: 0 0 8px var(--cyan);
+  animation: decrypt-flicker 0.12s steps(2) infinite;
+}
+@keyframes decrypt-flicker {
+  0% { opacity: 0.55; }
+  50% { opacity: 1; }
+  100% { opacity: 0.75; }
+}
+
+/* Gentle breathing hint on the info-panel tabs while the player waits */
+.panel-tabs.hint-pulse {
+  animation: tabs-hint-pulse 2.2s ease-in-out infinite;
+}
+@keyframes tabs-hint-pulse {
+  0%, 100% { box-shadow: inset 0 -2px 0 rgba(0, 255, 245, 0); }
+  50% { box-shadow: inset 0 -2px 0 rgba(0, 255, 245, 0.45); }
+}
+
 /* Thinking indicator */
 .thinking-indicator {
   padding: 12px 16px;
   display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  color: var(--text-dim);
+}
+
+.thinking-row {
+  display: flex;
   align-items: center;
   gap: 12px;
-  color: var(--text-dim);
+}
+
+.thinking-hint {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.5px;
+  color: var(--cyan-dim);
+  opacity: 0.7;
 }
 
 .thinking-dots {
@@ -1017,6 +1069,87 @@ html, body {
   background: var(--cyan);
   color: var(--bg-dark);
   box-shadow: 0 0 15px rgba(0,255,245,0.3);
+}
+
+/* Suggested actions (quick-pick buttons above the input) */
+.suggested-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.suggested-actions:not(:empty) {
+  padding: 8px 16px 0;
+}
+.suggested-actions:empty {
+  display: none;
+}
+.suggested-action-btn {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 100%;
+  text-align: left;
+  background: var(--bg-input);
+  border: 1px solid var(--magenta);
+  color: var(--magenta);
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 1.35;
+  padding: 8px 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 8px 100%, 0 calc(100% - 8px));
+  animation: sa-fade-in 0.25s ease;
+}
+.suggested-action-btn::before {
+  content: "▷ ";
+  opacity: 0.7;
+}
+.suggested-action-btn:hover {
+  background: var(--magenta);
+  color: var(--bg-dark);
+  box-shadow: 0 0 14px rgba(255,0,255,0.3), inset 0 0 14px rgba(255,0,255,0.1);
+}
+.suggested-action-btn:active {
+  transform: translateY(1px);
+}
+.suggested-action-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+/* predict_outcome: still pre-computing this action's outcome */
+.suggested-action-btn.pending {
+  opacity: 0.6;
+  border-style: dashed;
+  animation: sa-fade-in 0.25s ease, sa-pulse 1.4s ease-in-out infinite;
+}
+.suggested-action-btn.pending::before {
+  content: "○ ";
+}
+/* predict_outcome: outcome cached — clicking is instant (cyan = warm) */
+.suggested-action-btn.ready {
+  border-color: var(--cyan);
+  color: var(--cyan);
+  opacity: 1;
+}
+.suggested-action-btn.ready::before {
+  content: "⚡ ";
+  opacity: 1;
+}
+.suggested-action-btn.ready:hover {
+  background: var(--cyan);
+  color: var(--bg-dark);
+  box-shadow: 0 0 14px rgba(0,255,245,0.3), inset 0 0 14px rgba(0,255,245,0.1);
+}
+@keyframes sa-fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes sa-pulse {
+  0%, 100% { opacity: 0.45; }
+  50%      { opacity: 0.7; }
 }
 
 /* ================================================================
@@ -1578,6 +1711,52 @@ html, body {
   line-height: 1.6;
   font-style: italic;
   opacity: 0.8;
+}
+
+/* Location cover art — a framed "viewscreen" above the description prose.
+   Source art is 128x128 pixel-art, scaled up crisp to the panel width. */
+.location-image-frame {
+  position: relative;
+  margin-bottom: 10px;
+  border: 1px solid var(--border);
+  background: var(--bg-input);
+  box-shadow: 0 0 10px rgba(0, 255, 245, 0.12);
+  overflow: hidden;
+  line-height: 0; /* remove inline-image descender gap */
+}
+
+.location-image {
+  display: block;
+  width: 100%;
+  height: auto;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+
+/* CRT vignette + scanlines to match the cyberpunk terminal aesthetic. */
+.location-image-frame::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(rgba(0, 0, 0, 0) 55%, rgba(0, 0, 0, 0.5)),
+    repeating-linear-gradient(rgba(0, 255, 245, 0.05) 0 1px, transparent 1px 3px);
+}
+
+.location-image-caption {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 5px 8px;
+  font-family: var(--font-display);
+  font-size: 10px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--cyan);
+  text-shadow: 0 0 6px rgba(0, 0, 0, 0.9), 0 1px 2px rgba(0, 0, 0, 0.9);
+  pointer-events: none;
 }
 
 /* ================================================================

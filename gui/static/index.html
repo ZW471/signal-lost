@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>SIGNAL LOST</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='4' fill='%230a0a0f'/><text x='16' y='22' text-anchor='middle' font-size='18' fill='%2300ff88'>S</text></svg>">
-  <link rel="stylesheet" href="/static/style.css?v=avatars1">
+  <link rel="stylesheet" href="/static/style.css?v=locimg1">
   <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
@@ -190,11 +190,15 @@
       <div class="chat-panel" id="chatPanel">
         <div class="chat-messages" id="chatMessages"></div>
         <div class="thinking-indicator" id="thinkingIndicator" style="display:none">
-          <div class="thinking-dots">
-            <span></span><span></span><span></span>
+          <div class="thinking-row">
+            <div class="thinking-dots">
+              <span></span><span></span><span></span>
+            </div>
+            <span class="thinking-text">PROCESSING NEURAL INPUT</span>
           </div>
-          <span class="thinking-text">PROCESSING NEURAL INPUT</span>
+          <span class="thinking-hint" id="thinkingHint"></span>
         </div>
+        <div class="suggested-actions" id="suggestedActions" aria-label="Suggested actions"></div>
         <div class="chat-input-container">
           <div class="input-prefix">▶</div>
           <input type="text" class="chat-input" id="chatInput" placeholder="What do you do?" autocomplete="off" onkeydown="if(event.key==='Enter')sendMessage()">
@@ -358,6 +362,17 @@
             <span class="slider-value" id="musicVolValue">35%</span>
           </div>
         </div>
+        <h4 class="config-subtitle" id="gameplaySectionTitle">// GAMEPLAY</h4>
+        <div class="form-group">
+          <label class="cyber-label" style="display:flex;align-items:center;gap:8px;cursor:pointer">
+            <input type="checkbox" id="chkSuggestedActions" style="accent-color:var(--cyan)"> <span id="lblSuggestedActions">Suggest actions each turn</span>
+          </label>
+        </div>
+        <div class="form-group">
+          <label class="cyber-label" style="display:flex;align-items:center;gap:8px;cursor:pointer">
+            <input type="checkbox" id="chkPredictOutcome" style="accent-color:var(--cyan)"> <span id="lblPredictOutcome">Pre-compute suggested actions (instant replies, extra LLM calls)</span>
+          </label>
+        </div>
         <div class="form-actions">
           <button class="cyber-btn accent" onclick="saveSettings()">
             <span class="cyber-btn-text">SAVE</span>
@@ -375,6 +390,6 @@
   <div id="notification" class="notification"></div>
 
   <script src="/static/music.js"></script>
-  <script src="/static/app.js?v=avatars1"></script>
+  <script src="/static/app.js?v=locimg1"></script>
 </body>
 </html>
