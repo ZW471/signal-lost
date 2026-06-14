@@ -205,6 +205,99 @@ const MusicEngine = (() => {
     }
   }
 
+  // ---------------------------------------------------------------
+  // Visibility / focus auto-pause
+  //
+  // Pause the music when the user is not looking at the page (tab
+  // switch, window blur/minimize on desktop, app-switch or screen
+  // lock on mobile). Resume when the page is visible/focused again,
+  // but only if we were the ones who paused it and the user has not
+  // manually muted in the meantime.
+  // ---------------------------------------------------------------
+  const VIS_FADE_MS = 250;  // short, snappy fade — page is backgrounding
+  let _pausedByVisibility = false;
+  let _visFadeTimer = null;
+
+  /** True if there is a live audio element that is currently playing */
+  function _isPlaying() {
+    return !!(currentAudio && !currentAudio.paused);
+  }
+
+  /** Cancel a visibility-driven fade if one is in flight */
+  function _clearVisFade() {
+    if (_visFadeTimer) {
+      clearInterval(_visFadeTimer);
+      _visFadeTimer = null;
+    }
+  }
+
+  /** Called when the page is hidden / window loses focus */
+  function _onHide() {
+    // Nothing to do if there's no track or it isn't actually playing,
+    // or we've already paused it.
+    if (_pausedByVisibility) return;
+    if (!_isPlaying()) return;
+
+    // Kill any in-flight crossfade/visibility fade so they can't
+    // resurrect the volume after we pause.
+    if (_fadeOutTimer) { clearInterval(_fadeOutTimer); _fadeOutTimer = null; }
+    if (_fadeInTimer) { clearInterval(_fadeInTimer); _fadeInTimer = null; }
+    _clearVisFade();
+
+    _pausedByVisibility = true;
+    const audio = currentAudio;
+    _visFadeTimer = fade(audio, 0, VIS_FADE_MS, () => {
+      _visFadeTimer = null;
+      // Only pause if this is still the active track (guard against a
+      // track switch racing in during the fade).
+      if (audio) audio.pause();
+    });
+  }
+
+  /** Called when the page becomes visible / window regains focus */
+  function _onShow() {
+    if (!_pausedByVisibility) return;
+    _pausedByVisibility = false;
+
+    _clearVisFade();
+
+    // Respect a manual mute that may have happened while hidden, and
+    // bail if nothing is around to resume.
+    if (muted) return;
+    if (!currentAudio) return;
+
+    const audio = currentAudio;
+    const playPromise = audio.play();
+    const fadeUp = () => {
+      _visFadeTimer = fade(audio, effectiveVolume(), VIS_FADE_MS, () => {
+        _visFadeTimer = null;
+      });
+    };
+    if (playPromise && typeof playPromise.then === 'function') {
+      playPromise.then(fadeUp).catch(() => {});
+    } else {
+      fadeUp();
+    }
+  }
+
+  // Page Visibility API is the primary, reliable signal (fires on
+  // mobile app-switch / screen-lock and desktop tab-switch).
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) _onHide();
+    else _onShow();
+  });
+
+  // Window blur/focus catches desktop un-focus without a tab switch
+  // (e.g. clicking another window / minimizing). These are guarded by
+  // the _pausedByVisibility flag so they don't fight visibilitychange.
+  window.addEventListener('blur', _onHide);
+  window.addEventListener('focus', _onShow);
+
+  // pagehide/pageshow cover mobile bfcache transitions where
+  // visibilitychange may not fire consistently.
+  window.addEventListener('pagehide', _onHide);
+  window.addEventListener('pageshow', _onShow);
+
   return {
     switchTo,
     updateFromSession,
