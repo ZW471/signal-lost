@@ -508,15 +508,16 @@ function setLanguage(lang) {
   const reconnectBtn = document.querySelector('#gameOverOverlay .cyber-btn-text');
   if (reconnectBtn) reconnectBtn.textContent = L('game_over_reconnect');
 
-  // Status bar button titles — mapped by identity (id or onclick) so the
-  // button order can change without misaligning the localized tooltips.
-  const btnTitleMap = lang === 'zh'
-    ? { btnInfoPanels: '信息面板', btnTutorial: '教程', btnMusicToggle: '音乐', 'saveGame()': '保存', 'openSettings()': '设置', 'showMenu()': '菜单' }
-    : { btnInfoPanels: 'Info Panels', btnTutorial: 'Tutorial', btnMusicToggle: 'Music', 'saveGame()': 'Save Game', 'openSettings()': 'Settings', 'showMenu()': 'Menu' };
-  document.querySelectorAll('.status-item.actions .status-btn').forEach(btn => {
-    const key = btn.id || (btn.getAttribute('onclick') || '').trim();
-    if (btnTitleMap[key]) btn.title = btnTitleMap[key];
-  });
+  // Status bar: info-panel toggle tooltip + the consolidated nav menu labels.
+  const isZhUI = lang === 'zh';
+  const infoBtn = document.getElementById('btnInfoPanels');
+  if (infoBtn) infoBtn.title = isZhUI ? '信息面板' : 'Info Panels';
+  const navBtn = document.getElementById('btnNavMenu');
+  if (navBtn) navBtn.title = isZhUI ? '菜单' : 'Menu';
+  const navLabels = isZhUI
+    ? { navItemTutorial: '教程', navItemSave: '保存游戏', navItemSettings: '设置', navItemMenu: '主菜单' }
+    : { navItemTutorial: 'Tutorial', navItemSave: 'Save Game', navItemSettings: 'Settings', navItemMenu: 'Main Menu' };
+  Object.entries(navLabels).forEach(([id, label]) => { const el = document.getElementById(id); if (el) el.textContent = label; });
 
   // Re-render all panels if we have cached session
   if (cachedSession) updateAllPanels(cachedSession);
@@ -1711,13 +1712,6 @@ function disableInput() { document.getElementById('chatInput').disabled = true; 
 // SAVE / LOAD
 // ================================================================
 
-function toggleMusic() {
-  const muted = MusicEngine.toggleMute();
-  const btn = document.getElementById('btnMusicToggle');
-  if (btn) btn.textContent = muted ? '\u{1F507}' : '\u{1F50A}';
-  playBeep(muted ? 400 : 800, 0.03);
-}
-
 function _defaultSaveName() {
   const now = new Date();
   const mm = String(now.getMonth() + 1).padStart(2, '0');
@@ -1725,7 +1719,7 @@ function _defaultSaveName() {
   const yyyy = now.getFullYear();
   const hh = String(now.getHours()).padStart(2, '0');
   const mi = String(now.getMinutes()).padStart(2, '0');
-  const alias = (document.getElementById('statAlias')?.textContent || '').trim() || 'Unknown';
+  const alias = (cachedSession?.player?.alias || cachedSession?.player?.name || 'Unknown');
   return `${mm}-${dd}-${yyyy} ${hh}:${mi} ${alias}`;
 }
 function saveGame() { const el = document.getElementById('saveName'); el.value = _defaultSaveName(); document.getElementById('saveDialog').style.display = 'flex'; el.focus(); el.select(); playBeep(1000, 0.04); }
@@ -1963,6 +1957,43 @@ function closeInfoPanels() {
   if (btn) btn.classList.remove('active');
 }
 
+// Consolidated top-right nav menu (Tutorial / Save / Settings / Main Menu).
+function toggleNavMenu(ev) {
+  if (ev) ev.stopPropagation();
+  const menu = document.getElementById('navMenu');
+  const btn = document.getElementById('btnNavMenu');
+  if (!menu) return;
+  const open = menu.classList.toggle('open');
+  menu.setAttribute('aria-hidden', String(!open));
+  if (btn) btn.setAttribute('aria-expanded', String(open));
+  playBeep(700, 0.02);
+}
+
+function closeNavMenu() {
+  const menu = document.getElementById('navMenu');
+  const btn = document.getElementById('btnNavMenu');
+  if (menu && menu.classList.contains('open')) {
+    menu.classList.remove('open');
+    menu.setAttribute('aria-hidden', 'true');
+    if (btn) btn.setAttribute('aria-expanded', 'false');
+  }
+}
+
+function navMenuAction(which) {
+  closeNavMenu();
+  if (which === 'tutorial') startTutorial();
+  else if (which === 'save') saveGame();
+  else if (which === 'settings') openSettings();
+  else if (which === 'menu') showMenu();
+}
+
+// Dismiss the nav menu on outside click or Escape.
+document.addEventListener('click', (e) => {
+  const wrap = document.querySelector('.nav-menu-wrap');
+  if (wrap && !wrap.contains(e.target)) closeNavMenu();
+});
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeNavMenu(); });
+
 function updateAllPanels(session) {
   cachedSession = session;
   updateStatusBar(session);
@@ -1990,9 +2021,6 @@ function updateStatusBar(session) {
   const l = session.location || {};
   const integrity = p.integrity || {};
 
-  // Alias
-  setText('statAlias', p.alias || p.name || '—');
-
   // Integrity pips: filled █ and empty ░
   const cur = integrity.current || 0, max = integrity.max || 3;
   let pips = '';
@@ -2005,19 +2033,10 @@ function updateStatusBar(session) {
   setText('statLocation', l.district || '—');
   setText('statArea', l.area || '—');
 
-  // Time with icon + translation
-  const timeRaw = p.time || 'Morning';
-  const timeStr = timeRaw.toLowerCase();
-  const timeIcon = TIME_ICONS[timeStr] || '';
-  const timeDisplay = localizeData('time', timeRaw);
-  setText('statTime', `${timeIcon} ${timeDisplay}`);
-
   // Translate status bar labels
-  setText('statLabelAlias', L('alias').toUpperCase());
   setText('statLabelIntegrity', L('integrity').toUpperCase());
   setText('statLabelLocation', L('location').toUpperCase());
   setText('statLabelArea', L('area').toUpperCase());
-  setText('statLabelTime', L('time').toUpperCase());
 }
 
 function countDiscoveredTraces(traces) {

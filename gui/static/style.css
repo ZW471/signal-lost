@@ -2115,34 +2115,60 @@ mark.search-hl {
 }
 
 /* ================================================================
-   BRAND WORDMARK (in-game, top-left of the status bar)
+   NAV MENU (consolidated top-right menu button + dropdown)
    ================================================================ */
 
-.game-logo {
+.nav-menu-wrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.nav-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 170px;
   display: flex;
-  align-items: center;
-  gap: 7px;
-  padding: 2px 12px 2px 2px;
-  border-right: 1px solid var(--border);
-  flex-shrink: 0;
-  user-select: none;
+  flex-direction: column;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.6), 0 0 16px rgba(0, 255, 245, 0.12);
+  opacity: 0;
+  transform: translateY(-6px);
+  pointer-events: none;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+  z-index: 70;
 }
 
-.game-logo-glyph {
-  width: 22px;
-  height: 22px;
-  flex-shrink: 0;
-  filter: drop-shadow(0 0 4px rgba(0, 255, 136, 0.5));
+.nav-menu.open {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
 }
 
-.game-logo-text {
+.nav-menu-item {
+  padding: 12px 16px;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
   font-family: var(--font-display);
-  font-weight: 900;
-  font-size: 13px;
-  letter-spacing: 2px;
-  color: var(--text-bright);
-  text-shadow: 0 0 8px rgba(0, 255, 245, 0.35);
+  font-size: 12px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  text-align: left;
   white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.nav-menu-item:last-child { border-bottom: none; }
+
+.nav-menu-item:hover,
+.nav-menu-item:focus-visible {
+  background: rgba(0, 255, 245, 0.1);
+  color: var(--cyan);
+  outline: none;
 }
 
 /* ================================================================
@@ -2203,13 +2229,8 @@ mark.search-hl {
   }
   .status-value { font-size: 13px; }
   .status-value.truncate { max-width: 90px; }
-  /* AREA is the least essential — drop its label/value crowding on small screens. */
-  .status-bar .status-item:nth-child(5) { display: none; }
-
-  /* Compact the wordmark so it doesn't crowd the bar. */
-  .game-logo { padding: 2px 8px 2px 0; gap: 5px; }
-  .game-logo-glyph { width: 18px; height: 18px; }
-  .game-logo-text { font-size: 11px; letter-spacing: 1px; }
+  /* AREA is the least essential — drop it on small screens to save room. */
+  .status-item-area { display: none; }
 
   /* Actions group stays on the right; allow wrapping. */
   .status-item.actions {
@@ -2628,11 +2649,6 @@ mark.search-hl {
 
 /* Finer phone tuning for very narrow devices. */
 @media (max-width: 480px) {
-  .game-logo-text { display: none; } /* glyph-only on tiny screens */
-  .status-value.truncate { max-width: 72px; }
-  .status-bar .status-item:nth-child(4) .status-label,
-  .status-bar .status-item:nth-child(6) .status-label {
-    font-size: 8px;
-  }
+  .status-value.truncate { max-width: 96px; }
   .panel-tab { padding: 9px 10px; font-size: 10px; }
 }
