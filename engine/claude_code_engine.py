@@ -978,7 +978,15 @@ def run_turn(session_dir: str, player_input: str, mode: str = "play") -> dict:
     # ── Step 2: Build mega-prompt ────────────────────────────────────
     deepest_layer = extract_deepest_layer(traces)
     static_prompt = build_static_prompt(language, deepest_layer)
-    dynamic_prompt = build_dynamic_state_prompt(state)
+    # The turn-1 opening is cached and shared across players (keyed by language +
+    # background), so strip the player's name/alias from the state used to build
+    # it — otherwise the model could echo a real player's identity into a scene
+    # later shown to everyone. Mirrors pregen_openings.py (empty name/alias).
+    if is_resume and player.get("turn", 1) == 1:
+        prompt_state = {**state, "player": {**player, "name": "", "alias": ""}}
+    else:
+        prompt_state = state
+    dynamic_prompt = build_dynamic_state_prompt(prompt_state)
     validator_context = _build_validator_context(state)
     conversation_history = _read_conversation_history(session_dir, last_n=5)
 
@@ -987,13 +995,34 @@ def run_turn(session_dir: str, player_input: str, mode: str = "play") -> dict:
     system_prompt = f"{static_prompt}\n\n{dynamic_prompt}\n\n{output_spec}"
 
     if is_resume:
-        user_prompt = (
-            f"[SYSTEM: Session resumed. The player is {player.get('name', 'unknown')} "
-            f"(alias: {player.get('alias', '?')}), a {player.get('background', '?')}. "
-            f"Currently at {location.get('area', '?')} in {location.get('district', '?')}. "
-            f"Turn {player.get('turn', 1)}. Provide a brief scene-setting narrative. "
-            f"Do NOT call any tools. Return minimal JSON with just narrative.]"
-        )
+        if player.get("turn", 1) == 1:
+            # Fresh new-game opening. Written name-agnostically (second person, no
+            # player name/alias) so the scene can be cached once and reused for
+            # every new player of this (language, background) — see
+            # engine/opening_cache.py / gui/server.py.
+            user_prompt = (
+                f"[SYSTEM: New game — opening scene. The player is a "
+                f"{player.get('background', '?')} at {location.get('area', '?')} in "
+                f"{location.get('district', '?')}. Turn 1. Write a brief, atmospheric "
+                f"second-person ('you') scene-setting opening. Do NOT use the player's name "
+                f"or alias or invent any proper name for them — this exact opening is shown to "
+                f"every new player of this background. Do NOT call any tools (leave tool_calls "
+                f"empty), but DO fill suggested_actions with 1-3 short, distinct opening moves "
+                f"grounded only in what the player can currently see (follow the "
+                f"suggested_actions rules above). Return JSON with just narrative and "
+                f"suggested_actions.]"
+            )
+        else:
+            user_prompt = (
+                f"[SYSTEM: Session resumed. The player is {player.get('name', 'unknown')} "
+                f"(alias: {player.get('alias', '?')}), a {player.get('background', '?')}. "
+                f"Currently at {location.get('area', '?')} in {location.get('district', '?')}. "
+                f"Turn {player.get('turn', 1)}. Provide a brief scene-setting narrative. "
+                f"Do NOT call any tools (leave tool_calls empty), but DO fill suggested_actions "
+                f"with 1-3 short, distinct opening moves grounded only in what the player can "
+                f"currently see and already knows (follow the suggested_actions rules above). "
+                f"Return JSON with just narrative and suggested_actions.]"
+            )
     else:
         user_prompt = player_input
 

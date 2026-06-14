@@ -1,0 +1,19 @@
+{
+  "language": "en",
+  "background": "corporate_exile",
+  "narrative": "Rain needles down through the stacked alleys of The Sprawl, turning neon signs into bruised color on black pavement. You come awake beside a rusted service door with cold water in your collar and a faint hum behind your left ear.\n\nYour pockets hold fifty credits and an expired NEXUS keycard. No name rises with them. No memory. Just the smell of hot oil from the noodle shop to the east, the hiss of traffic on the main street north, and a woman behind the counter watching you like she saw you fall from somewhere high.",
+  "suggested_actions": [
+    {
+      "id": "sa-1",
+      "text": "Enter the noodle shop"
+    },
+    {
+      "id": "sa-2",
+      "text": "Examine the keycard"
+    },
+    {
+      "id": "sa-3",
+      "text": "Go to the public terminal"
+    }
+  ]
+}

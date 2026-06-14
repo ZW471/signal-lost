@@ -715,6 +715,8 @@ let cachedSessions = [];
 let selectedBackground = 'street_runner';
 let isFirstInput = true; // Track if first input after resume (to remove system message)
 let pendingTutorial = false; // Show tutorial after new game starts
+let _firstSceneArmed = false; // New game in progress: hold the opening scene until the tutorial ends
+let _pendingFirstScene = null; // Buffered opening 'narrative' payload, revealed on endTutorial
 let resumeMessageEl = null; // Reference to the resume system message element
 let discoveryEls = []; // Track discovery notification elements (ephemeral)
 let _cachedFeatures = null; // Latest gameplay feature flags from the server
@@ -757,6 +759,15 @@ function handleServerMessage(msg) {
       break;
 
     case 'narrative':
+      // New game: the tutorial masks the first-turn wait. Buffer the opening
+      // scene (and its suggested actions) and reveal it the instant the tutorial
+      // ends — never type it out behind the overlay. Falls through to normal
+      // rendering if the tutorial is already done (slow first turn).
+      if (_firstSceneArmed && (msg.role || 'agent') === 'system') {
+        hideThinking();
+        _pendingFirstScene = msg;
+        break;
+      }
       hideThinking();
       const role = msg.role || 'agent';
       if (role === 'system') {
@@ -1094,6 +1105,7 @@ function startNewGame() {
     language: document.getElementById('selectLanguage').value,
   };
   clearChat(); isFirstInput = true; pendingTutorial = true; resumeMessageEl = null;
+  _firstSceneArmed = true; _pendingFirstScene = null; // hold opening scene until tutorial ends
   sendWS({ action: 'new_game', config, provider: getProviderConfig() });
   switchScreen('gameScreen'); showThinking(); disableInput();
 }
@@ -1110,6 +1122,7 @@ function resumeGame(sessionName) {
     }
   }
   clearChat(); isFirstInput = true; resumeMessageEl = null;
+  _firstSceneArmed = false; _pendingFirstScene = null; // resume/load shows no tutorial — render scene immediately
   sendWS({ action: 'resume', session_name: sessionName, provider: getProviderConfig() });
   switchScreen('gameScreen'); showThinking(); disableInput();
 }
@@ -1134,6 +1147,7 @@ function showResumeSessionPicker() {
 
 function loadGame(saveName) {
   clearChat(); isFirstInput = true; resumeMessageEl = null;
+  _firstSceneArmed = false; _pendingFirstScene = null; // resume/load shows no tutorial — render scene immediately
   sendWS({ action: 'load_game', save_name: saveName, provider: getProviderConfig() });
   switchScreen('gameScreen'); showThinking(); disableInput();
 }
@@ -1280,9 +1294,16 @@ function addTypingMessage(text, role = 'agent', usage = null, elapsedSeconds = n
 // Suggested actions (quick-pick buttons)
 // ----------------------------------------------------------------------------
 
+// Action texts whose pre-computed outcome has landed (prediction_ready). Lets a
+// button render straight to "ready" when its prediction finished before the
+// buttons were drawn — which is the norm for the buffered opening scene, where
+// predictions complete while the player is still reading the tutorial.
+let _readyPredictions = new Set();
+
 function clearSuggestedActions() {
   const c = document.getElementById('suggestedActions');
   if (c) c.innerHTML = '';
+  _readyPredictions.clear();
 }
 
 function renderSuggestedActions(actions) {
@@ -1298,12 +1319,15 @@ function renderSuggestedActions(actions) {
   actions.slice(0, 3).forEach((a, idx) => {
     const text = (a && (a.text || a)) ? (a.text || a) : '';
     if (!text) return;
+    // A prediction may already be ready (e.g. it finished during the tutorial).
+    const ready = predicting && _readyPredictions.has(text);
     const btn = document.createElement('button');
     btn.type = 'button';
-    btn.className = 'suggested-action-btn' + (predicting ? ' pending' : '');
+    btn.className = 'suggested-action-btn' + (ready ? ' ready' : (predicting ? ' pending' : ''));
     btn.dataset.action = text;
     btn.textContent = text;
-    btn.title = predicting ? (text + ' — pre-computing…') : text;
+    btn.title = ready ? (text + ' — ready (instant)')
+              : (predicting ? (text + ' — pre-computing…') : text);
     btn.onclick = () => chooseSuggestedAction(text);
     c.appendChild(btn);
   });
@@ -1311,6 +1335,7 @@ function renderSuggestedActions(actions) {
 
 function markPredictionReady(text) {
   if (!text) return;
+  _readyPredictions.add(text); // remember, so a later render can start "ready"
   document.querySelectorAll('#suggestedActions .suggested-action-btn').forEach(btn => {
     if (btn.dataset.action === text) {
       btn.classList.remove('pending');
@@ -1565,6 +1590,22 @@ function endTutorial() {
   const idTab = document.querySelector('[data-panel="identity"]');
   if (idTab) switchPanel(idTab);
   playBeep(600, 0.03);
+  _revealFirstScene();
+}
+
+// Reveal the buffered opening scene once the tutorial is dismissed. Clearing
+// _firstSceneArmed first means that if the first turn hasn't returned yet, the
+// 'narrative' handler will render it normally (with the live thinking indicator)
+// instead of re-buffering it.
+function _revealFirstScene() {
+  _firstSceneArmed = false;
+  const msg = _pendingFirstScene;
+  _pendingFirstScene = null;
+  if (!msg) return;
+  hideThinking();
+  const role = msg.role || 'agent';
+  resumeMessageEl = addTypingMessage(msg.text, role, null, msg.elapsed_seconds, msg.suggested_actions);
+  isFirstInput = true;
 }
 
 function nextTutorialStep() {

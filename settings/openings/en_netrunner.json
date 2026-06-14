@@ -1,0 +1,19 @@
+{
+  "language": "en",
+  "background": "netrunner",
+  "narrative": "Rain needles down through the neon haze of The Sprawl, turning the alley into a black mirror. You come awake on wet concrete with no memory, a bitter taste in your mouth, and an old neural implant humming behind your left ear like a trapped insect.\n\nWarm light spills from Mira's Noodle Shop to the east. A woman behind the counter watches you through the steam. North, the main street breathes with vendors, a public NEXUS terminal, and the clatter of cheap electronics from a repair stall. South, the alleys narrow into shadow. West, the market square roars under flickering signs and rain-slick awnings.",
+  "suggested_actions": [
+    {
+      "id": "sa-1",
+      "text": "Enter Mira's noodle shop"
+    },
+    {
+      "id": "sa-2",
+      "text": "Check the public terminal"
+    },
+    {
+      "id": "sa-3",
+      "text": "Go to the market square"
+    }
+  ]
+}
