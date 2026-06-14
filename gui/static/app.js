@@ -92,6 +92,16 @@ const LABELS = {
     location: 'LOCATION',
     // Chat
     chat_placeholder: 'What do you do?', processing: 'PROCESSING NEURAL INPUT',
+    thinking_hint: '// link resolving — review your INTEL panels while you wait',
+    thinking_lines: [
+      'PARSING NEURAL INPUT…',
+      'CROSS-REFERENCING THE GRID…',
+      'ROUTING THROUGH DEAD CHANNELS…',
+      'THE CITY LISTENS…',
+      'DECRYPTING SIGNAL FRAGMENTS…',
+      'COMPILING RESPONSE…',
+      'STILL TRACING — DEEP LINK…',
+    ],
     // Danger
     safe: 'Safe', low: 'Low', moderate: 'Moderate', high: 'High', extreme: 'Extreme',
     // Menu & UI
@@ -180,6 +190,16 @@ const LABELS = {
     player_label: '玩家', agent_label: '引擎',
     location: '位置',
     chat_placeholder: '你想做什么？', processing: '正在处理神经输入',
+    thinking_hint: '// 链路解析中 —— 可在等待时查看右侧情报面板',
+    thinking_lines: [
+      '解析神经输入…',
+      '比对城市网格…',
+      '穿行废弃信道…',
+      '城市正在倾听…',
+      '解密信号碎片…',
+      '编译回应…',
+      '深度追踪中…',
+    ],
     safe: '安全', low: '低', moderate: '中', high: '高', extreme: '极端',
     // Menu & UI
     game_title: '信号遗失',
@@ -311,7 +331,11 @@ function setLanguage(lang) {
   const chatInput = document.getElementById('chatInput');
   if (chatInput) chatInput.placeholder = L('chat_placeholder');
   const thinkingText = document.querySelector('.thinking-text');
-  if (thinkingText) thinkingText.textContent = L('processing');
+  // If the wait ticker is mid-cycle, re-render its current line in the new
+  // language; otherwise fall back to the resting label.
+  if (thinkingText) thinkingText.textContent = (_thinkingTimer || _thinkingLineIdx > 0) ? _thinkingLineText() : L('processing');
+  const thinkingHint = document.getElementById('thinkingHint');
+  if (thinkingHint) thinkingHint.textContent = L('thinking_hint');
 
   // Game title (boot logo, menu h1, game over h1)
   const title = L('game_title');
@@ -1242,7 +1266,13 @@ function addTypingMessage(text, role = 'agent', usage = null, elapsedSeconds = n
       renderSuggestedActions(suggestedActions);
     }
   }
-  typeNext();
+  // Agent narration gets a brief "incoming transmission" decrypt flash first;
+  // resume/system messages type out plainly.
+  if (role === 'agent') {
+    _decryptReveal(msg, contentEl, typeNext);
+  } else {
+    typeNext();
+  }
   return msg;
 }
 
@@ -1309,7 +1339,7 @@ function chooseSuggestedAction(text) {
   discoveryEls = [];
 
   clearSuggestedActions();
-  addChatMessage(text, 'player');
+  _setPendingPlayer(addChatMessage(text, 'player'));
   input.value = '';
   disableInput();
   sendWS({ action: 'player_input', text });
@@ -1336,17 +1366,116 @@ function sendMessage() {
   discoveryEls = [];
 
   clearSuggestedActions();
-  addChatMessage(text, 'player');
+  _setPendingPlayer(addChatMessage(text, 'player'));
   input.value = '';
   disableInput();
   sendWS({ action: 'player_input', text });
 }
 
+// ----------------------------------------------------------------------------
+// Wait experience: status ticker, ambient audio, optimistic echo
+// Custom (typed) input can't be pre-computed, so it always pays the full LLM
+// wait. These keep the screen alive during it. All are cleared in hideThinking,
+// the single chokepoint hit by both the 'narrative' and 'error' handlers, so a
+// cached instant reply simply flashes through them harmlessly.
+// ----------------------------------------------------------------------------
+let _thinkingTimer = null;     // ticker interval (null once parked or stopped)
+let _thinkingLineIdx = 0;      // current ticker line
+let _ambientTimer = null;      // ambient-beep interval
+let _pendingPlayerEl = null;   // the in-flight player command line
+
+function _thinkingLineList() {
+  return (LABELS[currentLang] && LABELS[currentLang].thinking_lines) || LABELS.en.thinking_lines || [];
+}
+function _thinkingLineText() {
+  const lines = _thinkingLineList();
+  if (!lines.length) return L('processing');
+  return lines[Math.min(_thinkingLineIdx, lines.length - 1)];
+}
+function _renderThinkingLine() {
+  const el = document.querySelector('.thinking-text');
+  if (el) el.textContent = _thinkingLineText();
+}
+function _startThinkingTicker() {
+  _stopThinkingTicker();
+  _thinkingLineIdx = 0;
+  _renderThinkingLine();
+  const hint = document.getElementById('thinkingHint');
+  if (hint) hint.textContent = L('thinking_hint');
+  _thinkingTimer = setInterval(() => {
+    const lines = _thinkingLineList();
+    if (_thinkingLineIdx >= lines.length - 1) {
+      // Reached the final "still tracing" line — park there (CSS keeps it
+      // pulsing) and stop ticking so a long wait never looks frozen.
+      clearInterval(_thinkingTimer); _thinkingTimer = null;
+      return;
+    }
+    _thinkingLineIdx++;
+    _renderThinkingLine();
+  }, 2600);
+}
+function _stopThinkingTicker() {
+  if (_thinkingTimer) { clearInterval(_thinkingTimer); _thinkingTimer = null; }
+  _thinkingLineIdx = 0;
+}
+
+function _startAmbient() {
+  _stopAmbient();
+  _ambientTimer = setInterval(() => {
+    // Honour the music mute toggle (isMuted is a function — call it).
+    if (typeof MusicEngine !== 'undefined' && typeof MusicEngine.isMuted === 'function' && MusicEngine.isMuted()) return;
+    if (Math.random() < 0.5) playBeep(150 + Math.random() * 130, 0.05 + Math.random() * 0.05, 0.006);
+  }, 650);
+}
+function _stopAmbient() {
+  if (_ambientTimer) { clearInterval(_ambientTimer); _ambientTimer = null; }
+}
+
+function _setPendingPlayer(el) {
+  _clearPendingPlayer();
+  if (el) { el.classList.add('pending'); _pendingPlayerEl = el; }
+}
+function _clearPendingPlayer() {
+  if (_pendingPlayerEl) { _pendingPlayerEl.classList.remove('pending'); _pendingPlayerEl = null; }
+}
+
+const _DECRYPT_GLYPHS = '▓▒░#@%&/\\|<>=+*01';
+/** Brief "signal locking in" scramble before an agent message types out. */
+function _decryptReveal(msg, contentEl, done) {
+  msg.classList.add('decrypting');
+  playBeep(420, 0.05, 0.02);
+  setTimeout(() => playBeep(900, 0.06, 0.02), 90); // two-tone lock-in
+  const width = 14;
+  let frames = 0;
+  const t = setInterval(() => {
+    let s = '';
+    for (let k = 0; k < width; k++) s += _DECRYPT_GLYPHS[Math.floor(Math.random() * _DECRYPT_GLYPHS.length)];
+    contentEl.textContent = s;
+    if (++frames >= 6) { // ~6 * 50ms ≈ 300ms
+      clearInterval(t);
+      contentEl.textContent = '';
+      msg.classList.remove('decrypting');
+      done();
+    }
+  }, 50);
+}
+
 function showThinking() {
   document.getElementById('thinkingIndicator').style.display = 'flex';
   document.getElementById('chatMessages').scrollTop = document.getElementById('chatMessages').scrollHeight;
+  _startThinkingTicker();
+  _startAmbient();
+  const tabs = document.querySelector('.panel-tabs');
+  if (tabs) tabs.classList.add('hint-pulse');
 }
-function hideThinking() { document.getElementById('thinkingIndicator').style.display = 'none'; }
+function hideThinking() {
+  document.getElementById('thinkingIndicator').style.display = 'none';
+  _stopThinkingTicker();
+  _stopAmbient();
+  _clearPendingPlayer();
+  const tabs = document.querySelector('.panel-tabs');
+  if (tabs) tabs.classList.remove('hint-pulse');
+}
 function enableInput() { const i = document.getElementById('chatInput'); i.disabled = false; i.focus(); document.querySelector('.send-btn').disabled = false; document.querySelectorAll('.suggested-action-btn').forEach(b => b.disabled = false); }
 function disableInput() { document.getElementById('chatInput').disabled = true; document.querySelector('.send-btn').disabled = true; document.querySelectorAll('.suggested-action-btn').forEach(b => b.disabled = true); }
 

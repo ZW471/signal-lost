@@ -190,10 +190,13 @@
       <div class="chat-panel" id="chatPanel">
         <div class="chat-messages" id="chatMessages"></div>
         <div class="thinking-indicator" id="thinkingIndicator" style="display:none">
-          <div class="thinking-dots">
-            <span></span><span></span><span></span>
+          <div class="thinking-row">
+            <div class="thinking-dots">
+              <span></span><span></span><span></span>
+            </div>
+            <span class="thinking-text">PROCESSING NEURAL INPUT</span>
           </div>
-          <span class="thinking-text">PROCESSING NEURAL INPUT</span>
+          <span class="thinking-hint" id="thinkingHint"></span>
         </div>
         <div class="suggested-actions" id="suggestedActions" aria-label="Suggested actions"></div>
         <div class="chat-input-container">

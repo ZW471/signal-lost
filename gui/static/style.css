@@ -918,13 +918,65 @@ html, body {
   50% { opacity: 0; }
 }
 
+/* Optimistic echo: the just-sent player command, awaiting the world's response */
+.chat-msg.player.pending {
+  animation: player-pending-pulse 1.2s ease-in-out infinite;
+}
+.chat-msg.player.pending .msg-content::after {
+  content: '▌';
+  margin-left: 4px;
+  color: var(--cyan);
+  opacity: 0.8;
+  animation: cursor-blink 0.6s step-end infinite;
+}
+@keyframes player-pending-pulse {
+  0%, 100% { box-shadow: -2px 0 0 var(--cyan); }
+  50% { box-shadow: -2px 0 0 var(--cyan), -7px 0 14px rgba(0, 255, 245, 0.28); }
+}
+
+/* "Incoming transmission" decrypt flash before an agent message types out */
+.chat-msg.decrypting .msg-content {
+  color: var(--cyan);
+  text-shadow: 0 0 8px var(--cyan);
+  animation: decrypt-flicker 0.12s steps(2) infinite;
+}
+@keyframes decrypt-flicker {
+  0% { opacity: 0.55; }
+  50% { opacity: 1; }
+  100% { opacity: 0.75; }
+}
+
+/* Gentle breathing hint on the info-panel tabs while the player waits */
+.panel-tabs.hint-pulse {
+  animation: tabs-hint-pulse 2.2s ease-in-out infinite;
+}
+@keyframes tabs-hint-pulse {
+  0%, 100% { box-shadow: inset 0 -2px 0 rgba(0, 255, 245, 0); }
+  50% { box-shadow: inset 0 -2px 0 rgba(0, 255, 245, 0.45); }
+}
+
 /* Thinking indicator */
 .thinking-indicator {
   padding: 12px 16px;
   display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  color: var(--text-dim);
+}
+
+.thinking-row {
+  display: flex;
   align-items: center;
   gap: 12px;
-  color: var(--text-dim);
+}
+
+.thinking-hint {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.5px;
+  color: var(--cyan-dim);
+  opacity: 0.7;
 }
 
 .thinking-dots {
