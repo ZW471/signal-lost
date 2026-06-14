@@ -1033,6 +1033,31 @@ html, body {
   flex-shrink: 0;
 }
 
+/* Inline neural-link trigger at the left of the chat input. Desktop uses the
+   floating FAB instead, so this is hidden until the mobile media query. */
+.chat-neural-btn {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 1px solid var(--cyan);
+  border-radius: 8px;
+  background: radial-gradient(circle at 50% 35%, rgba(0, 255, 245, 0.16), var(--bg-input) 75%);
+  color: var(--cyan);
+  cursor: pointer;
+  transition: background 0.2s ease, box-shadow 0.2s ease, color 0.2s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.chat-neural-btn svg { width: 23px; height: 23px; }
+.chat-neural-btn:active {
+  background: var(--cyan);
+  color: var(--bg-dark);
+  box-shadow: 0 0 14px rgba(0, 255, 245, 0.35);
+}
+
 .chat-input {
   flex: 1;
   background: var(--bg-input);
@@ -2115,6 +2140,25 @@ mark.search-hl {
 }
 
 /* ================================================================
+   BRAND WORDMARK (in-game, top-left of the status bar — text only)
+   ================================================================ */
+
+.game-logo {
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: 13px;
+  letter-spacing: 2px;
+  color: var(--text-bright);
+  text-shadow: 0 0 8px rgba(0, 255, 245, 0.35);
+  white-space: nowrap;
+  flex-shrink: 0;
+  padding-right: 12px;
+  margin-right: 4px;
+  border-right: 1px solid var(--border);
+  user-select: none;
+}
+
+/* ================================================================
    NAV MENU (consolidated top-right menu button + dropdown)
    ================================================================ */
 
@@ -2625,30 +2669,20 @@ mark.search-hl {
     height: 72vh;
     max-height: calc(100vh - 80px);
   }
-  /* FAB: park it above the chat input row (right side, stacked over the send
-     button) so it never overlaps the input or the info-panel toggle. The
-     suggested-actions row reserves right padding below so its buttons don't
-     slide under the FAB. */
-  .companion-fab {
-    left: auto;
-    right: max(12px, env(safe-area-inset-right));
-    bottom: calc(64px + env(safe-area-inset-bottom));
-    width: 48px;
-    height: 48px;
-  }
-  .suggested-actions:not(:empty) {
-    padding-right: 60px;
-  }
-  .companion-fab-icon { width: 24px; height: 24px; }
-  /* While the drawer is open, tuck the FAB out of the way. */
-  .game-layout.panels-open ~ .companion-fab {
-    opacity: 0;
-    pointer-events: none;
-  }
+  /* On mobile the neural link lives inline at the left of the chat input
+     (replacing the ▶ prefix), so the floating FAB is hidden here. */
+  .companion-fab { display: none; }
+  .input-prefix { display: none; }
+  .chat-neural-btn { display: inline-flex; }
+
+  /* INTEGRITY is omitted from the cramped mobile bar (still shown in ID panel);
+     the SIGNAL LOST wordmark stays. */
+  .status-item-integrity { display: none; }
 }
 
 /* Finer phone tuning for very narrow devices. */
 @media (max-width: 480px) {
   .status-value.truncate { max-width: 96px; }
+  .game-logo { font-size: 11px; letter-spacing: 1px; padding-right: 8px; }
   .panel-tab { padding: 9px 10px; font-size: 10px; }
 }
