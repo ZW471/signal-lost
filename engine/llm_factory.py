@@ -99,7 +99,7 @@ def load_provider_config(settings_dir: str | None = None) -> dict:
 DEFAULT_MODELS: dict[str, str] = {
     "anthropic": "claude-sonnet-4-6-20250514",
     "claude-code": "sonnet",
-    "codex": "gpt-5-codex",
+    "codex": "gpt-5.5",
     "openai": "gpt-5.4",
     "openrouter": "openai/gpt-5.4",
     "local": "[model]",

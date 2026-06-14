@@ -276,7 +276,7 @@ class CodexCLILLM(BaseChatModel):
     Authenticates via `codex login` (ChatGPT OAuth) or OPENAI_API_KEY.
     """
 
-    model_name: str = "gpt-5-codex"
+    model_name: str = "gpt-5.5"
     max_retries: int = 2
     timeout: int = 300
     sandbox: str = "read-only"
