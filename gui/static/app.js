@@ -508,10 +508,16 @@ function setLanguage(lang) {
   const reconnectBtn = document.querySelector('#gameOverOverlay .cyber-btn-text');
   if (reconnectBtn) reconnectBtn.textContent = L('game_over_reconnect');
 
-  // Status bar button titles
-  const statusBtns = document.querySelectorAll('.status-btn');
-  const btnTitles = lang === 'zh' ? ['音乐', '保存', '设置', '菜单'] : ['Music', 'Save Game', 'Settings', 'Menu'];
-  statusBtns.forEach((btn, i) => { if (btnTitles[i]) btn.title = btnTitles[i]; });
+  // Status bar: info-panel toggle tooltip + the consolidated nav menu labels.
+  const isZhUI = lang === 'zh';
+  const infoBtn = document.getElementById('btnInfoPanels');
+  if (infoBtn) infoBtn.title = isZhUI ? '信息面板' : 'Info Panels';
+  const navBtn = document.getElementById('btnNavMenu');
+  if (navBtn) navBtn.title = isZhUI ? '菜单' : 'Menu';
+  const navLabels = isZhUI
+    ? { navItemTutorial: '教程', navItemSave: '保存游戏', navItemSettings: '设置', navItemMenu: '主菜单' }
+    : { navItemTutorial: 'Tutorial', navItemSave: 'Save Game', navItemSettings: 'Settings', navItemMenu: 'Main Menu' };
+  Object.entries(navLabels).forEach(([id, label]) => { const el = document.getElementById(id); if (el) el.textContent = label; });
 
   // Re-render all panels if we have cached session
   if (cachedSession) updateAllPanels(cachedSession);
@@ -1152,7 +1158,7 @@ function _updateUsageStats() {
 const DEFAULT_MODELS = {
   anthropic: 'claude-sonnet-4-6-20250514',
   'claude-code': 'sonnet',
-  codex: 'gpt-5-codex',
+  codex: 'gpt-5.5',
   openai: 'gpt-5.4',
   openrouter: 'openai/gpt-5.4',
   local: '[model]',
@@ -1706,13 +1712,6 @@ function disableInput() { document.getElementById('chatInput').disabled = true; 
 // SAVE / LOAD
 // ================================================================
 
-function toggleMusic() {
-  const muted = MusicEngine.toggleMute();
-  const btn = document.getElementById('btnMusicToggle');
-  if (btn) btn.textContent = muted ? '\u{1F507}' : '\u{1F50A}';
-  playBeep(muted ? 400 : 800, 0.03);
-}
-
 function _defaultSaveName() {
   const now = new Date();
   const mm = String(now.getMonth() + 1).padStart(2, '0');
@@ -1720,7 +1719,7 @@ function _defaultSaveName() {
   const yyyy = now.getFullYear();
   const hh = String(now.getHours()).padStart(2, '0');
   const mi = String(now.getMinutes()).padStart(2, '0');
-  const alias = (document.getElementById('statAlias')?.textContent || '').trim() || 'Unknown';
+  const alias = (cachedSession?.player?.alias || cachedSession?.player?.name || 'Unknown');
   return `${mm}-${dd}-${yyyy} ${hh}:${mi} ${alias}`;
 }
 function saveGame() { const el = document.getElementById('saveName'); el.value = _defaultSaveName(); document.getElementById('saveDialog').style.display = 'flex'; el.focus(); el.select(); playBeep(1000, 0.04); }
@@ -1755,7 +1754,7 @@ const TUTORIAL_STEPS = {
     { target: '[data-panel="world"]', text: '<b>WORLD</b> — Global state: NEXUS alert level, fragment decay, and district access status.', pos: 'below', activateTab: 'world' },
     { target: '[data-panel="log"]', text: '<b>LOG</b> — Session log of key events: discoveries, encounters, and world changes. A quick recap of what happened.', pos: 'below', activateTab: 'log' },
     { target: '[data-panel="conversation"]', text: '<b>CONV</b> — Full conversation history. Scroll back through everything you and the system have said.', pos: 'below', activateTab: 'conversation' },
-    { target: '#companionFab', text: '<b>NEURAL LINK</b> — Tap your implant anytime to ask questions or just think out loud. It only knows what you already know — no spoilers — and nothing you say here touches the world or gets saved. It won\'t interrupt the game.', pos: 'above' },
+    { target: '#chatNeuralBtn, #companionFab', text: '<b>NEURAL LINK</b> — Tap your implant anytime to ask questions or just think out loud. It only knows what you already know — no spoilers — and nothing you say here touches the world or gets saved. It won\'t interrupt the game.', pos: 'above' },
     { target: '#chatInput', text: 'You\'re ready. Type your first action and press Enter. Explore, investigate, and survive. Good luck, operative.', pos: 'above' },
   ],
   zh: [
@@ -1770,7 +1769,7 @@ const TUTORIAL_STEPS = {
     { target: '[data-panel="world"]', text: '<b>世界</b> — 全局状态：连结警报等级、碎片衰变和区域通行状况。', pos: 'below', activateTab: 'world' },
     { target: '[data-panel="log"]', text: '<b>日志</b> — 关键事件记录：发现、遭遇和世界变化。快速回顾发生的一切。', pos: 'below', activateTab: 'log' },
     { target: '[data-panel="conversation"]', text: '<b>对话</b> — 完整对话记录。回顾你和系统之间的所有交流。', pos: 'below', activateTab: 'conversation' },
-    { target: '#companionFab', text: '<b>神经链接</b> — 随时点击植入体提问，或只是自言自语。它只知道你已知的事——不会剧透——你在这里说的一切都不会影响世界，也不会被保存。它也不会打断游戏进程。', pos: 'above' },
+    { target: '#chatNeuralBtn, #companionFab', text: '<b>神经链接</b> — 随时点击植入体提问，或只是自言自语。它只知道你已知的事——不会剧透——你在这里说的一切都不会影响世界，也不会被保存。它也不会打断游戏进程。', pos: 'above' },
     { target: '#chatInput', text: '准备就绪。输入你的第一个行动并按回车。探索、调查、生存。祝你好运，特工。', pos: 'above' },
   ],
 };
@@ -1836,7 +1835,13 @@ function showTutorialStep() {
     if (tabBtn) switchPanel(tabBtn);
   }
 
-  const target = document.querySelector(step.target);
+  // Resolve to the first VISIBLE match so multi-selector targets (e.g. the
+  // inline neural button on mobile vs. the floating FAB on desktop) land on
+  // whichever element is actually shown.
+  let target = null;
+  for (const el of document.querySelectorAll(step.target)) {
+    if (el.getClientRects().length) { target = el; break; }
+  }
   if (!target) { nextTutorialStep(); return; }
 
   const rect = target.getBoundingClientRect();
@@ -1896,27 +1901,43 @@ function showTutorialStep() {
   const infoPanel = document.getElementById('infoPanels');
   let isResizing = false;
 
-  handle.addEventListener('mousedown', (e) => {
+  function startResize(e) {
     isResizing = true;
     document.body.style.cursor = 'col-resize';
     document.body.style.userSelect = 'none';
     e.preventDefault();
-  });
+  }
 
-  document.addEventListener('mousemove', (e) => {
+  function moveResize(clientX) {
     if (!isResizing) return;
     const layoutRect = layout.getBoundingClientRect();
-    const pct = ((e.clientX - layoutRect.left) / layoutRect.width) * 100;
+    const pct = ((clientX - layoutRect.left) / layoutRect.width) * 100;
     const clamped = Math.max(25, Math.min(80, pct));
     chatPanel.style.flex = 'none';
     chatPanel.style.width = clamped + '%';
     infoPanel.style.flex = 'none';
     infoPanel.style.width = (100 - clamped) + '%';
-  });
+  }
 
-  document.addEventListener('mouseup', () => {
+  function endResize() {
     if (isResizing) { isResizing = false; document.body.style.cursor = ''; document.body.style.userSelect = ''; }
-  });
+  }
+
+  // Mouse (desktop)
+  handle.addEventListener('mousedown', startResize);
+  document.addEventListener('mousemove', (e) => moveResize(e.clientX));
+  document.addEventListener('mouseup', endResize);
+
+  // Touch (iPad / touchscreens) — mirror the mouse flow. passive:false so we can
+  // preventDefault and stop the page from scrolling mid-drag.
+  handle.addEventListener('touchstart', startResize, { passive: false });
+  document.addEventListener('touchmove', (e) => {
+    if (!isResizing) return;
+    if (e.touches[0]) moveResize(e.touches[0].clientX);
+    e.preventDefault();
+  }, { passive: false });
+  document.addEventListener('touchend', endResize);
+  document.addEventListener('touchcancel', endResize);
 })();
 
 // ================================================================
@@ -1930,6 +1951,70 @@ function switchPanel(btn) {
   document.getElementById('panel-' + btn.dataset.panel).classList.add('active');
   playBeep(900, 0.02);
 }
+
+// ---------- MOBILE INFO-PANEL DRAWER ----------
+// On phones the info panels collapse into a slide-in drawer. These toggle a
+// `.panels-open` class on #gameLayout; the CSS only reacts to it at mobile
+// widths, so the desktop two-column layout is untouched.
+function toggleInfoPanels() {
+  const layout = document.getElementById('gameLayout');
+  if (!layout) return;
+  layout.classList.contains('panels-open') ? closeInfoPanels() : openInfoPanels();
+}
+
+function openInfoPanels() {
+  const layout = document.getElementById('gameLayout');
+  const btn = document.getElementById('btnInfoPanels');
+  if (!layout) return;
+  layout.classList.add('panels-open');
+  if (btn) btn.classList.add('active');
+  playBeep(700, 0.02);
+}
+
+function closeInfoPanels() {
+  const layout = document.getElementById('gameLayout');
+  const btn = document.getElementById('btnInfoPanels');
+  if (!layout) return;
+  layout.classList.remove('panels-open');
+  if (btn) btn.classList.remove('active');
+}
+
+// Consolidated top-right nav menu (Tutorial / Save / Settings / Main Menu).
+function toggleNavMenu(ev) {
+  if (ev) ev.stopPropagation();
+  const menu = document.getElementById('navMenu');
+  const btn = document.getElementById('btnNavMenu');
+  if (!menu) return;
+  const open = menu.classList.toggle('open');
+  menu.setAttribute('aria-hidden', String(!open));
+  if (btn) btn.setAttribute('aria-expanded', String(open));
+  playBeep(700, 0.02);
+}
+
+function closeNavMenu() {
+  const menu = document.getElementById('navMenu');
+  const btn = document.getElementById('btnNavMenu');
+  if (menu && menu.classList.contains('open')) {
+    menu.classList.remove('open');
+    menu.setAttribute('aria-hidden', 'true');
+    if (btn) btn.setAttribute('aria-expanded', 'false');
+  }
+}
+
+function navMenuAction(which) {
+  closeNavMenu();
+  if (which === 'tutorial') startTutorial();
+  else if (which === 'save') saveGame();
+  else if (which === 'settings') openSettings();
+  else if (which === 'menu') showMenu();
+}
+
+// Dismiss the nav menu on outside click or Escape.
+document.addEventListener('click', (e) => {
+  const wrap = document.querySelector('.nav-menu-wrap');
+  if (wrap && !wrap.contains(e.target)) closeNavMenu();
+});
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeNavMenu(); });
 
 function updateAllPanels(session) {
   cachedSession = session;
@@ -1958,9 +2043,6 @@ function updateStatusBar(session) {
   const l = session.location || {};
   const integrity = p.integrity || {};
 
-  // Alias
-  setText('statAlias', p.alias || p.name || '—');
-
   // Integrity pips: filled █ and empty ░
   const cur = integrity.current || 0, max = integrity.max || 3;
   let pips = '';
@@ -1973,19 +2055,10 @@ function updateStatusBar(session) {
   setText('statLocation', l.district || '—');
   setText('statArea', l.area || '—');
 
-  // Time with icon + translation
-  const timeRaw = p.time || 'Morning';
-  const timeStr = timeRaw.toLowerCase();
-  const timeIcon = TIME_ICONS[timeStr] || '';
-  const timeDisplay = localizeData('time', timeRaw);
-  setText('statTime', `${timeIcon} ${timeDisplay}`);
-
   // Translate status bar labels
-  setText('statLabelAlias', L('alias').toUpperCase());
   setText('statLabelIntegrity', L('integrity').toUpperCase());
   setText('statLabelLocation', L('location').toUpperCase());
   setText('statLabelArea', L('area').toUpperCase());
-  setText('statLabelTime', L('time').toUpperCase());
 }
 
 function countDiscoveredTraces(traces) {
@@ -2811,10 +2884,14 @@ document.addEventListener('keydown', (e) => {
     // Block all other keybindings when an overlay is open
     if (overlayOpen) return;
 
-    // Don't let game shortcuts fire while typing in the chat OR the companion.
+    // Don't let game shortcuts fire while typing in ANY field (chat, companion,
+    // or the panel search bars) — number keys must type, not switch tabs.
     const active = document.activeElement;
-    const isInput = active === document.getElementById('chatInput')
-                 || active === document.getElementById('companionInput');
+    const isInput = !!active && (
+      active.tagName === 'INPUT' ||
+      active.tagName === 'TEXTAREA' ||
+      active.isContentEditable
+    );
     const num = parseInt(e.key);
     if (num >= 1 && num <= 9 && !e.ctrlKey && !e.metaKey && !isInput) {
       const tabs = document.querySelectorAll('.panel-tab');

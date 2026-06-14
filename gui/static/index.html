@@ -2,10 +2,10 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, viewport-fit=cover">
   <title>SIGNAL LOST</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='4' fill='%230a0a0f'/><text x='16' y='22' text-anchor='middle' font-size='18' fill='%2300ff88'>S</text></svg>">
-  <link rel="stylesheet" href="/static/style.css?v=companion2">
+  <link rel="stylesheet" href="/static/style.css?v=mobile5">
   <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
@@ -155,11 +155,8 @@
   <div id="gameScreen" class="screen">
     <!-- Status bar -->
     <div class="status-bar" id="statusBar">
-      <div class="status-item">
-        <span class="status-label" id="statLabelAlias">ALIAS</span>
-        <span class="status-value cyan-bright" id="statAlias">—</span>
-      </div>
-      <div class="status-item">
+      <div class="game-logo" id="gameLogo" aria-label="Signal Lost">SIGNAL LOST</div>
+      <div class="status-item status-item-integrity">
         <span class="status-label" id="statLabelIntegrity">INTEGRITY</span>
         <div class="integrity-pips" id="statIntegrityPips"></div>
       </div>
@@ -167,20 +164,21 @@
         <span class="status-label" id="statLabelLocation">LOCATION</span>
         <span class="status-value truncate cyan" id="statLocation">—</span>
       </div>
-      <div class="status-item">
+      <div class="status-item status-item-area">
         <span class="status-label" id="statLabelArea">AREA</span>
         <span class="status-value truncate" id="statArea">—</span>
       </div>
-      <div class="status-item">
-        <span class="status-label" id="statLabelTime">TIME</span>
-        <span class="status-value" id="statTime">—</span>
-      </div>
       <div class="status-item actions">
-        <button class="status-btn" onclick="startTutorial()" title="Tutorial" id="btnTutorial">❓</button>
-        <button class="status-btn" onclick="toggleMusic()" title="Music" id="btnMusicToggle">🔊</button>
-        <button class="status-btn" onclick="saveGame()" title="Save Game">💾</button>
-        <button class="status-btn" onclick="openSettings()" title="Settings">⚙</button>
-        <button class="status-btn" onclick="showMenu()" title="Menu">☰</button>
+        <button class="status-btn status-btn-panels" onclick="toggleInfoPanels()" title="Show panels" aria-label="Toggle info panels" id="btnInfoPanels">▤</button>
+        <div class="nav-menu-wrap">
+          <button class="status-btn" onclick="toggleNavMenu(event)" title="Menu" aria-label="Menu" aria-haspopup="true" aria-expanded="false" id="btnNavMenu">☰</button>
+          <div class="nav-menu" id="navMenu" role="menu" aria-hidden="true">
+            <button class="nav-menu-item" role="menuitem" onclick="navMenuAction('tutorial')" id="navItemTutorial">Tutorial</button>
+            <button class="nav-menu-item" role="menuitem" onclick="navMenuAction('save')" id="navItemSave">Save Game</button>
+            <button class="nav-menu-item" role="menuitem" onclick="navMenuAction('settings')" id="navItemSettings">Settings</button>
+            <button class="nav-menu-item" role="menuitem" onclick="navMenuAction('menu')" id="navItemMenu">Main Menu</button>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -200,6 +198,14 @@
         </div>
         <div class="suggested-actions" id="suggestedActions" aria-label="Suggested actions"></div>
         <div class="chat-input-container">
+          <button class="chat-neural-btn" id="chatNeuralBtn" onclick="toggleCompanion()" title="Neural Link" aria-label="Open neural link">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z"/>
+              <path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z"/>
+              <path d="M15 13a4.5 4.5 0 0 1-3-4 4.5 4.5 0 0 1-3 4"/>
+              <circle cx="12" cy="6.6" r="0.85" fill="currentColor" stroke="none"/>
+            </svg>
+          </button>
           <div class="input-prefix">▶</div>
           <input type="text" class="chat-input" id="chatInput" placeholder="What do you do?" autocomplete="off" onkeydown="if(event.key==='Enter')sendMessage()">
           <button class="send-btn" onclick="sendMessage()">⟩</button>
@@ -209,8 +215,16 @@
       <!-- Resize handle -->
       <div class="resize-handle" id="resizeHandle" title="Drag to resize"></div>
 
-      <!-- Info panels (right) -->
+      <!-- Backdrop for the mobile info-panel drawer (tap to dismiss) -->
+      <div class="info-panels-backdrop" id="infoPanelsBackdrop" onclick="closeInfoPanels()"></div>
+
+      <!-- Info panels (right; slide-in drawer on mobile) -->
       <div class="info-panels" id="infoPanels">
+        <!-- Drawer handle: visible only on mobile, lets the user collapse the drawer -->
+        <div class="info-panels-drawer-head">
+          <span class="info-panels-drawer-title">// DATA PANELS</span>
+          <button class="info-panels-close" onclick="closeInfoPanels()" title="Close panels" aria-label="Close info panels">✕</button>
+        </div>
         <div class="panel-tabs">
           <button class="panel-tab active" data-panel="identity" onclick="switchPanel(this)">ID</button>
           <button class="panel-tab" data-panel="knowledge" onclick="switchPanel(this)">KNOW</button>
@@ -454,7 +468,7 @@
   <!-- ========== NOTIFICATION ========== -->
   <div id="notification" class="notification"></div>
 
-  <script src="/static/music.js"></script>
-  <script src="/static/app.js?v=companion2"></script>
+  <script src="/static/music.js?v=mobile5"></script>
+  <script src="/static/app.js?v=mobile5"></script>
 </body>
 </html>
