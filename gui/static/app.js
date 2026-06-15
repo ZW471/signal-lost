@@ -2735,13 +2735,16 @@ function updateInventoryPanel(inventory) {
     </div>
     <div class="panel-section"><div class="panel-section-title">${L('items')}</div>`;
 
-  // Render all 6 slots
-  for (let s = 1; s <= maxSlots; s++) {
-    const item = items.find(i => i.slot === s);
+  // Render all slots. Items are stored without a stable `slot` field, so render
+  // them by position; an item's display name may be under `name` or `item`.
+  const slotCount = Math.max(maxSlots, items.length);
+  for (let s = 1; s <= slotCount; s++) {
+    const item = items.find(i => i.slot === s) || items[s - 1];
     if (item) {
+      const itemName = item.name || item.item || '?';
       const icon = ITEM_ICONS[(item.type || '').toLowerCase()] || '\u25A0';
       html += `<div class="inv-slot filled">
-        <div class="inv-slot-header">${icon} <span class="cyan">[${s}] ${esc(item.item)}</span></div>
+        <div class="inv-slot-header">${icon} <span class="cyan">[${s}] ${esc(itemName)}</span></div>
         <div class="inv-slot-type dim">${esc(item.type || '')}</div>
         <div class="inv-slot-desc">${esc(item.description || '')}</div>
       </div>`;
@@ -2912,10 +2915,10 @@ function updateWorldPanel(worldState) {
 
   let html = '';
 
-  // NEXUS Alert — only shown if > 0 (matches TUI)
-  const alertVal = alert.current || 0;
-  if (alertVal > 0) {
-    const alertPct = Math.min(alertVal, 10) * 10;
+  // NEXUS Alert — always shown (a primary fail meter; capture at 100). Runs 0-100.
+  const alertVal = Math.max(0, Math.min(100, alert.current || 0));
+  {
+    const alertPct = alertVal;
     const alertStatusDisplay = localizeAlertStatus(alert.status);
     html += `<div class="panel-section"><div class="panel-section-title">${L('nexus_alert')}</div>
       <div class="panel-row"><span class="panel-key">${L('status')}</span>

@@ -259,6 +259,38 @@ def _read_conversation_history(session_dir: str, last_n: int = 5) -> str:
 # Build validator context (same as _build_validator_context in graph.py)
 # ---------------------------------------------------------------------------
 
+def _summarize_knowledge(knowledge: dict, traces: dict) -> list[str]:
+    """Shared validator/grounding summary of everything the player legitimately
+    KNOWS — facts, rumors, theories, evidence, and discovered traces — so the
+    validator stops rejecting references to the game's own established content.
+    ⚠️ SYNC: mirrored between graph.py and claude_code_engine.py.
+    """
+    def _descs(entries, limit=80):
+        out = []
+        for e in entries or []:
+            d = e.get("description") or e.get("statement") or e.get("name") or ""
+            d = str(d).strip()
+            if d:
+                out.append(d[:limit])
+        return out
+
+    facts = _descs(knowledge.get("facts", []))
+    rumors = _descs(knowledge.get("rumors", []))
+    theories = _descs(knowledge.get("theories", []))
+    evidence = [e.get("name") or e.get("id") or (e.get("description", "")[:50])
+                for e in knowledge.get("evidence", [])]
+    disc = traces.get("discovered", []) if isinstance(traces, dict) else []
+    disc_lines = [f"{d.get('id', '?')}: {str(d.get('description', ''))[:60]}" for d in disc]
+
+    return [
+        f"Known facts: {' | '.join(facts) if facts else 'none'}",
+        f"Known rumors: {' | '.join(rumors) if rumors else 'none'}",
+        f"Recorded theories: {' | '.join(theories) if theories else 'none'}",
+        f"Evidence: {', '.join(str(e) for e in evidence) if evidence else 'none'}",
+        f"Discovered Traces of Truth: {' ; '.join(disc_lines) if disc_lines else 'none'}",
+    ]
+
+
 def _build_validator_context(state: dict) -> str:
     """Build compact state summary for validation."""
     location = state.get("location", {})
@@ -266,6 +298,8 @@ def _build_validator_context(state: dict) -> str:
     npcs = state.get("npcs", {})
     knowledge = state.get("knowledge", {})
     world_state = state.get("world_state", {})
+    player = state.get("player", {})
+    traces = state.get("traces", {})
 
     exits = location.get("exits", {})
     pois = location.get("points_of_interest", [])
@@ -277,7 +311,7 @@ def _build_validator_context(state: dict) -> str:
     encountered = npcs.get("npcs", [])
     enc_names = [n.get("name", "?") for n in encountered]
     accessible = [e.get("name", "?") for e in world_state.get("district_access", [])]
-    evidence_names = [e.get("name", e.get("id", "?")) for e in knowledge.get("evidence", [])]
+    status_effects = player.get("status_effects", []) or []
 
     lines = [
         f"Current location: {location.get('district', '?')} — {location.get('area', '?')}",
@@ -287,8 +321,17 @@ def _build_validator_context(state: dict) -> str:
         f"All encountered NPCs: {', '.join(enc_names) if enc_names else 'none yet'}",
         f"Inventory: {', '.join(item_names) if item_names else 'empty'} | Credits: {inventory.get('credits', 0)}",
         f"Accessible districts: {', '.join(accessible) if accessible else 'The Sprawl, Neon Row'}",
-        f"Evidence: {', '.join(evidence_names) if evidence_names else 'none'}",
+        f"Player abilities: neural implant ({player.get('neural_implant', 'active')}); "
+        f"background {player.get('background', '?')}"
+        + (f"; status: {', '.join(str(s) for s in status_effects)}" if status_effects else ""),
     ]
+    lines.extend(_summarize_knowledge(knowledge, traces))
+    lines.append(
+        "NOTE: Everything above is ESTABLISHED and KNOWN to the player — the "
+        "scene, exits, POIs, present/encountered NPCs, inventory, abilities, and "
+        "all recorded knowledge/traces. Acting on or referring to any of it (or to "
+        "anything in the recent conversation history) is VALID, never fabrication."
+    )
     return "\n".join(lines)
 
 
@@ -679,11 +722,23 @@ def _apply_mutations(
                 if isinstance(item, str):
                     try: item = json.loads(item)
                     except: item = {"name": item}
+                # ⚠️ SYNC: mirrored in graph.py state_writer — dedupe by name and
+                # enforce the slot cap so the inventory never exceeds max (e.g. 7/6)
+                # or holds duplicates.
                 items = inventory.get("items", [])
-                items.append(item)
+                slots = inventory.get("slots", {}) or {}
+                max_slots = slots.get("max", 6)
+                new_name = str(item.get("name") or item.get("item") or "").strip().lower()
+                dup = bool(new_name) and any(
+                    str(i.get("name") or i.get("item") or "").strip().lower() == new_name
+                    for i in items
+                )
+                if not dup and len(items) < max_slots:
+                    items.append(item)
                 inventory["items"] = items
-                inventory["slots"] = inventory.get("slots", {})
-                inventory["slots"]["used"] = len(items)
+                slots["max"] = max_slots
+                slots["used"] = len(items)
+                inventory["slots"] = slots
             elif action == "remove":
                 item_spec = args.get("item", {})
                 if isinstance(item_spec, str):

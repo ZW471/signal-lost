@@ -479,9 +479,14 @@ def build_knowledge_context(knowledge: dict) -> str:
 # Layer depth extractor (shared utility)
 # ---------------------------------------------------------------------------
 
-def extract_deepest_layer(state: dict) -> int:
-    """Compute the deepest narrative layer the player has reached from discovered traces."""
-    discovered = state.get("traces", {}).get("discovered", [])
+def extract_deepest_layer(data: dict) -> int:
+    """Compute the deepest narrative layer the player has reached from discovered traces.
+
+    Accepts either a full game state (has a ``traces`` key) or a bare traces dict
+    (has a ``discovered`` key) — both call styles exist in the codebase.
+    """
+    traces = data.get("traces") if isinstance(data.get("traces"), dict) else data
+    discovered = traces.get("discovered", []) if isinstance(traces, dict) else []
     deepest = 0
     for trace in discovered:
         trace_id = trace.get("id", "")
