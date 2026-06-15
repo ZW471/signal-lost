@@ -155,6 +155,27 @@ const LABELS = {
     game_over_reconnect: 'RECONNECT', game_over_fallback: '// CONNECTION TERMINATED',
     // Connection
     connection_lost: 'Connection lost. Reconnecting...',
+    // Accounts / auth
+    auth_title: '// ACCESS TERMINAL',
+    auth_sign_in: 'SIGN IN', auth_register: 'REGISTER', auth_sign_out: 'SIGN OUT',
+    auth_username: 'USERNAME', auth_password: 'PASSWORD',
+    auth_username_placeholder: 'Enter a username',
+    auth_password_placeholder: 'Enter a password',
+    auth_signed_in_as: 'Signed in as', auth_signed_out: 'Signed out',
+    auth_err_username_required: 'Enter a username.',
+    auth_err_password_required: 'Enter a password.',
+    auth_err_username_taken: 'That username is taken.',
+    auth_err_username_too_long: 'Username is too long (max 32).',
+    auth_err_username_invalid: 'Username has invalid characters.',
+    auth_err_password_too_short: 'Password must be at least 4 characters.',
+    auth_err_invalid_credentials: 'Wrong username or password.',
+    auth_err_generic: 'Could not sign in. Try again.',
+    conflict_title: '// ACCOUNT ALREADY ACTIVE',
+    conflict_text: 'This account is already signed in on another session. Continue here and disconnect the other one?',
+    conflict_yes: 'CONTINUE HERE', conflict_no: 'CANCEL',
+    kicked_title: '// SESSION ENDED',
+    kicked_text: 'This account was opened in another session. You have been signed out here.',
+    kicked_reload: 'RECONNECT',
     // Tutorial
     tutorial_step: 'STEP', tutorial_skip: 'SKIP', tutorial_next: 'NEXT', tutorial_finish: 'GOT IT',
     // Companion (implant side-channel Q&A)
@@ -265,6 +286,27 @@ const LABELS = {
     game_over_reconnect: '重新连接', game_over_fallback: '// 连接已终止',
     // Connection
     connection_lost: '连接已断开，正在重连...',
+    // Accounts / auth
+    auth_title: '// 接入终端',
+    auth_sign_in: '登录', auth_register: '注册', auth_sign_out: '退出登录',
+    auth_username: '用户名', auth_password: '密码',
+    auth_username_placeholder: '请输入用户名',
+    auth_password_placeholder: '请输入密码',
+    auth_signed_in_as: '已登录为', auth_signed_out: '已退出登录',
+    auth_err_username_required: '请输入用户名。',
+    auth_err_password_required: '请输入密码。',
+    auth_err_username_taken: '该用户名已被占用。',
+    auth_err_username_too_long: '用户名过长（最多32个字符）。',
+    auth_err_username_invalid: '用户名包含无效字符。',
+    auth_err_password_too_short: '密码至少需要4个字符。',
+    auth_err_invalid_credentials: '用户名或密码错误。',
+    auth_err_generic: '登录失败，请重试。',
+    conflict_title: '// 账号已在使用',
+    conflict_text: '该账号已在另一个会话中登录。是否在此处继续并断开另一个会话？',
+    conflict_yes: '在此处继续', conflict_no: '取消',
+    kicked_title: '// 会话已结束',
+    kicked_text: '该账号已在另一个会话中打开，你已在此处登出。',
+    kicked_reload: '重新连接',
     // Tutorial
     tutorial_step: '步骤', tutorial_skip: '跳过', tutorial_next: '下一步', tutorial_finish: '知道了',
     // Companion (implant side-channel Q&A)
@@ -391,6 +433,9 @@ function setLanguage(lang) {
   setText('btnSettings', L('menu_settings'), '.cyber-btn-text');
   const menuFooter = document.querySelector('.menu-footer');
   if (menuFooter) menuFooter.innerHTML = '<span class="blink">_</span> ' + L('menu_footer');
+
+  // Account widget + auth dialog
+  applyAuthLanguage();
 
   // New game screen
   const configTitle = document.querySelector('#newGameScreen .config-title');
@@ -731,20 +776,251 @@ function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 let ws = null, wsReconnectTimer = null;
 
+// --- Auth state -----------------------------------------------------------
+let authToken = null;     // session token from register/login (also in localStorage)
+let currentUser = null;   // username once the server confirms the bind
+let pendingIntent = null; // action to run after a sign-in prompt ('newgame' | 'loadgame')
+let conflictUsername = null; // account awaiting a takeover confirmation
+let wasKicked = false;    // true after being kicked → stop auto-reconnect
+
 function connectWebSocket() {
   const protocol = location.protocol === 'https:' ? 'wss' : 'ws';
   ws = new WebSocket(`${protocol}://${location.host}/ws`);
-  ws.onopen = () => { ws.send(JSON.stringify({ action: 'init' })); };
+  ws.onopen = () => { sendInit(); };
   ws.onmessage = (event) => handleServerMessage(JSON.parse(event.data));
   ws.onclose = () => {
+    if (wasKicked) return;  // kicked elsewhere — don't fight the new session
     if (!wsReconnectTimer) wsReconnectTimer = setTimeout(() => { wsReconnectTimer = null; connectWebSocket(); }, 3000);
   };
   ws.onerror = () => {};
 }
 
+/** Send the init/bind handshake, carrying the stored token if we have one. */
+function sendInit(force) {
+  const payload = { action: 'init' };
+  if (authToken) payload.token = authToken;
+  if (force) payload.force = true;
+  if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(payload));
+}
+
 function sendWS(data) {
   if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(data));
   else notify(L('connection_lost'), true);
+}
+
+// ================================================================
+// ACCOUNTS — register / sign in / sign out (bottom-left widget)
+// ================================================================
+
+const AUTH_TOKEN_KEY = 'signal_lost_token';
+const AUTH_USER_KEY = 'signal_lost_username';
+let authMode = 'signin'; // 'signin' | 'register'
+
+/** Render the bottom-left account widget for the current auth state. */
+function renderAccountWidget() {
+  const label = document.getElementById('accountLabel');
+  const dot = document.getElementById('accountDot');
+  const btn = document.getElementById('accountBtn');
+  if (!label || !btn) return;
+  if (currentUser) {
+    label.textContent = currentUser;
+    dot.classList.add('online');
+    btn.classList.add('signed-in');
+  } else {
+    label.textContent = L('auth_sign_in');
+    dot.classList.remove('online');
+    btn.classList.remove('signed-in');
+    closeAccountMenu();
+  }
+}
+
+/** Refresh static auth/account chrome when the UI language changes. */
+function applyAuthLanguage() {
+  renderAccountWidget();
+  const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+  set('accountMenuLogout', L('auth_sign_out'));
+  set('authTitle', L('auth_title'));
+  set('authTabSignin', L('auth_sign_in'));
+  set('authTabRegister', L('auth_register'));
+  set('authUserLabel', L('auth_username'));
+  set('authPassLabel', L('auth_password'));
+  set('authCancelLabel', L('btn_cancel'));
+  set('authSubmitLabel', authMode === 'register' ? L('auth_register') : L('auth_sign_in'));
+  const u = document.getElementById('authUsername');
+  if (u) u.placeholder = L('auth_username_placeholder');
+  const pw = document.getElementById('authPassword');
+  if (pw) pw.placeholder = L('auth_password_placeholder');
+}
+
+/** Click on the account button: open the auth modal (logged out) or the
+ *  sign-out dropdown (logged in). */
+function onAccountButton(event) {
+  if (event) event.stopPropagation();
+  if (currentUser) toggleAccountMenu();
+  else openAuth('signin');
+}
+
+function toggleAccountMenu() {
+  const menu = document.getElementById('accountMenu');
+  const btn = document.getElementById('accountBtn');
+  if (!menu) return;
+  const open = menu.classList.toggle('open');
+  menu.setAttribute('aria-hidden', open ? 'false' : 'true');
+  if (btn) btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+}
+function closeAccountMenu() {
+  const menu = document.getElementById('accountMenu');
+  const btn = document.getElementById('accountBtn');
+  if (menu) { menu.classList.remove('open'); menu.setAttribute('aria-hidden', 'true'); }
+  if (btn) btn.setAttribute('aria-expanded', 'false');
+}
+// Dismiss the account dropdown when clicking elsewhere.
+document.addEventListener('click', (e) => {
+  const w = document.getElementById('accountWidget');
+  if (w && !w.contains(e.target)) closeAccountMenu();
+});
+
+/** Require a signed-in user before *intent*. Returns true if already signed in;
+ *  otherwise stashes the intent, opens the sign-in modal, and returns false. */
+function requireAuth(intent) {
+  if (currentUser) return true;
+  pendingIntent = intent || null;
+  openAuth('signin');
+  return false;
+}
+
+function openAuth(mode) {
+  switchAuthTab(mode || 'signin');
+  setAuthError('');
+  document.getElementById('authPassword').value = '';
+  const ov = document.getElementById('authOverlay');
+  ov.style.display = 'flex';
+  setTimeout(() => { const u = document.getElementById('authUsername'); if (u) u.focus(); }, 60);
+  playBeep(700, 0.04);
+}
+function closeAuth() {
+  document.getElementById('authOverlay').style.display = 'none';
+  pendingIntent = null;
+}
+
+function switchAuthTab(mode) {
+  authMode = (mode === 'register') ? 'register' : 'signin';
+  const tabSignin = document.getElementById('authTabSignin');
+  const tabReg = document.getElementById('authTabRegister');
+  if (tabSignin) tabSignin.classList.toggle('active', authMode === 'signin');
+  if (tabReg) tabReg.classList.toggle('active', authMode === 'register');
+  const submit = document.getElementById('authSubmitLabel');
+  if (submit) submit.textContent = authMode === 'register' ? L('auth_register') : L('auth_sign_in');
+  const pass = document.getElementById('authPassword');
+  if (pass) pass.setAttribute('autocomplete', authMode === 'register' ? 'new-password' : 'current-password');
+  setAuthError('');
+}
+
+function setAuthError(text) {
+  const el = document.getElementById('authError');
+  if (el) el.textContent = text || '';
+}
+
+function submitAuth() {
+  const username = (document.getElementById('authUsername').value || '').trim();
+  const password = document.getElementById('authPassword').value || '';
+  if (!username) { setAuthError(L('auth_err_username_required')); return; }
+  if (!password) { setAuthError(L('auth_err_password_required')); return; }
+  setAuthError('');
+  sendWS({ action: authMode === 'register' ? 'register' : 'login', username, password });
+}
+
+/** Handle the server's auth_result for a register/login attempt. */
+function handleAuthResult(msg) {
+  if (!msg.ok) {
+    setAuthError(authErrorText(msg.error));
+    return;
+  }
+  // Credentials accepted → store token and claim the active-session slot.
+  authToken = msg.token;
+  localStorage.setItem(AUTH_TOKEN_KEY, authToken);
+  document.getElementById('authOverlay').style.display = 'none';
+  // currentUser is set once the server confirms the bind (status/authed); a
+  // pending sign-in intent is also run there. A 'session_conflict' may arrive
+  // instead, prompting a takeover.
+  sendInit();
+}
+
+function authErrorText(code) {
+  const map = {
+    username_taken: L('auth_err_username_taken'),
+    username_required: L('auth_err_username_required'),
+    username_too_long: L('auth_err_username_too_long'),
+    username_invalid: L('auth_err_username_invalid'),
+    password_too_short: L('auth_err_password_too_short'),
+    password_required: L('auth_err_password_required'),
+    invalid_credentials: L('auth_err_invalid_credentials'),
+  };
+  return map[code] || L('auth_err_generic');
+}
+
+function doLogout() {
+  closeAccountMenu();
+  sendWS({ action: 'logout', token: authToken });
+  authToken = null;
+  currentUser = null;
+  localStorage.removeItem(AUTH_TOKEN_KEY);
+  localStorage.removeItem(AUTH_USER_KEY);
+  cachedSessions = [];
+  cachedSaves = [];
+  // Wipe the previous player's game data so nothing leaks into the next sign-in
+  // (e.g. a language change on the menu re-renders panels from cachedSession).
+  cachedSession = null;
+  clearChat();
+  resetCompanion();
+  ['identity', 'district', 'inventory', 'network', 'world'].forEach(p => {
+    const el = document.getElementById('panel-' + p); if (el) el.innerHTML = '';
+  });
+  ['knowledge', 'traces', 'log', 'conversation'].forEach(p => {
+    const el = document.getElementById('panel-' + p + '-body'); if (el) el.innerHTML = '';
+  });
+  const lb = document.getElementById('btnLoadGame');
+  if (lb) lb.style.display = 'none';
+  renderAccountWidget();
+  // If a game/sub-screen is open, return to the menu.
+  switchScreen('menuScreen');
+  notify(L('auth_signed_out'));
+}
+
+// --- Session-conflict (same account opened twice) -------------------------
+
+function showSessionConflict(username) {
+  conflictUsername = username || null;
+  document.getElementById('authOverlay').style.display = 'none';
+  document.getElementById('conflictTitle').textContent = L('conflict_title');
+  document.getElementById('conflictText').textContent = L('conflict_text');
+  document.getElementById('conflictYes').textContent = L('conflict_yes');
+  document.getElementById('conflictNo').textContent = L('conflict_no');
+  document.getElementById('sessionConflictDialog').style.display = 'flex';
+  playBeep(500, 0.05);
+}
+function confirmTakeover() {
+  document.getElementById('sessionConflictDialog').style.display = 'none';
+  sendInit(true); // force takeover → server kicks the older session
+}
+function closeConflict() {
+  document.getElementById('sessionConflictDialog').style.display = 'none';
+  conflictUsername = null;
+  pendingIntent = null;  // abandon any deferred New Game / Load intent
+}
+
+// --- Kicked (this connection was taken over elsewhere) --------------------
+
+function showKicked() {
+  wasKicked = true;
+  document.getElementById('kickedTitle').textContent = L('kicked_title');
+  document.getElementById('kickedText').textContent = L('kicked_text');
+  document.getElementById('kickedReload').textContent = L('kicked_reload');
+  // Hide any other overlays so the kicked notice is unambiguous.
+  ['authOverlay', 'sessionConflictDialog', 'saveDialog', 'settingsOverlay'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.style.display = 'none';
+  });
+  document.getElementById('kickedOverlay').style.display = 'flex';
 }
 
 // ================================================================
@@ -861,7 +1137,7 @@ function sendCompanionMessage() {
   showCompanionThinking();
 
   if (companionWS && companionWS.readyState === WebSocket.OPEN) {
-    companionWS.send(JSON.stringify({ action: 'ask', text, history }));
+    companionWS.send(JSON.stringify({ action: 'ask', text, history, token: authToken }));
   } else {
     hideCompanionThinking();
     companionPending = false;
@@ -919,13 +1195,32 @@ let _cachedFeatures = null; // Latest gameplay feature flags from the server
 
 function handleServerMessage(msg) {
   switch (msg.type) {
-    case 'status':
+    case 'status': {
+      const wasAuthed = !!currentUser;
+      if (msg.authed) {
+        currentUser = msg.username || null;
+        conflictUsername = null;
+        // Remember the identity so the next refresh auto-logs in without a flash.
+        if (currentUser) localStorage.setItem(AUTH_USER_KEY, currentUser);
+        // A bind just succeeded → close the auth modal.
+        const authOv = document.getElementById('authOverlay');
+        if (authOv && authOv.style.display !== 'none') authOv.style.display = 'none';
+        if (!wasAuthed && currentUser) notify(`${L('auth_signed_in_as')} ${currentUser}`);
+      } else {
+        currentUser = null;
+        // Token absent/expired server-side — drop it locally.
+        if (authToken) { authToken = null; localStorage.removeItem(AUTH_TOKEN_KEY); }
+        localStorage.removeItem(AUTH_USER_KEY);
+      }
+      renderAccountWidget();
+
       cachedSessions = msg.sessions || [];
       if (msg.saves && msg.saves.length > 0) {
         document.getElementById('btnLoadGame').style.display = '';
         cachedSaves = msg.saves;
       } else {
         document.getElementById('btnLoadGame').style.display = 'none';
+        cachedSaves = [];
       }
       if (msg.provider) prefillProviderSettings(msg.provider);
       if (msg.langsmith) prefillLangsmithSettings(msg.langsmith);
@@ -936,7 +1231,15 @@ function handleServerMessage(msg) {
         document.getElementById('selectMenuLanguage').value = lang;
         setLanguage(lang);
       }
+
+      // Run any action that was deferred until sign-in.
+      if (currentUser && pendingIntent) {
+        const intent = pendingIntent; pendingIntent = null;
+        if (intent === 'newgame') showNewGame();
+        else if (intent === 'loadgame') showLoadGame();
+      }
       break;
+    }
 
     case 'game_started':
       switchScreen('gameScreen');
@@ -1015,6 +1318,23 @@ function handleServerMessage(msg) {
       hideThinking(); enableInput();
       notify(msg.message, true);
       addChatMessage(msg.message, 'system');
+      break;
+
+    case 'auth_result':
+      handleAuthResult(msg);
+      break;
+
+    case 'session_conflict':
+      showSessionConflict(msg.username);
+      break;
+
+    case 'kicked':
+      showKicked();
+      break;
+
+    case 'auth_required':
+      // Server rejected a game action for lack of a session — prompt sign-in.
+      openAuth('signin');
       break;
   }
 }
@@ -1264,9 +1584,13 @@ function confirmReturnToMenu() {
 function closeConfirmMenu() {
   document.getElementById('confirmMenuDialog').style.display = 'none';
 }
-function showNewGame() { switchScreen('newGameScreen'); playBeep(1000, 0.04); }
+function showNewGame() {
+  if (!requireAuth('newgame')) return;
+  switchScreen('newGameScreen'); playBeep(1000, 0.04);
+}
 
 function showLoadGame() {
+  if (!requireAuth('loadgame')) return;
   const list = document.getElementById('savesList');
   list.innerHTML = '';
   if (cachedSaves.length === 0) {
@@ -2943,6 +3267,12 @@ window.addEventListener('load', () => {
   if (savedLang && (savedLang === 'en' || savedLang === 'zh')) {
     setLanguage(savedLang);
   }
+  // Restore a saved session token for auto-login; the ws 'init' handshake
+  // validates it. Optimistically show the stored username so the menu doesn't
+  // flash "sign in" before the server confirms (status authed) or clears it.
+  authToken = localStorage.getItem(AUTH_TOKEN_KEY) || null;
+  if (authToken) currentUser = localStorage.getItem(AUTH_USER_KEY) || null;
+  renderAccountWidget();
   runBootSequence();
 });
 

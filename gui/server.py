@@ -3,6 +3,20 @@ Signal Lost — Browser GUI Backend
 
 FastAPI + WebSocket server that interfaces with the LangGraph game engine.
 Serves the static frontend and handles real-time game communication.
+
+Multi-user model (demo-scale, < 10 concurrent players)
+------------------------------------------------------
+The server keeps ONE shared LLM/provider (configured server-wide — see
+``_configure_llm``) but isolates everything else per signed-in user. Each live
+WebSocket binds to a :class:`PlayerSession` that owns its own game state, session
+directory, turn lock, world-sim scheduler and suggested-action prediction cache,
+so concurrent players never touch each other's state. Sessions and saves are
+namespaced on disk under ``session/<uid>/`` and ``saves/<uid>/`` (``uid`` comes
+from the account store in :mod:`auth`).
+
+One account may only be actively playing from one connection at a time. A second
+sign-in is warned ("session_conflict"); if the player confirms, the older
+connection is kicked.
 """
 
 from __future__ import annotations
@@ -30,6 +44,7 @@ if _GAME_ROOT not in sys.path:
 
 from langchain_core.messages import HumanMessage
 
+import auth
 from engine.graph import compile_graph, set_llm, set_fast_llm, get_llm, get_fast_llm
 from engine.world_sim_scheduler import WorldSimScheduler
 from engine.claude_code_engine import run_turn as cc_run_turn
@@ -107,33 +122,76 @@ if os.path.isdir(ASSETS_DIR):
     app.mount("/assets", StaticFiles(directory=ASSETS_DIR), name="assets")
 
 # ---------------------------------------------------------------------------
-# Game engine state (per-server singleton for now)
+# Shared server state
 # ---------------------------------------------------------------------------
+# The LLM/provider is a single server-wide resource (see module docstring). The
+# compiled LangGraph is stateless — state flows through invoke() — so one
+# instance is shared across all players. Per-player state lives on PlayerSession.
 
-_game_graph = None
-_game_state = None
-_game_lock = threading.Lock()
-_active_session_dir: str | None = None
-_world_sim_scheduler: WorldSimScheduler | None = None
-
-
+_server_graph = None
 _is_cli_bypass: bool = False
+_llm_configured: bool = False
+_active_provider: tuple | None = None  # (provider, model, base_url) last built
+_llm_lock = threading.Lock()  # guards (re)building the shared LLM
 
 
-# --- Suggested-action outcome cache (predict_outcome feature) --------------
-# In-memory map: action-hash -> {text, state_dir, result, ready}.
-# Backed by speculative session snapshots under <session>/.action_cache/.
-_action_cache: dict[str, dict] = {}
-_action_cache_turn: int | None = None      # player turn the cache branched from
-_action_cache_fp: str | None = None        # fingerprint of that base state
-_predict_generation: int = 0               # bumped to invalidate in-flight work
-_predict_task: "asyncio.Task | None" = None
-# Guards the in-memory cache bookkeeping above. Held only for microsecond-scale
-# critical sections (dict get/set, generation bump) — NEVER during disk or LLM
-# work — so it cannot stall the event loop. Distinct from _game_lock, which
-# serializes actual turn execution.
-_cache_lock = threading.Lock()
+def _get_graph():
+    """Return the shared, lazily-compiled (stateless) game graph."""
+    global _server_graph
+    if _server_graph is None:
+        _server_graph = compile_graph()
+    return _server_graph
 
+
+# Registry of currently-active player sessions, keyed by username. Mutated only
+# from the asyncio event loop (single-threaded), so a plain dict is safe.
+_sessions_by_user: "dict[str, PlayerSession]" = {}
+
+
+class PlayerSession:
+    """All per-player runtime state for one live connection.
+
+    Each instance is fully self-contained: its own game state, session dir, turn
+    ``lock`` (serializes this player's turns and guards its world-sim writes),
+    scheduler, and suggested-action prediction cache. Two PlayerSessions never
+    share mutable state, so concurrent players cannot interfere.
+    """
+
+    def __init__(self, username: str, uid: str):
+        self.username = username
+        self.uid = uid
+        self.ws: WebSocket | None = None
+
+        self.graph = None
+        self.game_state = None
+        self.session_dir: str | None = None
+        self.scheduler: WorldSimScheduler | None = None
+
+        # Serializes this player's turn execution and world-sim disk writes.
+        self.lock = threading.Lock()
+
+        # --- Suggested-action prediction cache (predict_outcome feature) ---
+        self.action_cache: dict[str, dict] = {}
+        self.action_cache_turn: int | None = None
+        self.action_cache_fp: str | None = None
+        self.predict_generation: int = 0
+        self.predict_task: "asyncio.Task | None" = None
+        # Guards the in-memory cache bookkeeping above (microsecond critical
+        # sections only — never held across disk/LLM work).
+        self.cache_lock = threading.Lock()
+
+    @property
+    def session_root(self) -> str:
+        return os.path.join(SESSION_DIR, self.uid)
+
+    @property
+    def saves_root(self) -> str:
+        return os.path.join(SAVES_DIR, self.uid)
+
+
+# ---------------------------------------------------------------------------
+# LLM configuration (shared, server-wide)
+# ---------------------------------------------------------------------------
 
 def _setup_fast_llm(provider: str):
     """Set up a fast (haiku-class) LLM for lightweight tasks.
@@ -159,17 +217,16 @@ def _env_var_for_provider(provider: str) -> str | None:
     }.get(provider)
 
 
-def _build_llm_from_config(provider_cfg: dict):
-    """Resolve a provider config dict into a live LLM + side-effects.
+def _configure_llm(provider_cfg: dict, *, persist: bool = True):
+    """(Re)build the shared server LLM from a provider config.
 
-    - Stashes the API key into the right env var (and .env where relevant).
-    - Builds the LLM via create_llm.
-    - Registers it with the engine as the main + fast LLM.
-    - Returns (provider, model, temperature) for the caller to persist.
+    Sets the engine's global LLM + fast LLM and the server-wide bypass flag, and
+    (optionally) persists the choice to ``settings/provider.json``. This affects
+    every player — the provider is a shared server-wide setting.
 
-    Mutates module globals: _is_cli_bypass.
+    Returns (provider, model, temperature).
     """
-    global _is_cli_bypass
+    global _is_cli_bypass, _llm_configured, _active_provider
 
     provider = provider_cfg.get("provider", "openai")
     model = provider_cfg.get("model", default_model_for(provider))
@@ -190,25 +247,62 @@ def _build_llm_from_config(provider_cfg: dict):
     if provider not in OAUTH_CLI_PROVIDERS:
         extra["temperature"] = temperature
 
-    llm = create_llm(provider, model, **extra)
-    set_llm(llm, zero_cost=provider in ZERO_COST_PROVIDERS)
-    _is_cli_bypass = provider in OAUTH_CLI_PROVIDERS
-    _setup_fast_llm(provider)
+    with _llm_lock:
+        llm = create_llm(provider, model, **extra)
+        set_llm(llm, zero_cost=provider in ZERO_COST_PROVIDERS)
+        _is_cli_bypass = provider in OAUTH_CLI_PROVIDERS
+        _setup_fast_llm(provider)
+        _llm_configured = True
+        _active_provider = (provider, model, extra.get("base_url"))
+
+    if persist:
+        cfg = {"provider": provider, "model": model, "temperature": temperature}
+        if provider_cfg.get("base_url") and provider in ("local", "lmstudio", "openrouter"):
+            cfg["base_url"] = provider_cfg["base_url"]
+        try:
+            os.makedirs(SETTINGS_DIR, exist_ok=True)
+            with open(os.path.join(SETTINGS_DIR, "provider.json"), "w", encoding="utf-8") as f:
+                json.dump(cfg, f, indent=2)
+        except OSError:
+            pass
 
     return provider, model, temperature
 
 
-def _start_world_sim_scheduler(session_dir: str):
-    """Create or restart the WorldSimScheduler for the active session."""
-    global _world_sim_scheduler
-    if _world_sim_scheduler is not None:
-        _world_sim_scheduler.stop()
-    _world_sim_scheduler = WorldSimScheduler(
-        session_dir=session_dir,
-        llm_getter=get_llm,
-        game_lock=_game_lock,
-    )
+def _provider_changed(provider_cfg: dict) -> bool:
+    """True if *provider_cfg* selects a different provider/model/base_url than the
+    currently-built LLM, or carries a fresh api_key to apply."""
+    if _active_provider is None:
+        return True
+    provider = provider_cfg.get("provider", "openai")
+    model = provider_cfg.get("model", default_model_for(provider))
+    base_url = provider_cfg.get("base_url")
+    if (provider, model, base_url) != _active_provider:
+        return True
+    return bool(provider_cfg.get("api_key"))  # a newly-entered key must take effect
 
+
+def _ensure_llm(provider_cfg: dict | None = None):
+    """Ensure the shared LLM is built and reflects the requested provider.
+
+    Builds only when needed: on first use, or when *provider_cfg* actually selects
+    a different provider/model/base_url (or supplies a new api_key). This keeps the
+    common case (every player on the same configured provider) from rebuilding —
+    so a second player's new game can't swap the LLM out from under a player who is
+    mid-turn — while still letting a provider change in Settings take effect on the
+    next game start.
+    """
+    if provider_cfg is None:
+        if not _llm_configured:
+            _configure_llm(load_provider_config(), persist=False)
+        return
+    if not _llm_configured or _provider_changed(provider_cfg):
+        _configure_llm(provider_cfg, persist=True)
+
+
+# ---------------------------------------------------------------------------
+# Session data helpers
+# ---------------------------------------------------------------------------
 
 def _filter_hidden(obj):
     """Recursively remove any dict that contains 'hidden': True."""
@@ -222,9 +316,11 @@ def _filter_hidden(obj):
     return obj
 
 
-def _get_session_data(session_dir: str | None = None) -> dict:
-    """Read all session JSON files, filter hidden fields, and return as a dict."""
-    sd = session_dir or _active_session_dir or SESSION_DIR
+def _get_session_data(sess: PlayerSession) -> dict:
+    """Read all of *sess*'s session JSON files, filter hidden fields, return dict."""
+    sd = sess.session_dir
+    if not sd:
+        return {}
     data = load_session(sd)
     data = _filter_hidden(data)
     conv_path = os.path.join(sd, "conversation.jsonl")
@@ -239,7 +335,6 @@ def _get_session_data(session_dir: str | None = None) -> dict:
                     except json.JSONDecodeError:
                         pass
     data["conversation"] = conversation
-    # Include cumulative usage stats
     usage_path = os.path.join(sd, "usage.json")
     if os.path.exists(usage_path):
         try:
@@ -250,12 +345,12 @@ def _get_session_data(session_dir: str | None = None) -> dict:
     return data
 
 
-def _list_saves() -> list[dict]:
-    """List available save games, sorted newest-first by last modification time."""
+def _list_saves(saves_root: str) -> list[dict]:
+    """List save games under *saves_root*, newest-first by mtime."""
     saves = []
-    if os.path.isdir(SAVES_DIR):
-        for name in os.listdir(SAVES_DIR):
-            save_path = os.path.join(SAVES_DIR, name)
+    if os.path.isdir(saves_root):
+        for name in os.listdir(saves_root):
+            save_path = os.path.join(saves_root, name)
             if os.path.isdir(save_path):
                 player = _read_json(os.path.join(save_path, "player.json"))
                 player_file = os.path.join(save_path, "player.json")
@@ -272,19 +367,37 @@ def _list_saves() -> list[dict]:
     return saves
 
 
-# --- Auto-save -------------------------------------------------------------
+def _list_sessions(session_root: str) -> list[dict]:
+    """List active sessions under *session_root*."""
+    return list_active_sessions(session_root)
+
+
+def _safe_name(name: str) -> str | None:
+    """Reduce a client-supplied save/session name to a single safe path
+    component. Returns None if it can't be made safe (prevents traversal into
+    another user's namespace via '..' or path separators)."""
+    name = (name or "").strip()
+    if not name:
+        return None
+    name = os.path.basename(name)  # strip any directory components
+    if not name or name in (".", "..") or "/" in name or "\\" in name:
+        return None
+    return name
+
+
+# --- Autosave (per-user) --------------------------------------------------
 AUTOSAVE_PREFIX = "autosave_"
 AUTOSAVE_INTERVAL = 5   # turns
-AUTOSAVE_MAX = 10       # keep at most this many autosaves; prune the oldest
+AUTOSAVE_MAX = 10       # keep at most this many autosaves per user; prune oldest
 
 
-def _prune_autosaves() -> None:
-    """Keep at most AUTOSAVE_MAX autosaves; delete the oldest beyond that."""
+def _prune_autosaves(saves_root: str) -> None:
+    """Keep at most AUTOSAVE_MAX autosaves under *saves_root*; delete the oldest."""
     try:
         autos = []
-        for name in os.listdir(SAVES_DIR):
+        for name in os.listdir(saves_root):
             if name.startswith(AUTOSAVE_PREFIX):
-                p = os.path.join(SAVES_DIR, name)
+                p = os.path.join(saves_root, name)
                 if os.path.isdir(p):
                     autos.append((p, os.path.getmtime(p)))
         autos.sort(key=lambda t: t[1], reverse=True)
@@ -294,36 +407,50 @@ def _prune_autosaves() -> None:
         pass
 
 
-def _maybe_autosave(session_dir: str) -> None:
-    """Autosave every AUTOSAVE_INTERVAL turns, then prune to AUTOSAVE_MAX.
+def _maybe_autosave(session_dir: str, saves_root: str) -> None:
+    """Autosave every AUTOSAVE_INTERVAL turns into *saves_root*, then prune.
 
-    Named with the turn + a timestamp so each is unique and the list stays
-    chronological. Best-effort: never let a save failure break a turn.
+    Best-effort: never let a save failure break a turn.
     """
     try:
         turn = _player_turn(session_dir)
         if not isinstance(turn, int) or turn % AUTOSAVE_INTERVAL != 0:
             return
         import time as _t
+        os.makedirs(saves_root, exist_ok=True)
         name = f"{AUTOSAVE_PREFIX}T{turn:03d}_{_t.strftime('%H%M%S')}"
-        save_game_to_slot(session_dir, name, SAVES_DIR)
-        _prune_autosaves()
+        save_game_to_slot(session_dir, name, saves_root)
+        _prune_autosaves(saves_root)
     except Exception:
         pass
 
 
-def _list_sessions() -> list[dict]:
-    """List active sessions under session/."""
-    return list_active_sessions(SESSION_DIR)
-
-
-def _has_session() -> bool:
-    """Check if any resumable sessions exist under session/."""
-    return bool(_list_sessions())
+def _status_payload(sess: PlayerSession | None) -> dict:
+    """Build the 'status' message — scoped to *sess*'s user, or logged-out."""
+    base = {
+        "type": "status",
+        "settings": load_settings(),
+        "provider": load_provider_config(),
+        "langsmith": _get_langsmith_status(),
+    }
+    if sess is None:
+        base.update({"authed": False, "username": None,
+                     "has_session": False, "sessions": [], "saves": []})
+        return base
+    sessions = _list_sessions(sess.session_root)
+    saves = _list_saves(sess.saves_root)
+    base.update({
+        "authed": True,
+        "username": sess.username,
+        "has_session": bool(sessions),
+        "sessions": sessions,
+        "saves": saves,
+    })
+    return base
 
 
 # ---------------------------------------------------------------------------
-# Routes
+# Routes (HTTP)
 # ---------------------------------------------------------------------------
 
 @app.get("/")
@@ -333,21 +460,59 @@ async def index():
 
 @app.get("/api/status")
 async def status():
-    return {
-        "has_session": _has_session(),
-        "sessions": _list_sessions(),
-        "saves": _list_saves(),
-        "settings": load_settings(),
-        "provider": load_provider_config(),
-        "langsmith": _get_langsmith_status(),
-    }
+    # HTTP status is user-agnostic (the authenticated, per-user view comes over
+    # the WebSocket 'init' action). Kept for health checks / compatibility.
+    return _status_payload(None)
 
 
-@app.get("/api/session")
-async def session_data():
-    if not _active_session_dir:
-        return {"error": "No active session"}
-    return _get_session_data()
+# ---------------------------------------------------------------------------
+# Session binding / registry helpers (event-loop thread only)
+# ---------------------------------------------------------------------------
+
+def _unbind(sess: PlayerSession | None) -> None:
+    """Detach *sess* from the active registry and stop its background work."""
+    if sess is None:
+        return
+    _reset_prediction(sess)
+    if _sessions_by_user.get(sess.username) is sess:
+        del _sessions_by_user[sess.username]
+    if sess.scheduler:
+        sess.scheduler.stop()
+    sess.ws = None
+
+
+async def _kick(existing: PlayerSession) -> None:
+    """Forcibly disconnect an older session for the same account."""
+    old_ws = existing.ws
+    _reset_prediction(existing)
+    if existing.scheduler:
+        existing.scheduler.stop()
+    if _sessions_by_user.get(existing.username) is existing:
+        del _sessions_by_user[existing.username]
+    existing.ws = None
+    if old_ws is not None:
+        try:
+            await old_ws.send_json({"type": "kicked"})
+        except Exception:
+            pass
+        try:
+            await old_ws.close()
+        except Exception:
+            pass
+
+
+def _on_disconnect(sess: PlayerSession | None, ws: WebSocket) -> None:
+    """Clean up when a bound connection drops (only if it's still the live one)."""
+    if sess is None:
+        return
+    _reset_prediction(sess)
+    # Only tear down if THIS ws is still the registered owner — a prior kick may
+    # have already replaced it with a newer connection.
+    if sess.ws is ws and _sessions_by_user.get(sess.username) is sess:
+        del _sessions_by_user[sess.username]
+        if sess.scheduler:
+            sess.scheduler.stop()
+        sess.ws = None
 
 
 # ---------------------------------------------------------------------------
@@ -356,9 +521,10 @@ async def session_data():
 
 @app.websocket("/ws")
 async def websocket_endpoint(ws: WebSocket):
-    global _game_graph, _game_state, _active_session_dir
-
     await ws.accept()
+
+    sess: PlayerSession | None = None  # this connection's bound player session
+    loop = asyncio.get_event_loop()
 
     try:
         while True:
@@ -366,250 +532,314 @@ async def websocket_endpoint(ws: WebSocket):
             msg = json.loads(raw)
             action = msg.get("action")
 
+            # -------------------- Auth: register / login --------------------
+            if action in ("register", "login"):
+                username = msg.get("username", "")
+                password = msg.get("password", "")
+                result = (auth.register(username, password) if action == "register"
+                          else auth.login(username, password))
+                if result.get("ok"):
+                    await ws.send_json({
+                        "type": "auth_result", "ok": True, "action": action,
+                        "username": result["username"], "token": result["token"],
+                    })
+                else:
+                    await ws.send_json({
+                        "type": "auth_result", "ok": False, "action": action,
+                        "error": result.get("error", "unknown"),
+                    })
+                continue
+
+            # -------------------- Bind / refresh status (init) --------------------
             if action == "init":
-                await ws.send_json({
-                    "type": "status",
-                    "has_session": _has_session(),
-                    "sessions": _list_sessions(),
-                    "saves": _list_saves(),
-                    "settings": load_settings(),
-                    "provider": load_provider_config(),
-                    "langsmith": _get_langsmith_status(),
-                })
+                token = msg.get("token")
+                force = bool(msg.get("force"))
+                info = auth.resolve_token(token) if token else None
 
-            elif action == "new_game":
-                _reset_prediction()  # cancel/clear any prior session's predictions
-                config = msg.get("config", {})
-                provider_cfg = msg.get("provider", {})
-
-                try:
-                    provider, model, temperature = _build_llm_from_config(provider_cfg)
-                except Exception as e:
-                    await ws.send_json({"type": "error", "message": f"Failed to create LLM: {e}"})
+                if not info:
+                    # Unauthenticated (no/expired token) — drop any prior binding
+                    # and report the logged-out menu.
+                    if sess is not None:
+                        _unbind(sess)
+                        sess = None
+                    await ws.send_json(_status_payload(None))
                     continue
 
-                # Save provider config (global)
-                cfg_to_save = {
-                    "provider": provider,
-                    "model": model,
-                    "temperature": temperature,
-                }
-                if provider_cfg.get("base_url") and provider in ("local", "lmstudio", "openrouter"):
-                    cfg_to_save["base_url"] = provider_cfg["base_url"]
-                with open(os.path.join(SETTINGS_DIR, "provider.json"), "w", encoding="utf-8") as f:
-                    json.dump(cfg_to_save, f, indent=2)
+                username, uid = info["username"], info["uid"]
 
-                lang = config.get("language", "en")
-                diff = config.get("difficulty", "standard")
+                # Switching identity on the same socket — release the old one.
+                if sess is not None and sess.username != username:
+                    _unbind(sess)
+                    sess = None
 
-                save_name = config.get("save_name", config.get("alias", "Unknown"))
-                save_name = re.sub(r"[^\w\-]", "_", save_name)
-                _active_session_dir = os.path.join(SESSION_DIR, save_name)
+                existing = _sessions_by_user.get(username)
+                if existing is not None and existing.ws is not ws:
+                    if not force:
+                        # Another live connection already owns this account.
+                        await ws.send_json({"type": "session_conflict", "username": username})
+                        continue
+                    await _kick(existing)
 
-                # create_new_session now writes session_settings.json
-                # inside the session dir (per-session difficulty + language)
-                create_new_session(
-                    session_dir=_active_session_dir,
-                    name=config.get("name", "Unknown"),
-                    alias=config.get("alias", "Unknown"),
-                    background=config.get("background", "street_runner"),
-                    difficulty=diff,
-                    language=lang,
-                )
+                if sess is None or sess.username != username:
+                    sess = PlayerSession(username, uid)
+                sess.ws = ws
+                _sessions_by_user[username] = sess
+                await ws.send_json(_status_payload(sess))
+                continue
 
-                _game_graph = compile_graph()
-                _game_state = initial_state(_active_session_dir)
-                _start_world_sim_scheduler(_active_session_dir)
+            # -------------------- Logout --------------------
+            if action == "logout":
+                token = msg.get("token")
+                if token:
+                    auth.logout(token)
+                if sess is not None:
+                    _unbind(sess)
+                    sess = None
+                await ws.send_json(_status_payload(None))
+                continue
 
-                await ws.send_json({
-                    "type": "game_started",
-                    "session": _get_session_data(),
-                })
+            # -------------------- Provider/settings (allowed logged-out) --------------------
+            if action == "save_provider":
+                await _handle_save_provider(ws, sess, msg)
+                continue
 
-                await _run_opening(ws, lang, config.get("background", "street_runner"))
+            # -------------------- Game actions (require auth) --------------------
+            if sess is None:
+                await ws.send_json({"type": "auth_required"})
+                continue
+
+            if action == "new_game":
+                await _handle_new_game(ws, sess, msg)
 
             elif action == "resume":
-                _reset_prediction()  # cancel/clear any prior session's predictions
-                session_name = msg.get("session_name", "")
-                if not session_name:
-                    await ws.send_json({"type": "error", "message": "No session_name provided."})
-                    continue
-                sess_path = os.path.join(SESSION_DIR, session_name)
-                if not os.path.isdir(sess_path):
-                    await ws.send_json({"type": "error", "message": f"Session not found: {session_name}"})
-                    continue
-
-                provider_cfg = msg.get("provider", load_provider_config())
-
-                try:
-                    _build_llm_from_config(provider_cfg)
-                except Exception as e:
-                    await ws.send_json({"type": "error", "message": f"Failed to create LLM: {e}"})
-                    continue
-
-                _active_session_dir = sess_path
-                _game_graph = compile_graph()
-                _game_state = initial_state(_active_session_dir)
-                _start_world_sim_scheduler(_active_session_dir)
-
-                await ws.send_json({
-                    "type": "game_started",
-                    "session": _get_session_data(),
-                })
-
-                await _run_turn(ws, mode="resume")
+                await _handle_resume(ws, sess, msg)
 
             elif action == "load_game":
-                _reset_prediction()  # cancel/clear any prior session's predictions
-                save_name = msg.get("save_name", "")
-                save_path = os.path.join(SAVES_DIR, save_name)
-                if not os.path.isdir(save_path):
-                    await ws.send_json({"type": "error", "message": f"Save not found: {save_name}"})
-                    continue
-
-                provider_cfg = msg.get("provider", load_provider_config())
-
-                try:
-                    _build_llm_from_config(provider_cfg)
-                except Exception as e:
-                    await ws.send_json({"type": "error", "message": f"Failed to create LLM: {e}"})
-                    continue
-
-                _active_session_dir = os.path.join(SESSION_DIR, save_name)
-                copy_save_to_session(save_path, _active_session_dir)
-                _game_graph = compile_graph()
-                _game_state = initial_state(_active_session_dir)
-                _start_world_sim_scheduler(_active_session_dir)
-
-                await ws.send_json({
-                    "type": "game_started",
-                    "session": _get_session_data(),
-                })
-
-                await _run_turn(ws, mode="resume")
+                await _handle_load_game(ws, sess, msg)
 
             elif action == "player_input":
-                text = msg.get("text", "").strip()
-                if not text:
-                    continue
-                if _game_graph is None or _game_state is None:
-                    await ws.send_json({"type": "error", "message": "No active game. Start or resume first."})
-                    continue
-
-                # Fast path: serve a pre-computed suggested-action outcome.
-                # Run the lock-guarded validate+promote off the event loop so a
-                # background prediction holding _game_lock can't stall the server.
-                import time as _t
-                _start = _t.time()
-                cached = await asyncio.get_event_loop().run_in_executor(
-                    None, _try_serve_cached, text
-                )
-                if cached is not None:
-                    await ws.send_json({"type": "thinking"})
-                    _reset_prediction()  # the promoted snapshot is now the live turn
-                    served = {**cached, "elapsed_seconds": round(_t.time() - _start, 1)}
-                    await _finish_turn(ws, served, "play", _start)
-                else:
-                    await _run_turn(ws, player_input=text)
+                await _handle_player_input(ws, sess, msg, loop)
 
             elif action == "save_game":
-                save_name = msg.get("save_name", "quicksave")
-                if not _active_session_dir:
+                save_name = _safe_name(msg.get("save_name", "quicksave")) or "quicksave"
+                if not sess.session_dir:
                     await ws.send_json({"type": "error", "message": "No active session to save."})
                     continue
                 try:
-                    path = save_game_to_slot(_active_session_dir, save_name, SAVES_DIR)
+                    os.makedirs(sess.saves_root, exist_ok=True)
+                    path = save_game_to_slot(sess.session_dir, save_name, sess.saves_root)
                     await ws.send_json({"type": "saved", "save_name": save_name, "path": path})
                 except Exception as e:
                     await ws.send_json({"type": "error", "message": f"Save failed: {e}"})
 
             elif action == "refresh":
-                if _active_session_dir:
+                if sess.session_dir:
                     await ws.send_json({
                         "type": "session_update",
-                        "session": _get_session_data(),
+                        "session": _get_session_data(sess),
                     })
 
-            elif action == "save_provider":
-                provider_cfg = msg.get("provider", {})
-                os.makedirs(SETTINGS_DIR, exist_ok=True)
-                prov = provider_cfg.get("provider", "openai")
-                cfg_to_save = {
-                    "provider": prov,
-                    "model": provider_cfg.get("model", default_model_for(prov)),
-                    "temperature": provider_cfg.get("temperature", 0.7),
-                }
-                if provider_cfg.get("base_url") and prov in ("local", "lmstudio", "openrouter"):
-                    cfg_to_save["base_url"] = provider_cfg["base_url"]
-                with open(os.path.join(SETTINGS_DIR, "provider.json"), "w", encoding="utf-8") as f:
-                    json.dump(cfg_to_save, f, indent=2)
-
-                lang = msg.get("language")
-                if lang:
-                    # Update session-level language if a session is active
-                    if _active_session_dir:
-                        ss_path = os.path.join(_active_session_dir, "session_settings.json")
-                        ss = _read_json(ss_path)
-                        ss["language"] = lang
-                        with open(ss_path, "w", encoding="utf-8") as f:
-                            json.dump(ss, f, ensure_ascii=False, indent=2)
-                    # Also update the global menu language
-                    custom_path = os.path.join(SETTINGS_DIR, "custom.json")
-                    custom = _read_json(custom_path)
-                    custom.setdefault("language", {})
-                    custom["language"]["display"] = lang
-                    custom["language"]["tui"] = lang
-                    with open(custom_path, "w", encoding="utf-8") as f:
-                        json.dump(custom, f, ensure_ascii=False, indent=2)
-
-                api_key = provider_cfg.get("api_key")
-                if api_key and prov not in OAUTH_CLI_PROVIDERS and prov not in ("local", "lmstudio"):
-                    env_var = _env_var_for_provider(prov)
-                    if env_var:
-                        os.environ[env_var] = api_key
-                        save_env_key(env_var, api_key)
-
-                langsmith_cfg = msg.get("langsmith")
-                if langsmith_cfg:
-                    _apply_langsmith(langsmith_cfg)
-
-                # Gameplay feature toggles (suggested actions / outcome prediction)
-                features = msg.get("features")
-                if isinstance(features, dict):
-                    # Persist globally (custom.json overrides default.json)
-                    custom_path = os.path.join(SETTINGS_DIR, "custom.json")
-                    custom = _read_json(custom_path)
-                    custom.setdefault("features", {})
-                    custom["features"].update(features)
-                    with open(custom_path, "w", encoding="utf-8") as f:
-                        json.dump(custom, f, ensure_ascii=False, indent=2)
-                    # And per-session so it applies to the running game immediately
-                    if _active_session_dir:
-                        ss_path = os.path.join(_active_session_dir, "session_settings.json")
-                        ss = _read_json(ss_path)
-                        ss.setdefault("features", {})
-                        ss["features"].update(features)
-                        with open(ss_path, "w", encoding="utf-8") as f:
-                            json.dump(ss, f, ensure_ascii=False, indent=2)
-                    # Turning prediction off (or changing options) invalidates the cache.
-                    _reset_prediction()
-
-                await ws.send_json({
-                    "type": "provider_saved",
-                    "provider": cfg_to_save,
-                    "langsmith": _get_langsmith_status(),
-                    "features": read_features(_active_session_dir),
-                })
-
     except WebSocketDisconnect:
-        _reset_prediction()  # cancel any in-flight speculation
-        if _world_sim_scheduler:
-            _world_sim_scheduler.stop()
+        _on_disconnect(sess, ws)
     except Exception as e:
         try:
             await ws.send_json({"type": "error", "message": str(e)})
         except Exception:
             pass
+
+
+# ---------------------------------------------------------------------------
+# Action handlers
+# ---------------------------------------------------------------------------
+
+async def _handle_new_game(ws: WebSocket, sess: PlayerSession, msg: dict):
+    _reset_prediction(sess)  # cancel/clear any prior game's predictions
+    config = msg.get("config", {})
+    provider_cfg = msg.get("provider", {})
+
+    try:
+        _ensure_llm(provider_cfg)
+    except Exception as e:
+        await ws.send_json({"type": "error", "message": f"Failed to create LLM: {e}"})
+        return
+
+    lang = config.get("language", "en")
+    diff = config.get("difficulty", "standard")
+
+    save_name = config.get("save_name", config.get("alias", "Unknown"))
+    save_name = re.sub(r"[^\w\-]", "_", save_name)
+    os.makedirs(sess.session_root, exist_ok=True)
+    sess.session_dir = os.path.join(sess.session_root, save_name)
+
+    create_new_session(
+        session_dir=sess.session_dir,
+        name=config.get("name", "Unknown"),
+        alias=config.get("alias", "Unknown"),
+        background=config.get("background", "street_runner"),
+        difficulty=diff,
+        language=lang,
+    )
+
+    sess.graph = _get_graph()
+    sess.game_state = initial_state(sess.session_dir)
+    _start_world_sim_scheduler(sess)
+
+    await ws.send_json({"type": "game_started", "session": _get_session_data(sess)})
+    await _run_opening(sess, ws, lang, config.get("background", "street_runner"))
+
+
+async def _handle_resume(ws: WebSocket, sess: PlayerSession, msg: dict):
+    _reset_prediction(sess)
+    session_name = _safe_name(msg.get("session_name", ""))
+    if not session_name:
+        await ws.send_json({"type": "error", "message": "No session_name provided."})
+        return
+    sess_path = os.path.join(sess.session_root, session_name)
+    if not os.path.isdir(sess_path):
+        await ws.send_json({"type": "error", "message": f"Session not found: {session_name}"})
+        return
+
+    provider_cfg = msg.get("provider", load_provider_config())
+    try:
+        _ensure_llm(provider_cfg)
+    except Exception as e:
+        await ws.send_json({"type": "error", "message": f"Failed to create LLM: {e}"})
+        return
+
+    sess.session_dir = sess_path
+    sess.graph = _get_graph()
+    sess.game_state = initial_state(sess.session_dir)
+    _start_world_sim_scheduler(sess)
+
+    await ws.send_json({"type": "game_started", "session": _get_session_data(sess)})
+    await _run_turn(sess, ws, mode="resume")
+
+
+async def _handle_load_game(ws: WebSocket, sess: PlayerSession, msg: dict):
+    _reset_prediction(sess)
+    save_name = _safe_name(msg.get("save_name", ""))
+    if not save_name:
+        await ws.send_json({"type": "error", "message": "Save not found."})
+        return
+    save_path = os.path.join(sess.saves_root, save_name)
+    if not os.path.isdir(save_path):
+        await ws.send_json({"type": "error", "message": f"Save not found: {save_name}"})
+        return
+
+    provider_cfg = msg.get("provider", load_provider_config())
+    try:
+        _ensure_llm(provider_cfg)
+    except Exception as e:
+        await ws.send_json({"type": "error", "message": f"Failed to create LLM: {e}"})
+        return
+
+    os.makedirs(sess.session_root, exist_ok=True)
+    sess.session_dir = os.path.join(sess.session_root, save_name)
+    copy_save_to_session(save_path, sess.session_dir)
+    sess.graph = _get_graph()
+    sess.game_state = initial_state(sess.session_dir)
+    _start_world_sim_scheduler(sess)
+
+    await ws.send_json({"type": "game_started", "session": _get_session_data(sess)})
+    await _run_turn(sess, ws, mode="resume")
+
+
+async def _handle_player_input(ws: WebSocket, sess: PlayerSession, msg: dict, loop):
+    text = msg.get("text", "").strip()
+    if not text:
+        return
+    if sess.graph is None or sess.game_state is None:
+        await ws.send_json({"type": "error", "message": "No active game. Start or resume first."})
+        return
+
+    # Fast path: serve a pre-computed suggested-action outcome. Run the
+    # lock-guarded validate+promote off the event loop so a background
+    # prediction holding sess.lock can't stall the server.
+    import time as _t
+    _start = _t.time()
+    cached = await loop.run_in_executor(None, _try_serve_cached, sess, text)
+    if cached is not None:
+        await ws.send_json({"type": "thinking"})
+        _reset_prediction(sess)  # the promoted snapshot is now the live turn
+        served = {**cached, "elapsed_seconds": round(_t.time() - _start, 1)}
+        await _finish_turn(sess, ws, served, "play", _start)
+    else:
+        await _run_turn(sess, ws, player_input=text)
+
+
+async def _handle_save_provider(ws: WebSocket, sess: PlayerSession | None, msg: dict):
+    """Persist provider/langsmith/feature settings. Allowed while logged out
+    (global parts only); per-session parts apply when a game is active.
+
+    Does NOT rebuild the shared LLM here — that would swap the provider out from
+    under any player currently mid-turn, and could lock in a keyless build. The
+    new provider takes effect on the next game start, where ``_ensure_llm`` sees
+    the change. The provider is a shared, server-wide setting."""
+    provider_cfg = msg.get("provider", {})
+    os.makedirs(SETTINGS_DIR, exist_ok=True)
+    prov = provider_cfg.get("provider", "openai")
+
+    # Persist the provider choice (no rebuild — see docstring).
+    cfg_to_save = {
+        "provider": prov,
+        "model": provider_cfg.get("model", default_model_for(prov)),
+        "temperature": provider_cfg.get("temperature", 0.7),
+    }
+    if provider_cfg.get("base_url") and prov in ("local", "lmstudio", "openrouter"):
+        cfg_to_save["base_url"] = provider_cfg["base_url"]
+    with open(os.path.join(SETTINGS_DIR, "provider.json"), "w", encoding="utf-8") as f:
+        json.dump(cfg_to_save, f, indent=2)
+
+    lang = msg.get("language")
+    if lang:
+        if sess and sess.session_dir:
+            ss_path = os.path.join(sess.session_dir, "session_settings.json")
+            ss = _read_json(ss_path)
+            ss["language"] = lang
+            with open(ss_path, "w", encoding="utf-8") as f:
+                json.dump(ss, f, ensure_ascii=False, indent=2)
+        custom_path = os.path.join(SETTINGS_DIR, "custom.json")
+        custom = _read_json(custom_path)
+        custom.setdefault("language", {})
+        custom["language"]["display"] = lang
+        custom["language"]["tui"] = lang
+        with open(custom_path, "w", encoding="utf-8") as f:
+            json.dump(custom, f, ensure_ascii=False, indent=2)
+
+    api_key = provider_cfg.get("api_key")
+    if api_key and prov not in OAUTH_CLI_PROVIDERS and prov not in ("local", "lmstudio"):
+        env_var = _env_var_for_provider(prov)
+        if env_var:
+            os.environ[env_var] = api_key
+            save_env_key(env_var, api_key)
+
+    langsmith_cfg = msg.get("langsmith")
+    if langsmith_cfg:
+        _apply_langsmith(langsmith_cfg)
+
+    features = msg.get("features")
+    if isinstance(features, dict):
+        custom_path = os.path.join(SETTINGS_DIR, "custom.json")
+        custom = _read_json(custom_path)
+        custom.setdefault("features", {})
+        custom["features"].update(features)
+        with open(custom_path, "w", encoding="utf-8") as f:
+            json.dump(custom, f, ensure_ascii=False, indent=2)
+        if sess and sess.session_dir:
+            ss_path = os.path.join(sess.session_dir, "session_settings.json")
+            ss = _read_json(ss_path)
+            ss.setdefault("features", {})
+            ss["features"].update(features)
+            with open(ss_path, "w", encoding="utf-8") as f:
+                json.dump(ss, f, ensure_ascii=False, indent=2)
+        _reset_prediction(sess)
+
+    await ws.send_json({
+        "type": "provider_saved",
+        "provider": cfg_to_save,
+        "langsmith": _get_langsmith_status(),
+        "features": read_features(sess.session_dir if sess else None),
+    })
 
 
 # ---------------------------------------------------------------------------
@@ -620,13 +850,11 @@ async def websocket_endpoint(ws: WebSocket):
 async def companion_endpoint(ws: WebSocket):
     """Side-channel for the player to ask questions without advancing the game.
 
-    Deliberately a SEPARATE socket from ``/ws`` so it runs truly concurrently:
-    while the main game loop is blocked awaiting a turn, this loop keeps
-    receiving and can answer immediately. It is strictly read-only — it never
-    takes ``_game_lock``, never mutates session state, never advances the turn,
-    and never writes to the conversation log. The LLM call runs in the executor
-    so it doesn't stall the event loop. Nothing is persisted server-side; the
-    transcript lives only in the browser and is gone on reload.
+    Deliberately a SEPARATE socket from ``/ws`` so it runs truly concurrently.
+    It is strictly read-only — never takes a turn lock, never mutates session
+    state, never advances the turn, and never writes to the conversation log.
+    The asking connection identifies its player via the same auth token; the
+    answer is drawn from that player's active session only.
     """
     await ws.accept()
     loop = asyncio.get_event_loop()
@@ -644,12 +872,18 @@ async def companion_endpoint(ws: WebSocket):
             if not question:
                 continue
 
-            session_dir = _active_session_dir
+            token = msg.get("token")
+            info = auth.resolve_token(token) if token else None
+            sess = _sessions_by_user.get(info["username"]) if info else None
+            session_dir = sess.session_dir if sess else None
             if not session_dir:
                 await ws.send_json({"type": "companion_reply", "error": True, "code": "no_session"})
                 continue
 
-            llm = get_llm()
+            try:
+                llm = get_llm()
+            except Exception:
+                llm = None
             if llm is None:
                 await ws.send_json({"type": "companion_reply", "error": True, "code": "no_session"})
                 continue
@@ -673,30 +907,38 @@ async def companion_endpoint(ws: WebSocket):
 
 
 # ---------------------------------------------------------------------------
-# Suggested-action prediction cache (predict_outcome feature)
+# World-sim scheduler (per player)
 # ---------------------------------------------------------------------------
 
-def _reset_prediction(*, clear_disk: bool = True) -> None:
-    """Invalidate any cached or in-flight suggested-action predictions.
+def _start_world_sim_scheduler(sess: PlayerSession):
+    """Create or restart the WorldSimScheduler for *sess*."""
+    if sess.scheduler is not None:
+        sess.scheduler.stop()
+    sess.scheduler = WorldSimScheduler(
+        session_dir=sess.session_dir,
+        llm_getter=get_llm,
+        game_lock=sess.lock,
+    )
 
-    Called whenever a real turn happens or the session changes (the predictions
-    were computed from the now-superseded state). Bumping the generation counter
-    makes any in-flight background task abandon its remaining work. The in-memory
-    bookkeeping is mutated under ``_cache_lock`` so a background task can't write
-    a stale entry into a cache we are concurrently clearing.
-    """
-    global _action_cache, _action_cache_turn, _action_cache_fp, _predict_generation, _predict_task
-    with _cache_lock:
-        _predict_generation += 1
-        _action_cache = {}
-        _action_cache_turn = None
-        _action_cache_fp = None
-    if _predict_task is not None and not _predict_task.done():
-        _predict_task.cancel()
-    _predict_task = None
-    # Disk clear is bounded (<=4 tiny snapshot dirs) so it stays inexpensive.
-    if clear_disk and _active_session_dir:
-        action_cache.clear(_active_session_dir)
+
+# ---------------------------------------------------------------------------
+# Suggested-action prediction cache (predict_outcome feature) — per player
+# ---------------------------------------------------------------------------
+
+def _reset_prediction(sess: PlayerSession | None, *, clear_disk: bool = True) -> None:
+    """Invalidate any cached or in-flight suggested-action predictions for *sess*."""
+    if sess is None:
+        return
+    with sess.cache_lock:
+        sess.predict_generation += 1
+        sess.action_cache = {}
+        sess.action_cache_turn = None
+        sess.action_cache_fp = None
+    if sess.predict_task is not None and not sess.predict_task.done():
+        sess.predict_task.cancel()
+    sess.predict_task = None
+    if clear_disk and sess.session_dir:
+        action_cache.clear(sess.session_dir)
 
 
 def _player_turn(session_dir: str) -> int | None:
@@ -714,48 +956,39 @@ def _session_language(session_dir: str | None) -> str:
     return ss.get("language", "en")
 
 
-def _maybe_schedule_prediction(result: dict, ws: WebSocket | None = None) -> None:
+def _maybe_schedule_prediction(sess: PlayerSession, result: dict, ws: WebSocket | None = None) -> None:
     """If predict_outcome is on, speculatively pre-compute each suggested action."""
-    global _predict_task
-    session_dir = _active_session_dir
+    session_dir = sess.session_dir
     if not (_is_cli_bypass and session_dir) or result.get("game_over"):
         return
     actions = [a.get("text", "") for a in (result.get("suggested_actions") or []) if a.get("text")]
     if not actions or not read_features(session_dir)["predict_outcome"]:
         return
     try:
-        # Capture session_dir now so the task can't be diverted to a different
-        # session if the player switches games while it runs.
-        _predict_task = asyncio.get_event_loop().create_task(
-            _predict_outcomes(actions, _predict_generation, session_dir, ws)
+        sess.predict_task = asyncio.get_event_loop().create_task(
+            _predict_outcomes(sess, actions, sess.predict_generation, session_dir, ws)
         )
     except RuntimeError:
         pass  # no running loop
 
 
-async def _predict_outcomes(action_texts: list[str], gen: int, session_dir: str,
-                            ws: WebSocket | None = None) -> None:
+async def _predict_outcomes(sess: PlayerSession, action_texts: list[str], gen: int,
+                            session_dir: str, ws: WebSocket | None = None) -> None:
     """Background: speculate the suggested actions, ALL IN PARALLEL.
 
-    The base snapshot is taken once under ``_game_lock`` (so it can't tear against
+    The base snapshot is taken once under ``sess.lock`` (so it can't tear against
     a live turn). Each action then branches from that frozen snapshot into its own
-    isolated working dir and runs a full speculative turn concurrently — codex/
-    claude-code spawn an independent subprocess per call, and the tools' per-turn
+    isolated working dir and runs a full speculative turn concurrently. Tool
     context is thread-local, so parallel speculations (and the live turn) never
-    interfere. Running them in parallel means all outcomes are ready in roughly
-    one turn's time instead of N turns' time, which is what makes a click actually
-    land on a warm cache. Cancellable via the generation counter; the click-time
-    turn+fingerprint check (in _try_serve_cached) is the authoritative guard
-    against serving a stale outcome.
+    interfere. Cancellable via the per-session generation counter.
     """
-    global _action_cache_turn, _action_cache_fp
     if not session_dir:
         return
     loop = asyncio.get_event_loop()
 
     def _make_base():
-        with _game_lock:
-            if gen != _predict_generation:
+        with sess.lock:
+            if gen != sess.predict_generation:
                 return None
             action_cache.clear(session_dir)
             base = action_cache.make_base(session_dir)
@@ -766,15 +999,15 @@ async def _predict_outcomes(action_texts: list[str], gen: int, session_dir: str,
         if not info:
             return
         base, fp, turn = info
-        with _cache_lock:
-            if gen != _predict_generation:
+        with sess.cache_lock:
+            if gen != sess.predict_generation:
                 return
-            _action_cache_fp, _action_cache_turn = fp, turn
+            sess.action_cache_fp, sess.action_cache_turn = fp, turn
 
         def _spec(text):
-            # No _game_lock: operates only on its own copy of the frozen base,
+            # No sess.lock: operates only on its own copy of the frozen base,
             # and tool context is thread-local. Independent of the live session.
-            if gen != _predict_generation:
+            if gen != sess.predict_generation:
                 return None
             work_dir = action_cache.prepare_action_dir(session_dir, base, text)
             res = cc_run_turn(session_dir=work_dir, player_input=text, mode="play")
@@ -787,16 +1020,15 @@ async def _predict_outcomes(action_texts: list[str], gen: int, session_dir: str,
                 import logging
                 logging.getLogger(__name__).warning("prediction failed for %r: %s", text, e)
                 return
-            if outcome and gen == _predict_generation:
+            if outcome and gen == sess.predict_generation:
                 work_dir, res = outcome
                 stored = False
-                with _cache_lock:
-                    if gen == _predict_generation:
-                        _action_cache[action_cache.hash_action(text)] = {
+                with sess.cache_lock:
+                    if gen == sess.predict_generation:
+                        sess.action_cache[action_cache.hash_action(text)] = {
                             "text": text, "state_dir": work_dir, "result": res, "ready": True,
                         }
                         stored = True
-                # Tell the client this action is now instant-clickable.
                 if stored and ws is not None:
                     try:
                         await ws.send_json({"type": "prediction_ready", "text": text})
@@ -808,45 +1040,48 @@ async def _predict_outcomes(action_texts: list[str], gen: int, session_dir: str,
         pass
 
 
-def _try_serve_cached(text: str) -> dict | None:
+def _try_serve_cached(sess: PlayerSession, text: str) -> dict | None:
     """Return a pre-computed result for *text* if a valid cache hit exists.
 
-    Confirms (under ``_game_lock``) that the live session still matches the
+    Confirms (under ``sess.lock``) that the live session still matches the
     snapshot the prediction branched from (same turn + fingerprint), then
-    promotes that snapshot to be the live session. Returns the cached result, or
-    None to fall back to a normal live turn. In-memory bookkeeping reads/writes
-    are guarded by ``_cache_lock``.
+    promotes that snapshot to be the live session.
     """
-    session_dir = _active_session_dir
+    session_dir = sess.session_dir
     if not (_is_cli_bypass and session_dir):
         return None
     if not read_features(session_dir)["predict_outcome"]:
         return None
-    global _predict_generation
-    with _cache_lock:
-        entry = _action_cache.get(action_cache.hash_action(text))
-        exp_turn, exp_fp = _action_cache_turn, _action_cache_fp
+    with sess.cache_lock:
+        entry = sess.action_cache.get(action_cache.hash_action(text))
+        exp_turn, exp_fp = sess.action_cache_turn, sess.action_cache_fp
     if not entry or not entry.get("ready"):
         return None
-    with _game_lock:
+    with sess.lock:
         if _player_turn(session_dir) != exp_turn:
             return None
         if action_cache.fingerprint(session_dir) != exp_fp:
             return None
         action_cache.promote(session_dir, entry["state_dir"])
-    # Invalidate in-flight speculation: the live state is now the next turn.
-    with _cache_lock:
-        _predict_generation += 1
+    with sess.cache_lock:
+        sess.predict_generation += 1
     return entry["result"]
 
 
-async def _finish_turn(ws: WebSocket, result: dict, mode: str, turn_start: float) -> None:
-    """Send a completed turn's result to the client and schedule follow-ups.
+# ---------------------------------------------------------------------------
+# Turn execution
+# ---------------------------------------------------------------------------
 
-    Shared by live turns (``_run_turn``) and instant cache hits so both paths
-    emit identical message sequences.
-    """
+async def _finish_turn(sess: PlayerSession, ws: WebSocket, result: dict, mode: str,
+                       turn_start: float) -> None:
+    """Send a completed turn's result to the client and schedule follow-ups."""
     import time as _time
+
+    # If this session is no longer the live one (the player logged out, was
+    # kicked, or disconnected mid-turn), drop the result: don't write to a dead
+    # socket or reactivate a torn-down scheduler / prediction for a stale session.
+    if sess.ws is not ws or _sessions_by_user.get(sess.username) is not sess:
+        return
 
     narrative = result.get("narrative", "")
     game_over = result.get("game_over", False)
@@ -896,22 +1131,21 @@ async def _finish_turn(ws: WebSocket, result: dict, mode: str, turn_start: float
         })
 
     # Meter-change + low-integrity notices, rendered as system lines in chat so
-    # the player is fully aware of how Integrity / NEXUS Alert / Fragment Decay
-    # moved this turn (from → to).
+    # the player sees how Integrity / NEXUS Alert / Fragment Decay moved this turn.
     for note in result.get("system_notices", []) or []:
         if note:
             await ws.send_json({"type": "system_notice", "text": note})
 
     await ws.send_json({
         "type": "session_update",
-        "session": _get_session_data(),
+        "session": _get_session_data(sess),
     })
 
-    # Auto-save on normal play turns (every N turns; pruned to a cap).
-    if mode == "play" and not game_over and not result.get("is_warning") and _active_session_dir:
+    # Auto-save on normal play turns (every N turns; pruned to a cap), per user.
+    if mode == "play" and not game_over and not result.get("is_warning") and sess.session_dir:
         try:
             await asyncio.get_event_loop().run_in_executor(
-                None, _maybe_autosave, _active_session_dir
+                None, _maybe_autosave, sess.session_dir, sess.saves_root
             )
         except Exception:
             pass
@@ -923,23 +1157,18 @@ async def _finish_turn(ws: WebSocket, result: dict, mode: str, turn_start: float
             "death_cause": result.get("death_cause"),
             "narrative": narrative,
         })
-        if _world_sim_scheduler:
-            _world_sim_scheduler.stop()
+        if sess.scheduler:
+            sess.scheduler.stop()
         return
 
-    if mode == "play" and _world_sim_scheduler:
-        _world_sim_scheduler.on_player_input()
+    if mode == "play" and sess.scheduler:
+        sess.scheduler.on_player_input()
 
-    _maybe_schedule_prediction(result, ws)
+    _maybe_schedule_prediction(sess, result, ws)
 
 
-async def _run_opening(ws: WebSocket, language: str, background: str) -> None:
-    """Present a new game's opening scene.
-
-    Serves the persistent opening cache instantly (no LLM) when warm; on a cache
-    miss it runs the turn-1 ``resume`` generation once and persists the result so
-    every later new game of this ``(language, background)`` is instant.
-    """
+async def _run_opening(sess: PlayerSession, ws: WebSocket, language: str, background: str) -> None:
+    """Present a new game's opening scene (served from the persistent cache when warm)."""
     import time as _time
     cached = opening_cache.load(language, background)
     if cached:
@@ -954,75 +1183,66 @@ async def _run_opening(ws: WebSocket, language: str, background: str) -> None:
             "turn_usage": {},
             "elapsed_seconds": 0.0,
         }
-        await _finish_turn(ws, result, "resume", _time.time())
+        await _finish_turn(sess, ws, result, "resume", _time.time())
         return
-    # Miss: generate the opening once and write it through to the cache.
-    await _run_turn(ws, mode="resume", opening_key=(language, background))
+    await _run_turn(sess, ws, mode="resume", opening_key=(language, background))
 
 
-async def _run_turn(ws: WebSocket, player_input: str | None = None, mode: str = "play",
-                    opening_key: tuple[str, str] | None = None):
-    """Run a single game turn in a background thread.
-
-    When *opening_key* is set (new-game turn-1 only), the resulting opening scene
-    is written to the persistent opening cache so subsequent new games skip it.
-    """
-    global _game_state
-
+async def _run_turn(sess: PlayerSession, ws: WebSocket, player_input: str | None = None,
+                    mode: str = "play", opening_key: tuple[str, str] | None = None):
+    """Run a single game turn for *sess* in a background thread."""
     await ws.send_json({"type": "thinking"})
 
     import time as _time
     _turn_start = _time.time()
 
     # A real turn supersedes any pending suggested-action predictions.
-    _reset_prediction()
+    _reset_prediction(sess)
 
     loop = asyncio.get_event_loop()
 
     def _invoke():
-        global _game_state
-        with _game_lock:
+        with sess.lock:
             # --- CLI-bypass: single LLM call, pure Python post-processing ---
-            # The same fast path is used by both Claude Code CLI and Codex CLI;
-            # any LLM exposing _call_claude(system, user) -> str can plug in.
             # Re-check from the live LLM instance to avoid a stale flag.
             from engine.graph import get_llm as _get_current_llm
-            _current_llm = _get_current_llm()
+            try:
+                _current_llm = _get_current_llm()
+            except Exception:
+                _current_llm = None
             _use_bypass = (
                 _is_cli_bypass
-                and _active_session_dir
+                and sess.session_dir
                 and hasattr(_current_llm, '_call_claude')
             )
             if _use_bypass:
                 return cc_run_turn(
-                    session_dir=_active_session_dir,
+                    session_dir=sess.session_dir,
                     player_input=player_input or "",
                     mode=mode,
                 )
 
             # --- Standard LangGraph path ---
             # Inject any pending world events from background world simulator
-            if _world_sim_scheduler and mode == "play":
-                pending = _world_sim_scheduler.get_pending_events()
+            if sess.scheduler and mode == "play":
+                pending = sess.scheduler.get_pending_events()
                 if pending:
                     world_section = "\n\n".join(pending)
-                    _game_state["messages"].append(
+                    sess.game_state["messages"].append(
                         HumanMessage(content=(
                             f"[SYSTEM: While you were away, the world moved on.]\n{world_section}"
                         ))
                     )
-                    _game_state["skip_conversation_log"] = True
-                    _game_state["skip_turn_increment"] = True
-                    _game_state["skip_validation"] = True
-                    result = _game_graph.invoke(_game_state)
-                    _game_state = result
+                    sess.game_state["skip_conversation_log"] = True
+                    sess.game_state["skip_turn_increment"] = True
+                    sess.game_state["skip_validation"] = True
+                    result = sess.graph.invoke(sess.game_state)
+                    sess.game_state = result
 
             if mode == "resume":
-                player = _game_state.get("player", {})
-                location = _game_state.get("location", {})
+                player = sess.game_state.get("player", {})
+                location = sess.game_state.get("location", {})
                 if player.get("turn", 1) == 1:
-                    # Fresh new-game opening — name-agnostic so it can be cached
-                    # and reused for every new player of this (language, background).
                     resume_text = (
                         f"[SYSTEM: New game — opening scene. The player is a "
                         f"{player.get('background', '?')} at {location.get('area', '?')} in "
@@ -1038,15 +1258,15 @@ async def _run_turn(ws: WebSocket, player_input: str | None = None, mode: str = 
                         f"Currently at {location.get('area', '?')} in {location.get('district', '?')}. "
                         f"Turn {player.get('turn', 1)}. Provide a brief scene-setting narrative.]"
                     )
-                _game_state["messages"].append(HumanMessage(content=resume_text))
-                _game_state["skip_conversation_log"] = True
-                _game_state["skip_turn_increment"] = True
-                _game_state["skip_validation"] = True
+                sess.game_state["messages"].append(HumanMessage(content=resume_text))
+                sess.game_state["skip_conversation_log"] = True
+                sess.game_state["skip_turn_increment"] = True
+                sess.game_state["skip_validation"] = True
             else:
-                _game_state["messages"].append(HumanMessage(content=player_input))
+                sess.game_state["messages"].append(HumanMessage(content=player_input))
 
-            result = _game_graph.invoke(_game_state)
-            _game_state = result
+            result = sess.graph.invoke(sess.game_state)
+            sess.game_state = result
             return result
 
     try:
@@ -1057,14 +1277,14 @@ async def _run_turn(ws: WebSocket, player_input: str | None = None, mode: str = 
         if (not _is_cli_bypass and not result.get("suggested_actions")
                 and not result.get("game_over") and not result.get("is_warning")):
             try:
-                feats = read_features(_active_session_dir)
+                feats = read_features(sess.session_dir)
                 if feats["suggested_actions"]:
                     suggestions = await loop.run_in_executor(
                         None,
                         lambda: generate_suggested_actions(
-                            _game_state,
+                            sess.game_state,
                             result.get("narrative", ""),
-                            _session_language(_active_session_dir),
+                            _session_language(sess.session_dir),
                             get_fast_llm(),
                             feats["suggested_actions_count"],
                         ),
@@ -1074,14 +1294,11 @@ async def _run_turn(ws: WebSocket, player_input: str | None = None, mode: str = 
                 pass
 
         # Write-through the freshly generated opening so future new games of this
-        # (language, background) are served instantly from cache. The cache is
-        # shared across all future players of that combo, so never persist an
-        # opening that embedded THIS player's name/alias. The bypass engine
-        # already strips identity from the opening prompt; this is a cross-engine
-        # safety net (covers the LangGraph path / any residual leak).
+        # (language, background) are served instantly from cache. Never persist
+        # an opening that embedded THIS player's name/alias.
         if (opening_key and result.get("narrative")
                 and not result.get("game_over") and not result.get("is_warning")):
-            ply = (_game_state or {}).get("player", {}) if isinstance(_game_state, dict) else {}
+            ply = (sess.game_state or {}).get("player", {}) if isinstance(sess.game_state, dict) else {}
             narr_lower = result["narrative"].lower()
             ident = [str(ply.get("name", "")).strip(), str(ply.get("alias", "")).strip()]
             leaked = any(len(tok) >= 3 and tok.lower() in narr_lower for tok in ident)
@@ -1092,12 +1309,11 @@ async def _run_turn(ws: WebSocket, player_input: str | None = None, mode: str = 
                 except Exception:
                     pass
 
-        await _finish_turn(ws, result, mode, _turn_start)
+        await _finish_turn(sess, ws, result, mode, _turn_start)
 
     except WebSocketDisconnect:
-        # Client closed/reloaded the tab mid-turn — not an error. Let the
-        # endpoint's disconnect handler do the cleanup (stop world sim, cancel
-        # predictions). Don't try to send on the dead socket.
+        # Client closed/reloaded mid-turn — not an error. The endpoint's
+        # disconnect handler does the cleanup.
         raise
     except Exception as e:
         import traceback

@@ -560,6 +560,29 @@ html, body {
   box-shadow: 0 0 10px rgba(0,255,245,0.15), inset 0 0 10px rgba(0,255,245,0.05);
 }
 
+/* Browser autofill forces a light background + dark text on inputs, which breaks
+   the dark theme. There's no way to override the autofill background directly, so
+   mask it with a huge inset box-shadow in the input's own colour and set the text
+   fill colour. The long transition defeats the brief autofill background flash. */
+.cyber-input:-webkit-autofill,
+.cyber-input:-webkit-autofill:hover,
+.cyber-input:-webkit-autofill:active {
+  -webkit-text-fill-color: var(--text-bright);
+  -webkit-box-shadow: 0 0 0 1000px var(--bg-input) inset;
+  box-shadow: 0 0 0 1000px var(--bg-input) inset;
+  caret-color: var(--text-bright);
+  font-family: var(--font-mono);
+  transition: background-color 9999s ease-in-out 0s;
+}
+/* Keep the cyan focus glow on an autofilled field while still masking the bg. */
+.cyber-input:-webkit-autofill:focus {
+  -webkit-text-fill-color: var(--text-bright);
+  -webkit-box-shadow: 0 0 10px rgba(0,255,245,0.15), inset 0 0 0 1000px var(--bg-input);
+  box-shadow: 0 0 10px rgba(0,255,245,0.15), inset 0 0 0 1000px var(--bg-input);
+  caret-color: var(--text-bright);
+  font-family: var(--font-mono);
+}
+
 .cyber-input option {
   background: var(--bg-dark);
   color: var(--text);
@@ -1652,6 +1675,155 @@ mark.search-hl {
   text-align: center;
   margin: 16px 0;
   line-height: 1.6;
+}
+
+/* ================================================================
+   ACCOUNT WIDGET (bottom-left of the main menu)
+   ================================================================ */
+.account-widget {
+  position: absolute;
+  left: 22px;
+  bottom: 20px;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.account-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 14px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  font-family: var(--font-mono, monospace);
+  font-size: 12px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: border-color 0.2s, color 0.2s, box-shadow 0.2s;
+  clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 8px 100%, 0 calc(100% - 8px));
+}
+.account-btn:hover {
+  color: var(--text-bright);
+  border-color: var(--cyan-dim);
+  box-shadow: 0 0 12px var(--border-glow);
+}
+.account-btn.signed-in { color: var(--cyan); }
+
+.account-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-dim);
+  box-shadow: none;
+  flex: 0 0 auto;
+}
+.account-status-dot.online {
+  background: var(--green);
+  box-shadow: 0 0 8px var(--green);
+  animation: account-pulse 2.4s ease-in-out infinite;
+}
+@keyframes account-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+
+.account-label {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-menu {
+  display: none;
+  flex-direction: column;
+  min-width: 150px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  box-shadow: 0 0 18px rgba(0, 0, 0, 0.6);
+}
+.account-menu.open { display: flex; }
+
+.account-menu-item {
+  padding: 10px 14px;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  font-family: var(--font-mono, monospace);
+  font-size: 12px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.account-menu-item:last-child { border-bottom: none; }
+.account-menu-item:hover { background: var(--bg-input); color: var(--magenta); }
+
+/* ================================================================
+   AUTH DIALOG (register / sign in)
+   ================================================================ */
+.auth-dialog {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  padding: 28px 30px 30px;
+  width: 400px;
+  max-width: 90vw;
+  max-height: 90vh;
+  overflow: auto;
+  box-sizing: border-box;
+}
+
+/* Buttons: the base .cyber-btn has min-width:280px, which would overflow this
+   narrow dialog two-up. Constrain them to fit (same approach as .save-dialog). */
+.auth-dialog .form-actions {
+  flex-wrap: wrap;
+}
+.auth-dialog .cyber-btn {
+  min-width: 140px;
+  flex: 1;
+  padding: 12px 20px;
+  font-size: 14px;
+}
+
+.auth-tabs {
+  display: flex;
+  gap: 4px;
+  margin: 18px 0 20px;
+}
+.auth-tab {
+  flex: 1;
+  padding: 10px 0;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  font-family: var(--font-mono, monospace);
+  font-size: 12px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: color 0.2s, border-color 0.2s, background 0.2s;
+}
+.auth-tab:hover { color: var(--text-bright); }
+.auth-tab.active {
+  color: var(--cyan);
+  border-color: var(--cyan-dim);
+  background: rgba(0, 255, 245, 0.06);
+}
+
+.auth-error {
+  min-height: 18px;
+  margin: 4px 0 10px;
+  color: var(--magenta);
+  font-size: 12px;
+  letter-spacing: 0.5px;
+  text-align: center;
 }
 
 /* ================================================================

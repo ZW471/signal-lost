@@ -15,6 +15,17 @@ const MusicEngine = (() => {
   let currentName = null;
   let _fadeOutTimer = null;
   let _fadeInTimer = null;
+  let _retryHandler = null;  // pending autoplay-retry click listener (at most one)
+  let _desiredName = null;   // the track that SHOULD be playing (menu or a district)
+
+  /** Drop any pending autoplay-retry listener (e.g. a stale menu-track retry)
+   *  so a later click can't resurrect a track we've already switched away from. */
+  function _clearRetry() {
+    if (_retryHandler) {
+      document.removeEventListener('click', _retryHandler);
+      _retryHandler = null;
+    }
+  }
 
   // MP3 file mapping: track name → URL path (opaque filenames to avoid spoilers)
   const TRACK_FILES = {
@@ -112,6 +123,18 @@ const MusicEngine = (() => {
     const newAudio = getAudio(resolved);
     if (!newAudio) return;
 
+    // Switching to a different track: drop any pending autoplay-retry from a
+    // PREVIOUS switchTo (e.g. the menu track armed at boot) so a later click
+    // can't resurrect it on top of this one.
+    _clearRetry();
+
+    // Single-playback guarantee: stop any stray track that is neither the old
+    // (about to fade out) nor the new one, so only one track is ever audible.
+    for (const _n in _audioCache) {
+      const a = _audioCache[_n];
+      if (a !== newAudio && a !== currentAudio && !a.paused) { a.pause(); a.currentTime = 0; }
+    }
+
     // Clear any ongoing fades
     if (_fadeOutTimer) clearInterval(_fadeOutTimer);
     if (_fadeInTimer) clearInterval(_fadeInTimer);
@@ -136,16 +159,22 @@ const MusicEngine = (() => {
           _fadeInTimer = null;
         });
       }).catch(err => {
-        // Autoplay blocked — retry on next user interaction
+        // Autoplay blocked — retry on next user interaction. Only ONE retry is
+        // ever pending, and it only plays if this is still the intended track,
+        // so it can never resurrect a track we've since switched away from.
         console.warn('MusicEngine: play blocked, will retry on click', err);
         const retry = () => {
+          document.removeEventListener('click', retry);
+          if (_retryHandler === retry) _retryHandler = null;
+          if (currentName !== resolved) return;  // we've moved on; don't play
           newAudio.play().then(() => {
             _fadeInTimer = fade(newAudio, effectiveVolume(), FADE_MS, () => {
               _fadeInTimer = null;
             });
           }).catch(() => {});
-          document.removeEventListener('click', retry);
         };
+        _clearRetry();
+        _retryHandler = retry;
         document.addEventListener('click', retry, { once: true });
       });
     }
@@ -161,12 +190,17 @@ const MusicEngine = (() => {
   function updateFromSession(session) {
     if (!session || !session.location) return;
     const district = session.location.district;
-    if (district) switchTo(district);
+    if (!district) return;
+    const resolved = resolveTrack(district);
+    if (resolved) _desiredName = resolved;   // watchdog target
+    switchTo(district);
   }
 
-  function playMenu() { switchTo('menu'); }
+  function playMenu() { _desiredName = 'menu'; switchTo('menu'); }
 
   function stopAll() {
+    _desiredName = null;   // nothing should be playing → watchdog won't restart
+    _clearRetry();
     if (_fadeOutTimer) clearInterval(_fadeOutTimer);
     if (_fadeInTimer) clearInterval(_fadeInTimer);
     if (currentAudio) {
@@ -279,6 +313,45 @@ const MusicEngine = (() => {
       fadeUp();
     }
   }
+
+  // ---------------------------------------------------------------
+  // Watchdog: every 5s, reconcile ACTUAL playback with the desired track.
+  //
+  // Belt-and-suspenders for the music: instead of trusting every screen/
+  // location transition to fire perfectly, this periodically checks what is
+  // really playing and (a) pauses any stray track so only ONE ever sounds, and
+  // (b) starts/repairs the desired track if it's wrong, paused, or silent.
+  // It deliberately stands down while the page is hidden or the user has muted,
+  // so it never fights the visibility auto-pause or a manual mute.
+  // ---------------------------------------------------------------
+  function _enforce() {
+    if (!_desiredName) return;
+    if (document.hidden || _pausedByVisibility) return;
+
+    // (a) Single-playback: pause anything that isn't the desired track.
+    let desiredAudio = null;
+    for (const name in _audioCache) {
+      const a = _audioCache[name];
+      if (name === _desiredName) { desiredAudio = a; continue; }
+      if (!a.paused) { a.pause(); a.currentTime = 0; }
+    }
+
+    if (muted) return;  // don't force-start while muted
+
+    // (b) Wrong track playing → switch to the desired one.
+    if (currentName !== _desiredName) { switchTo(_desiredName); return; }
+
+    // (b') Right track but silent/paused (autoplay blocked, stalled) → nudge it.
+    if (desiredAudio && (desiredAudio.paused || desiredAudio.volume === 0)) {
+      desiredAudio.play().then(() => {
+        if (desiredAudio.volume < effectiveVolume()) {
+          if (_fadeInTimer) clearInterval(_fadeInTimer);
+          _fadeInTimer = fade(desiredAudio, effectiveVolume(), FADE_MS, () => { _fadeInTimer = null; });
+        }
+      }).catch(() => {});
+    }
+  }
+  setInterval(_enforce, 5000);
 
   // Page Visibility API is the primary, reliable signal (fires on
   // mobile app-switch / screen-lock and desktop tab-switch).
