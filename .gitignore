@@ -3,6 +3,7 @@
 !.env.example
 /session
 /saves
+/auth
 __pycache__
 .claude
 /assets/music/*.mp3

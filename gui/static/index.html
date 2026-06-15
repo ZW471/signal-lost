@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, viewport-fit=cover">
   <title>SIGNAL LOST</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='4' fill='%230a0a0f'/><text x='16' y='22' text-anchor='middle' font-size='18' fill='%2300ff88'>S</text></svg>">
-  <link rel="stylesheet" href="/static/style.css?v=mobile5">
+  <link rel="stylesheet" href="/static/style.css?v=mobile8">
   <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
@@ -68,6 +68,17 @@
       <a href="https://github.com/ZW471/signal-lost" target="_blank" rel="noopener" class="github-link" title="GitHub">
         <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='%23606080' d='M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0016 8c0-4.42-3.58-8-8-8z'/%3E%3C/svg%3E" alt="GitHub" width="22" height="22">
       </a>
+    </div>
+
+    <!-- Account widget (bottom-left corner) -->
+    <div class="account-widget" id="accountWidget">
+      <div class="account-menu" id="accountMenu" aria-hidden="true">
+        <button class="account-menu-item" id="accountMenuLogout" onclick="doLogout()">SIGN OUT</button>
+      </div>
+      <button class="account-btn" id="accountBtn" onclick="onAccountButton(event)" aria-haspopup="true" aria-expanded="false">
+        <span class="account-status-dot" id="accountDot"></span>
+        <span class="account-label" id="accountLabel">SIGN IN</span>
+      </button>
     </div>
   </div>
 
@@ -465,10 +476,69 @@
     </div>
   </div>
 
+  <!-- ========== AUTH (REGISTER / SIGN IN) ========== -->
+  <div id="authOverlay" class="overlay" style="display:none">
+    <div class="auth-dialog">
+      <h3 class="config-title" id="authTitle">// ACCESS TERMINAL</h3>
+      <div class="auth-tabs">
+        <button class="auth-tab active" id="authTabSignin" onclick="switchAuthTab('signin')">SIGN IN</button>
+        <button class="auth-tab" id="authTabRegister" onclick="switchAuthTab('register')">REGISTER</button>
+      </div>
+      <div class="config-form">
+        <div class="form-group">
+          <label class="cyber-label" id="authUserLabel">USERNAME</label>
+          <input type="text" class="cyber-input" id="authUsername" autocomplete="username" maxlength="32" placeholder="Enter a username" onkeydown="if(event.key==='Enter')submitAuth()">
+        </div>
+        <div class="form-group">
+          <label class="cyber-label" id="authPassLabel">PASSWORD</label>
+          <input type="password" class="cyber-input" id="authPassword" autocomplete="current-password" placeholder="Enter a password" onkeydown="if(event.key==='Enter')submitAuth()">
+        </div>
+        <div class="auth-error" id="authError"></div>
+        <div class="form-actions">
+          <button class="cyber-btn accent" onclick="submitAuth()">
+            <span class="cyber-btn-text" id="authSubmitLabel">SIGN IN</span>
+          </button>
+          <button class="cyber-btn" onclick="closeAuth()">
+            <span class="cyber-btn-text" id="authCancelLabel">CANCEL</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== SESSION CONFLICT (double login) ========== -->
+  <div id="sessionConflictDialog" class="overlay" style="display:none">
+    <div class="save-dialog">
+      <h3 class="config-title" id="conflictTitle">// ACCOUNT ALREADY ACTIVE</h3>
+      <p class="confirm-text" id="conflictText">This account is already signed in on another session. Continue here and disconnect the other one?</p>
+      <div class="form-actions">
+        <button class="cyber-btn accent" onclick="confirmTakeover()">
+          <span class="cyber-btn-text" id="conflictYes">CONTINUE HERE</span>
+        </button>
+        <button class="cyber-btn" onclick="closeConflict()">
+          <span class="cyber-btn-text" id="conflictNo">CANCEL</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== KICKED (signed out elsewhere) ========== -->
+  <div id="kickedOverlay" class="overlay" style="display:none">
+    <div class="save-dialog">
+      <h3 class="config-title" id="kickedTitle">// SESSION ENDED</h3>
+      <p class="confirm-text" id="kickedText">This account was opened in another session. You have been signed out here.</p>
+      <div class="form-actions">
+        <button class="cyber-btn accent" onclick="location.reload()">
+          <span class="cyber-btn-text" id="kickedReload">RECONNECT</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- ========== NOTIFICATION ========== -->
   <div id="notification" class="notification"></div>
 
-  <script src="/static/music.js?v=mobile5"></script>
-  <script src="/static/app.js?v=mobile5"></script>
+  <script src="/static/music.js?v=mobile8"></script>
+  <script src="/static/app.js?v=mobile8"></script>
 </body>
 </html>
