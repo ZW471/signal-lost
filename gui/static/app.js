@@ -988,9 +988,13 @@ function handleServerMessage(msg) {
       showKnowledgeNotification(msg.entry_type);
       break;
 
+    case 'system_notice':
+      showSystemNotice(msg.text);
+      break;
+
     case 'game_over':
       clearSuggestedActions();
-      setTimeout(() => showGameOver(msg.ending, msg.narrative), 2000);
+      setTimeout(() => showGameOver(msg.ending, msg.narrative, msg.death_cause), 2000);
       break;
 
     case 'saved':
@@ -1367,6 +1371,16 @@ function showDiscoveryNotification(msg) {
   discoveryEls.push(el);
 }
 
+function showSystemNotice(text) {
+  if (!text) return;
+  const container = document.getElementById('chatMessages');
+  const el = document.createElement('div');
+  el.className = 'chat-msg system-notice';
+  el.innerHTML = `<div class="system-notice-text">${esc(text)}</div>`;
+  container.appendChild(el);
+  container.scrollTop = container.scrollHeight;
+}
+
 // Track active knowledge toasts for vertical stacking
 let _activeToasts = [];
 
@@ -1726,10 +1740,27 @@ function saveGame() { const el = document.getElementById('saveName'); el.value =
 function confirmSave() { sendWS({ action: 'save_game', save_name: document.getElementById('saveName').value.trim() || _defaultSaveName() }); }
 function closeSaveDialog() { document.getElementById('saveDialog').style.display = 'none'; }
 
-function showGameOver(ending, narrative) {
+function showGameOver(ending, narrative, deathCause) {
   triggerGlitch(); triggerGlitch();
-  document.getElementById('gameOverEnding').textContent = ending ? `// ${ending.toUpperCase()}` : L('game_over_fallback');
-  document.getElementById('gameOverNarrative').textContent = narrative || '';
+  let label = ending ? `// ${ending.toUpperCase()}` : L('game_over_fallback');
+  if (ending === 'death' && deathCause) {
+    const causes = {
+      collapse: { en: 'NEURAL COLLAPSE', zh: '神经崩溃' },
+      capture:  { en: 'CAPTURED BY NEXUS', zh: '被NEXUS擒获' },
+      unknown:  { en: 'DEATH', zh: '死亡' },
+    };
+    const c = causes[deathCause] || causes.unknown;
+    label = `// ${currentLang === 'zh' ? c.zh : c.en}`;
+  }
+  document.getElementById('gameOverEnding').textContent = label;
+  let narr = narrative || '';
+  // DEATH is a failure state, not a full story ending — nudge toward reloading.
+  if (ending === 'death') {
+    narr += (narr ? '\n\n' : '') + (currentLang === 'zh'
+      ? '— 你可以从自动存档（每5回合）或手动存档重新连接。'
+      : '— You can RECONNECT from an autosave (every 5 turns) or a manual save.');
+  }
+  document.getElementById('gameOverNarrative').textContent = narr;
   document.getElementById('gameOverOverlay').style.display = 'flex';
   playBeep(200, 0.3, 0.05);
 }

@@ -42,6 +42,8 @@ from engine.game_data import (
     _count_discovered_traces,
     ITEM_SKILL_BONUSES,
     ITEM_SKILL_PENALTIES,
+    check_death,
+    integrity_warning_text,
 )
 from engine.tools import (
     decrypt_cipher,
@@ -516,15 +518,17 @@ def _apply_mutations(
                     if not isinstance(existing, dict):
                         existing = {"current": existing, "max": existing}
                     if isinstance(v, dict):
-                        player["integrity"] = {
-                            "current": v.get("current", existing.get("current", 1)),
-                            "max": v.get("max", existing.get("max", existing.get("current", 1))),
-                        }
+                        new_max = v.get("max", existing.get("max", existing.get("current", 1)))
+                        new_cur = v.get("current", existing.get("current", 1))
                     else:
-                        player["integrity"] = {
-                            "current": int(v),
-                            "max": existing.get("max", int(v)),
-                        }
+                        new_max = existing.get("max", int(v))
+                        new_cur = int(v)
+                    # Clamp current to [0, max] so healing can't exceed the cap.
+                    try:
+                        new_cur = max(0, min(int(new_cur), int(new_max)))
+                    except (TypeError, ValueError):
+                        pass
+                    player["integrity"] = {"current": new_cur, "max": new_max}
                 else:
                     player[k] = v
 
@@ -893,23 +897,98 @@ def _run_trace_checker(traces, knowledge, npcs, player, world_state, session_dir
 
 
 # ---------------------------------------------------------------------------
+# Meter-change notices (Integrity / NEXUS Alert / Fragment Decay)
+# ---------------------------------------------------------------------------
+
+def _meter_values(player: dict, world_state: dict) -> dict:
+    """Snapshot the three end-gating meters as plain numbers."""
+    ig = player.get("integrity", {})
+    ic = ig.get("current") if isinstance(ig, dict) else ig
+    im = ig.get("max") if isinstance(ig, dict) else ig
+    al = world_state.get("nexus_alert", {})
+    de = world_state.get("fragment_decay", {})
+    return {
+        "integrity": ic,
+        "integrity_max": im,
+        "alert": al.get("current") if isinstance(al, dict) else None,
+        "decay": de.get("current") if isinstance(de, dict) else None,
+    }
+
+
+def _build_meter_notices(before: dict, after: dict, language: str) -> list[str]:
+    """Build 'X → Y' chat notices for any meter that changed this turn."""
+    zh = language == "zh"
+    notices: list[str] = []
+
+    b, a = before.get("integrity"), after.get("integrity")
+    if isinstance(b, int) and isinstance(a, int) and a != b:
+        mx = after.get("integrity_max") or before.get("integrity_max") or "?"
+        arrow = "↓" if a < b else "↑"
+        notices.append(
+            f"{arrow} 神经完整度：{b}/{mx} → {a}/{mx}" if zh
+            else f"{arrow} Integrity: {b}/{mx} → {a}/{mx}"
+        )
+
+    b, a = before.get("alert"), after.get("alert")
+    if isinstance(b, (int, float)) and isinstance(a, (int, float)) and a != b:
+        arrow = "↑" if a > b else "↓"
+        notices.append(
+            f"{arrow} NEXUS 警戒：{int(b)}% → {int(a)}%" if zh
+            else f"{arrow} NEXUS Alert: {int(b)}% → {int(a)}%"
+        )
+
+    b, a = before.get("decay"), after.get("decay")
+    if isinstance(b, (int, float)) and isinstance(a, (int, float)) and a != b:
+        arrow = "↑" if a > b else "↓"
+        notices.append(
+            f"{arrow} 碎片衰变：{int(b)}% → {int(a)}%" if zh
+            else f"{arrow} Fragment Decay: {int(b)}% → {int(a)}%"
+        )
+
+    return notices
+
+
+# One-time Integrity primer (woven into the scene diegetically by the resolver).
+_INTEGRITY_PRIMER_EN = (
+    "[ONE-TIME — INTEGRITY PRIMER]: The player has not yet learned what Integrity "
+    "means. At a natural moment THIS turn — through an NPC's concern, the implant's "
+    "feedback, or their own body — briefly and diegetically convey that Integrity is "
+    "their physical/neural resilience: it erodes from strain, injury and deep Signal "
+    "resonance; it can be restored by rest, medical help, or stims; and at zero they "
+    "collapse and die. Keep it short, in-world, and woven into the scene — NOT a "
+    "tutorial popup, and do NOT state game mechanics or numbers. Mention it only once."
+)
+_INTEGRITY_PRIMER_ZH = (
+    "[一次性——完整度提示]：玩家尚未了解「神经完整度」的含义。请在本回合的自然时机——"
+    "通过某个NPC的关切、植入体的反馈，或玩家自身的身体感受——简短而有代入感地传达："
+    "神经完整度代表其身体/神经的承受力；它会因劳损、受伤和深度信号共鸣而下降；可通过"
+    "休息、医疗或兴奋剂恢复；归零时会昏厥并死亡。保持简短、融入剧情，不要做成教程弹窗，"
+    "也不要提及游戏机制或具体数字。只提示这一次。"
+)
+
+
+# ---------------------------------------------------------------------------
 # Consequence checker (mirrors graph.py consequence)
 # ---------------------------------------------------------------------------
 
 def _run_consequence(player, traces, world_state, knowledge, npcs):
-    """Check death and ending conditions. Returns (game_over, ending)."""
-    integrity = player.get("integrity", {})
-    if isinstance(integrity, dict) and integrity.get("current", 1) <= 0:
-        return True, "death"
+    """Check death and ending conditions. Returns (game_over, ending, death_cause).
+
+    DEATH is a generic ending reachable multiple ways (see game_data.check_death)
+    and is checked before the designed story endings.
+    """
+    is_dead, cause = check_death(player, world_state)
+    if is_dead:
+        return True, "death", cause
 
     for ending in ENDINGS:
         try:
             if ending["check"](traces, world_state, player, knowledge, npcs):
-                return True, ending["id"]
+                return True, ending["id"], None
         except Exception:
             pass
 
-    return False, None
+    return False, None, None
 
 
 # ---------------------------------------------------------------------------
@@ -937,6 +1016,10 @@ def run_turn(session_dir: str, player_input: str, mode: str = "play") -> dict:
     settings = _read_session_settings(session_dir)
     language = settings.get("language", "en")
     difficulty = settings.get("difficulty", "standard")
+
+    # Snapshot the three end-gating meters BEFORE any mutation/world-tick so we
+    # can report exactly how they changed (from → to) as in-chat notices.
+    _meters_before = _meter_values(player, world_state)
 
     # Set session dir for tools that need it
     set_session_dir(session_dir)
@@ -993,6 +1076,23 @@ def run_turn(session_dir: str, player_input: str, mode: str = "play") -> dict:
     output_spec = _OUTPUT_FORMAT_SPEC.replace("{validator_context}", validator_context)
 
     system_prompt = f"{static_prompt}\n\n{dynamic_prompt}\n\n{output_spec}"
+
+    # One-time, diegetic Integrity primer. Recorded via a persistent player flag
+    # so it never repeats. Fires the first time the player has actually been hurt
+    # (integrity below max) or, failing that, by an early fallback turn — whichever
+    # comes first — so the concept is learned in-fiction, at a natural moment.
+    flags = player.get("flags") or {}
+    if not is_resume and not flags.get("integrity_introduced"):
+        ig = player.get("integrity", {})
+        cur = ig.get("current") if isinstance(ig, dict) else ig
+        mx = ig.get("max") if isinstance(ig, dict) else ig
+        hurt = isinstance(cur, int) and isinstance(mx, int) and cur < mx
+        early = player.get("turn", 1) >= 4
+        if hurt or early:
+            primer = _INTEGRITY_PRIMER_ZH if language == "zh" else _INTEGRITY_PRIMER_EN
+            system_prompt = f"{system_prompt}\n\n{primer}"
+            flags["integrity_introduced"] = True
+            player["flags"] = flags
 
     if is_resume:
         if player.get("turn", 1) == 1:
@@ -1101,7 +1201,22 @@ def run_turn(session_dir: str, player_input: str, mode: str = "play") -> dict:
     )
 
     # ── Step 12: Run consequence ─────────────────────────────────────
-    game_over, ending = _run_consequence(player, traces, world_state, knowledge, npcs)
+    game_over, ending, death_cause = _run_consequence(player, traces, world_state, knowledge, npcs)
+
+    # ── Step 12b: Build in-chat meter notices (from → to) + low-integrity warning
+    system_notices: list[str] = []
+    if not is_resume:
+        _meters_after = _meter_values(player, world_state)
+        system_notices = _build_meter_notices(_meters_before, _meters_after, language)
+        if not game_over:
+            before_i = _meters_before.get("integrity")
+            cur_i = _meters_after.get("integrity")
+            max_i = _meters_after.get("integrity_max")
+            if (isinstance(cur_i, int) and isinstance(before_i, int)
+                    and isinstance(max_i, int) and cur_i < before_i):
+                warn = integrity_warning_text(difficulty, cur_i, max_i, language)
+                if warn:
+                    system_notices.append(warn)
 
     # ── Step 13: Log conversation ────────────────────────────────────
     if not is_resume:
@@ -1124,10 +1239,12 @@ def run_turn(session_dir: str, player_input: str, mode: str = "play") -> dict:
         "narrative": narrative,
         "game_over": game_over,
         "ending": ending,
+        "death_cause": death_cause,
         "is_warning": False,
         "discovery_notifications": discovery_notifications,
         "turn_usage": {},
         "knowledge_notifications": knowledge_notifications,
+        "system_notices": system_notices,
         "suggested_actions": suggested_actions,
         "elapsed_seconds": round(_time.time() - _turn_start, 1),
     }

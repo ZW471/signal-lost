@@ -11,6 +11,7 @@ import asyncio
 import json
 import os
 import re
+import shutil
 import sys
 import threading
 
@@ -269,6 +270,46 @@ def _list_saves() -> list[dict]:
     for s in saves:
         del s["mtime"]
     return saves
+
+
+# --- Auto-save -------------------------------------------------------------
+AUTOSAVE_PREFIX = "autosave_"
+AUTOSAVE_INTERVAL = 5   # turns
+AUTOSAVE_MAX = 10       # keep at most this many autosaves; prune the oldest
+
+
+def _prune_autosaves() -> None:
+    """Keep at most AUTOSAVE_MAX autosaves; delete the oldest beyond that."""
+    try:
+        autos = []
+        for name in os.listdir(SAVES_DIR):
+            if name.startswith(AUTOSAVE_PREFIX):
+                p = os.path.join(SAVES_DIR, name)
+                if os.path.isdir(p):
+                    autos.append((p, os.path.getmtime(p)))
+        autos.sort(key=lambda t: t[1], reverse=True)
+        for p, _ in autos[AUTOSAVE_MAX:]:
+            shutil.rmtree(p, ignore_errors=True)
+    except OSError:
+        pass
+
+
+def _maybe_autosave(session_dir: str) -> None:
+    """Autosave every AUTOSAVE_INTERVAL turns, then prune to AUTOSAVE_MAX.
+
+    Named with the turn + a timestamp so each is unique and the list stays
+    chronological. Best-effort: never let a save failure break a turn.
+    """
+    try:
+        turn = _player_turn(session_dir)
+        if not isinstance(turn, int) or turn % AUTOSAVE_INTERVAL != 0:
+            return
+        import time as _t
+        name = f"{AUTOSAVE_PREFIX}T{turn:03d}_{_t.strftime('%H%M%S')}"
+        save_game_to_slot(session_dir, name, SAVES_DIR)
+        _prune_autosaves()
+    except Exception:
+        pass
 
 
 def _list_sessions() -> list[dict]:
@@ -854,15 +895,32 @@ async def _finish_turn(ws: WebSocket, result: dict, mode: str, turn_start: float
             "entry_type": kn.get("entry_type", "fact"),
         })
 
+    # Meter-change + low-integrity notices, rendered as system lines in chat so
+    # the player is fully aware of how Integrity / NEXUS Alert / Fragment Decay
+    # moved this turn (from → to).
+    for note in result.get("system_notices", []) or []:
+        if note:
+            await ws.send_json({"type": "system_notice", "text": note})
+
     await ws.send_json({
         "type": "session_update",
         "session": _get_session_data(),
     })
 
+    # Auto-save on normal play turns (every N turns; pruned to a cap).
+    if mode == "play" and not game_over and not result.get("is_warning") and _active_session_dir:
+        try:
+            await asyncio.get_event_loop().run_in_executor(
+                None, _maybe_autosave, _active_session_dir
+            )
+        except Exception:
+            pass
+
     if game_over:
         await ws.send_json({
             "type": "game_over",
             "ending": ending,
+            "death_cause": result.get("death_cause"),
             "narrative": narrative,
         })
         if _world_sim_scheduler:
