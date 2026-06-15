@@ -77,11 +77,15 @@ def write_status(status: str, turn: int = 0):
 
 
 def write_response(narrative: str, turn: int, game_over: bool, state: dict):
+    from engine.prompts import extract_deepest_layer
     player = state.get("player", {})
     location = state.get("location", {})
     integrity = player.get("integrity", {})
     traces = state.get("traces", {})
-    discovered = sum(1 for t in traces.values() if isinstance(t, dict) and t.get("discovered"))
+    world_state = state.get("world_state", {})
+    discovered = len(traces.get("discovered", []))
+    alert = world_state.get("nexus_alert", {})
+    alert_cur = alert.get("current", "?") if isinstance(alert, dict) else alert
     with open(RESPONSE_FILE, "w", encoding="utf-8") as f:
         json.dump({
             "narrative": narrative,
@@ -91,10 +95,10 @@ def write_response(narrative: str, turn: int, game_over: bool, state: dict):
             "state_summary": {
                 "location": f"{location.get('district', '?')} — {location.get('area', '?')}",
                 "integrity": f"{integrity.get('current', '?')}/{integrity.get('max', '?')}",
-                "nexus_alert": player.get("nexus_alert", "?"),
+                "nexus_alert": alert_cur,
                 "credits": player.get("credits", "?"),
                 "traces_discovered": discovered,
-                "deepest_layer": state.get("deepest_layer", "?"),
+                "deepest_layer": extract_deepest_layer(traces),
                 "turn": player.get("turn", "?"),
             }
         }, f, ensure_ascii=False, indent=2)

@@ -79,6 +79,42 @@ def _layer_complete(traces: dict, layer: int) -> bool:
     return True
 
 
+def reconcile_trace_presentation(traces: dict) -> dict:
+    """Sync the display fields (``total_discovered``, per-layer ``progress``,
+    per-trace ``status``/``description``) with the authoritative ``discovered``
+    list.
+
+    The trace_checker only appends to ``discovered``; without this the persisted
+    counter stays "0 / 47" and every per-trace entry stays "[???]" even after
+    real discoveries. Idempotent; safe to call every turn. Returns ``traces``.
+    """
+    discovered = traces.get("discovered", []) or []
+    disc_map = {d.get("id"): d for d in discovered if d.get("id")}
+    total = len(TRACE_CONDITIONS)
+    traces["total_discovered"] = f"{len(disc_map)} / {total}"
+
+    layers = traces.get("layers", {})
+    if isinstance(layers, dict):
+        for layer in layers.values():
+            if not isinstance(layer, dict):
+                continue
+            tr = layer.get("traces", {})
+            if not isinstance(tr, dict):
+                continue
+            count = 0
+            for trace_id, info in tr.items():
+                if not isinstance(info, dict):
+                    continue
+                if trace_id in disc_map:
+                    count += 1
+                    info["status"] = "discovered"
+                    desc = disc_map[trace_id].get("description")
+                    if desc and info.get("description") in (None, "", "[???]"):
+                        info["description"] = desc
+            layer["progress"] = f"{count}/{len(tr)}"
+    return traces
+
+
 # ---------------------------------------------------------------------------
 # Trace definitions
 # ---------------------------------------------------------------------------
@@ -442,8 +478,11 @@ ENDINGS: list[dict] = [
         "type": "bad",
         "check": lambda t, w, p, k, n: (
             w.get("nexus_alert", {}).get("current", 0) > 60
-            and _has_fact_or_rumor_about(k, ["attack", "destroy", "nexus facility"])
-            and _count_discovered_traces(t) < 30
+            and _has_fact_or_rumor_about(k, [
+                "attack", "destroy", "nexus facility",
+                "攻击", "摧毁", "捣毁", "瘫痪", "炸毁", "袭击", "连结设施", "数据中心",
+            ])
+            and _count_discovered_traces(t) < 12
         ),
     },
     {
@@ -453,7 +492,10 @@ ENDINGS: list[dict] = [
         "type": "bad",
         "check": lambda t, w, p, k, n: (
             _count_discovered_traces(t) >= 3
-            and _has_fact_or_rumor_about(k, ["force-merge", "merge fragments", "merge", "ascend"])
+            and _has_fact_or_rumor_about(k, [
+                "force-merge", "merge fragments", "merge", "ascend",
+                "强行融合", "融合碎片", "合并碎片", "融合", "合并", "升华", "飞升",
+            ])
         ),
     },
     {
@@ -463,9 +505,15 @@ ENDINGS: list[dict] = [
         "type": "bad",
         "check": lambda t, w, p, k, n: (
             (w.get("nexus_alert", {}).get("current", 0) > 80
-             and _has_fact_or_rumor_about(k, ["cooperate", "nexus", "cooperation"]))
+             and _has_fact_or_rumor_about(k, [
+                 "cooperate", "nexus", "cooperation",
+                 "合作", "配合", "归顺", "效忠", "投靠", "秩序",
+             ]))
             or (_npc_trust_at_least(n, "orin", "trusted")
-                and _has_fact_or_rumor_about(k, ["cooperate nexus", "orin alliance"]))
+                and _has_fact_or_rumor_about(k, [
+                    "cooperate nexus", "orin alliance",
+                    "归顺连结", "与连结合作", "奥林同盟", "奥林联盟",
+                ]))
         ),
     },
     {
@@ -474,7 +522,10 @@ ENDINGS: list[dict] = [
         "name_zh": "净化",
         "type": "bad",
         "check": lambda t, w, p, k, n: (
-            _has_fact_or_rumor_about(k, ["purify", "destroy fragment", "lian alliance"])
+            _has_fact_or_rumor_about(k, [
+                "purify", "destroy fragment", "lian alliance",
+                "净化", "销毁碎片", "摧毁碎片", "清除碎片", "莲同盟", "莲联盟",
+            ])
         ),
     },
     {
@@ -483,7 +534,7 @@ ENDINGS: list[dict] = [
         "name_zh": "沉默",
         "type": "neutral",
         "check": lambda t, w, p, k, n: (
-            p.get("turn", 0) >= 256
+            p.get("turn", 0) >= 100
         ),
     },
     {
@@ -492,7 +543,10 @@ ENDINGS: list[dict] = [
         "name_zh": "流放",
         "type": "neutral",
         "check": lambda t, w, p, k, n: (
-            _has_fact_or_rumor_about(k, ["leave neo-kowloon", "exile"])
+            _has_fact_or_rumor_about(k, [
+                "leave neo-kowloon", "exile",
+                "离开新九龙", "逃离新九龙", "流亡", "流放", "出走", "远走他乡",
+            ])
         ),
     },
     {
@@ -501,9 +555,12 @@ ENDINGS: list[dict] = [
         "name_zh": "共生",
         "type": "good",
         "check": lambda t, w, p, k, n: (
-            _count_discovered_traces(t) >= 25
+            _count_discovered_traces(t) >= 12
             and _trace_discovered(t, "TRACE-L5-01")
-            and _has_evidence(k, ["echo", "communion"])
+            and _has_evidence(k, [
+                "echo", "communion",
+                "回声", "回响", "交融", "共融", "共鸣", "圣餐", "共生",
+            ])
             and w.get("fragment_decay", {}).get("current", 0) < 40
         ),
     },
@@ -513,9 +570,12 @@ ENDINGS: list[dict] = [
         "name_zh": "桥",
         "type": "good",
         "check": lambda t, w, p, k, n: (
-            _count_discovered_traces(t) >= 40
+            _count_discovered_traces(t) >= 18
             and _trace_discovered(t, "TRACE-L5-02")
-            and _has_evidence(k, ["architect", "echo communion", "resonance chamber"])
+            and _has_evidence(k, [
+                "architect", "echo communion", "resonance chamber",
+                "建筑师", "设计者", "回声交融", "共鸣室", "共振室", "桥",
+            ])
             and w.get("fragment_decay", {}).get("current", 0) < 25
         ),
     },

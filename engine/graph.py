@@ -1897,8 +1897,14 @@ def trace_checker(state: GameState) -> dict:
 
     result = {"traces": traces, "discovery_notifications": []}
 
+    # ⚠️ SYNC: mirrored in claude_code_engine._run_trace_checker. Keep the display
+    # fields (counter, per-layer progress, per-trace status) synced with the
+    # authoritative `discovered` list every turn.
+    from engine.game_data import reconcile_trace_presentation
+    reconcile_trace_presentation(traces)
+    save_session_file(session_dir, "traces", traces)
+
     if new_discoveries:
-        save_session_file(session_dir, "traces", traces)
         # Build discovery notifications for GUI
         _LAYER_NAMES = {
             1: {"en": "The Surface", "zh": "表层"},
