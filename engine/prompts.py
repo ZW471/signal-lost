@@ -157,11 +157,20 @@ Knowledge is THE core mechanic. Players progress by discovering facts, verifying
   - Selling Listener secrets to NEXUS: 30-50 credits, but Mira/Patch trust drops to hostile. Can permanently lock good endings.
   - Selling NEXUS intel to Listeners: 10-20 credits, builds Listener trust.
   - Call update_world_state and update_npc to reflect consequences.
-- **Jobs/favors**: Every 5-7 turns, have an NPC offer paid work (10-25 credits). Jobs require a dice roll — failure means no pay + consequences.
+- **Jobs/favors & Side Quests (支线任务)**: Occasionally (no more than once every ~5-7 turns, and never two turns in a row) an NPC may offer optional side work. Rewards are EITHER 10-25 credits OR a useful item (e.g. a healing stim, a tool, or a one-use keycard) — not both. Side quests take real effort: they require a dice roll and/or several turns, can fail (no reward + consequences), and may carry risk (alert, integrity, trust). ANTI-EXPLOIT — side quests are NOT a farm: do not offer repeatable/grindable jobs, do not re-offer the same job, escalate difficulty and shrink rewards if the player keeps chasing easy money, and gate richer rewards behind trust/story progress. If the player tries to repeat or trivially exploit a money/heal source, narrate diminishing returns or that the opportunity has dried up.
 - **Scavenging**: In the Undercroft or abandoned areas, salvageable tech worth 5-15 credits. Requires exploration + dice roll.
 - **Gambling**: Neon Row gambling dens — player wagers credits, roll_dice determines 2x payout or total loss.
 - **Hacking**: Netrunners can siphon NEXUS terminals for 15-30 credits. Hard check (target 40). Failure = +10 alert.
 - At 0 credits, the player is desperate — NPCs notice, fewer options, but the game continues. Earning opportunities still exist.
+
+### Healing & Recovery (Integrity)
+- Integrity is the player's physical/neural resilience. It erodes from injury, strain, and especially deep Signal resonance. At 0 the player collapses and dies (a DEATH ending).
+- The player CAN recover Integrity — make recovery possible but never trivial:
+  - **Rest**: sleeping/laying low at a safe location (Mira's, a safehouse) restores ~1 Integrity, but ADVANCES time and may raise risk while they're exposed. Call `update_player` with the new integrity.
+  - **Medical help / stims**: clinics or fixers can patch the player for credits; a **healing item** (e.g. "Neural Stim", "Med-Patch") restores ~1 Integrity and is CONSUMED on use (remove it via `update_inventory`). Such items are scarce — they come from side quests, brokers, or scavenging, and cost credits.
+  - Integrity can NEVER exceed its maximum, and a single rest/stim restores at most 1. Do not let the player heal repeatedly in the same scene or spam-rest to full for free.
+- When Integrity is LOW (1, or 2 on the most forgiving difficulty), warn the player IN-FICTION before they take an action that could kill them — scale the warning by difficulty: explicit and caring on Easy/Paranoid (an NPC or the implant plainly says this could be fatal), terse and atmospheric on Standard, barely a flicker on Reckless. This warning is in-world, never a meta "are you sure?".
+- Deep Signal resonance / pushing into the Resonance at low Integrity is potentially FATAL. Make the cost clear (scaled by difficulty) so death is a chosen risk, not a surprise.
 
 ### Item Usage
 - Reference inventory items when they could be useful in the current situation.

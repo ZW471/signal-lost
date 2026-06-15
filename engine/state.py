@@ -40,6 +40,7 @@ class GameState(TypedDict):
     turn_delta: dict      # Accumulated state changes from this turn
     game_over: bool       # Whether the game has ended
     ending: str | None    # Which ending triggered, if any
+    death_cause: str | None  # If ending == "death", which cause (collapse/capture/…)
     narrative: str        # The narrative text to display to the player
     discovery_notifications: list  # Populated by trace_checker, consumed by server
     knowledge_notifications: list  # Populated by state_writer, consumed by server
@@ -212,6 +213,7 @@ def initial_state(session_dir: str) -> GameState:
         turn_delta=empty_turn_delta(),
         game_over=False,
         ending=None,
+        death_cause=None,
         narrative="",
         session_dir=session_dir,
         skip_conversation_log=False,

@@ -361,6 +361,76 @@ DECAY_THRESHOLDS: list[dict] = [
 
 
 # ---------------------------------------------------------------------------
+# Death (a generic, non-canonical ending — reachable multiple ways)
+# Checked BEFORE the designed story endings. "DEATH" is a failure state, not a
+# full story resolution: the player is encouraged to reload an autosave.
+# ---------------------------------------------------------------------------
+
+DEATH_CAUSES: dict[str, dict] = {
+    "collapse": {"en": "Neural Collapse", "zh": "神经崩溃"},
+    "capture": {"en": "Captured by NEXUS", "zh": "被NEXUS擒获"},
+    "unknown": {"en": "Death", "zh": "死亡"},
+}
+
+
+def check_death(player: dict, world_state: dict) -> tuple[bool, str | None]:
+    """Return ``(is_dead, cause_id)``.
+
+    There are several ways to die; each maps to a generic DEATH ending with a
+    distinct cause label. Add new causes here as the fiction grows.
+    """
+    integ = player.get("integrity", {})
+    cur = integ.get("current", 1) if isinstance(integ, dict) else integ
+    try:
+        if cur is not None and int(cur) <= 0:
+            return True, "collapse"
+    except (TypeError, ValueError):
+        pass
+
+    alert = world_state.get("nexus_alert", {})
+    aval = alert.get("current", 0) if isinstance(alert, dict) else 0
+    try:
+        if int(aval) >= 100:
+            return True, "capture"
+    except (TypeError, ValueError):
+        pass
+
+    return False, None
+
+
+# Difficulty-scaled low-integrity warning (fires when integrity is low but > 0,
+# giving the player a chance to rest/heal before the Signal path kills them).
+# threshold: warn when current <= threshold. verbosity: how blunt the warning is.
+INTEGRITY_WARNINGS: dict[str, dict] = {
+    "paranoid": {"threshold": 2, "verbosity": "explicit"},
+    "cautious": {"threshold": 1, "verbosity": "moderate"},
+    "standard": {"threshold": 1, "verbosity": "subtle"},
+    "reckless": {"threshold": 1, "verbosity": "subtle"},
+}
+
+
+def integrity_warning_text(difficulty: str, current: int, maximum: int, language: str) -> str | None:
+    """Build a difficulty-scaled low-integrity warning, or None if no warning."""
+    cfg = INTEGRITY_WARNINGS.get(difficulty, INTEGRITY_WARNINGS["standard"])
+    if current <= 0 or current > cfg["threshold"]:
+        return None
+    verbosity = cfg["verbosity"]
+    if language == "zh":
+        msgs = {
+            "explicit": f"⚠ 神经完整度危急（{current}/{maximum}）。再受一次重创——尤其是深度信号共鸣——就可能要了你的命。先休息或治疗，再继续深入。",
+            "moderate": f"⚠ 神经完整度过低（{current}/{maximum}）。身体已濒临极限，务必谨慎。",
+            "subtle": "⚠ 你的身体在颤抖，视野发暗。",
+        }
+    else:
+        msgs = {
+            "explicit": f"⚠ Neural integrity critical ({current}/{maximum}). One more serious hit — especially deep Signal resonance — could kill you. Rest or heal before pushing deeper.",
+            "moderate": f"⚠ Neural integrity is low ({current}/{maximum}). Your body is near its limit — be careful.",
+            "subtle": "⚠ Your body is shaking and your vision is dimming.",
+        }
+    return msgs.get(verbosity)
+
+
+# ---------------------------------------------------------------------------
 # Ending conditions
 # ---------------------------------------------------------------------------
 

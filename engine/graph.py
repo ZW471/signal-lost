@@ -934,16 +934,18 @@ def state_writer(state: GameState) -> dict:
                     if not isinstance(existing, dict):
                         existing = {"current": existing, "max": existing}
                     if isinstance(v, dict):
-                        player["integrity"] = {
-                            "current": v.get("current", existing.get("current", 1)),
-                            "max": v.get("max", existing.get("max", existing.get("current", 1))),
-                        }
+                        new_max = v.get("max", existing.get("max", existing.get("current", 1)))
+                        new_cur = v.get("current", existing.get("current", 1))
                     else:
                         # LLM sent a bare integer — update current, preserve max
-                        player["integrity"] = {
-                            "current": int(v),
-                            "max": existing.get("max", int(v)),
-                        }
+                        new_max = existing.get("max", int(v))
+                        new_cur = int(v)
+                    # Clamp current to [0, max] so healing can't exceed the cap.
+                    try:
+                        new_cur = max(0, min(int(new_cur), int(new_max)))
+                    except (TypeError, ValueError):
+                        pass
+                    player["integrity"] = {"current": new_cur, "max": new_max}
                 else:
                     player[k] = v
 
@@ -1934,10 +1936,11 @@ def consequence(state: GameState) -> dict:
     knowledge = state["knowledge"]
     npcs = state["npcs"]
 
-    # Death check
-    integrity = player.get("integrity", {})
-    if isinstance(integrity, dict) and integrity.get("current", 1) <= 0:
-        return {"game_over": True, "ending": "death"}
+    # Death check (generic ending, multiple causes)
+    from engine.game_data import check_death
+    is_dead, death_cause = check_death(player, world_state)
+    if is_dead:
+        return {"game_over": True, "ending": "death", "death_cause": death_cause}
 
     # Trajectory warnings (inject as SystemMessage for LLM to narrate)
     from engine.game_data import _has_evidence
