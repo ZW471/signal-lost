@@ -38,7 +38,7 @@ def main() -> int:
     ap.add_argument("--session", required=True, help="session subdir under session/")
     ap.add_argument("--turn", required=True, type=int, help="turn number to submit")
     ap.add_argument("--action", default=None, help="action text (else read stdin)")
-    ap.add_argument("--timeout", type=float, default=480.0, help="max seconds to wait")
+    ap.add_argument("--timeout", type=float, default=540.0, help="max seconds to wait")
     ap.add_argument("--poll", type=float, default=3.0, help="poll interval seconds")
     args = ap.parse_args()
 
@@ -58,6 +58,40 @@ def main() -> int:
         print("ERROR: empty action", file=sys.stderr)
         return 1
 
+    def turn_done(n: int) -> bool:
+        """Race-free completion check.
+
+        The engine sets status "done"/turn N only for a split second before
+        flipping to "waiting"/turn N+1, so polling for that flash is unreliable.
+        Instead, turn N is complete when its response is written
+        (game_response.json turn == N) OR the engine has advanced past N OR we
+        catch the brief "done" state.
+        """
+        try:
+            with open(status_file, "r", encoding="utf-8") as f:
+                st = json.load(f)
+            if st.get("status") == "done" and st.get("turn") == n:
+                return True
+            if isinstance(st.get("turn"), int) and st.get("turn") > n:
+                return True
+        except (FileNotFoundError, json.JSONDecodeError):
+            pass
+        try:
+            with open(response_file, "r", encoding="utf-8") as f:
+                rp = json.load(f)
+            if rp.get("turn") == n:
+                return True
+        except (FileNotFoundError, json.JSONDecodeError):
+            pass
+        return False
+
+    # If the engine has already produced this turn's response (e.g. a prior
+    # call submitted it and timed out), don't resubmit — just return it.
+    if turn_done(args.turn):
+        with open(response_file, "r", encoding="utf-8") as f:
+            print(json.dumps(json.load(f), ensure_ascii=False, indent=2))
+        return 0
+
     # Submit the action.
     with open(action_file, "w", encoding="utf-8") as f:
         json.dump({"action": action, "turn": args.turn}, f, ensure_ascii=False)
@@ -65,17 +99,12 @@ def main() -> int:
     # Block until the engine reports this turn done (or timeout).
     deadline = time.time() + args.timeout
     while time.time() < deadline:
-        try:
-            with open(status_file, "r", encoding="utf-8") as f:
-                st = json.load(f)
-            if st.get("status") == "done" and st.get("turn") == args.turn:
-                break
-        except (FileNotFoundError, json.JSONDecodeError):
-            pass
+        if turn_done(args.turn):
+            break
         time.sleep(args.poll)
     else:
         print(json.dumps({"_timeout": True, "turn": args.turn,
-                          "hint": "engine did not finish in time; re-run to keep waiting"},
+                          "hint": "engine still processing; re-run the SAME command to keep waiting"},
                          ensure_ascii=False))
         return 2
 
