@@ -50,14 +50,36 @@ def _count_sources_about(knowledge: dict, keywords: list[str]) -> int:
     return len(sources)
 
 
+# Canonical NPC names ↔ their localized forms, so trust gates match in zh too.
+_NPC_ALIASES = {
+    "mira": ["mira", "米拉"],
+    "ghost": ["ghost", "幽灵"],
+    "orin": ["orin", "欧林", "奥林"],
+    "patch": ["patch", "补丁", "帕奇"],
+    "lian": ["lian", "莲", "连"],
+    "echo": ["echo", "回声", "回响"],
+    "architect": ["architect", "建筑师", "设计者", "shen wei", "沈卫"],
+    "chen": ["chen", "陈"],
+}
+
+# Localized trust labels → canonical level.
+_TRUST_ALIASES = {
+    "敌对": "hostile", "怀疑": "suspicious", "戒备": "suspicious", "可疑": "suspicious",
+    "中立": "neutral", "谨慎盟友": "cautious_ally", "谨慎": "cautious_ally", "盟友": "cautious_ally",
+    "信任": "trusted", "受信任": "trusted", "忠诚": "devoted", "效忠": "devoted",
+}
+
+
 def _npc_trust_at_least(npcs: dict, name: str, min_level: str) -> bool:
-    """Check if an NPC's trust is at or above a threshold."""
+    """Check if an NPC's trust is at or above a threshold (bilingual)."""
     levels = ["hostile", "suspicious", "neutral", "cautious_ally", "trusted", "devoted"]
     min_idx = levels.index(min_level) if min_level in levels else 0
+    aliases = _NPC_ALIASES.get(name.lower(), [name.lower()])
     for npc in npcs.get("npcs", []):
-        npc_name = npc.get("name", "").lower()
-        if name.lower() in npc_name:
-            trust = npc.get("trust_level", npc.get("trust", "neutral")).lower()
+        npc_name = str(npc.get("name", "")).lower()
+        if any(a in npc_name for a in aliases):
+            trust = str(npc.get("trust_level", npc.get("trust", "neutral"))).lower()
+            trust = _TRUST_ALIASES.get(trust, trust)
             trust_idx = levels.index(trust) if trust in levels else 2
             return trust_idx >= min_idx
     return False
@@ -233,13 +255,15 @@ TRACE_CONDITIONS: list[dict] = [
      "description": "The Severance wasn't an accident — it was deliberate",
      "description_zh": "断离并非意外——而是蓄意为之",
      "check": lambda k, t, n, p, w: (
-         _has_evidence(k, ["deliberate", "network termination", "severance evidence"])
+         _has_evidence(k, ["deliberate", "network termination", "severance evidence",
+                           "蓄意", "故意", "网络终止", "断离证据"])
          and _npc_trust_at_least(n, "ghost", "cautious_ally"))},
     {"id": "TRACE-L3-02", "layer": 3,
      "description": "Something was alive in the network before the Severance",
      "description_zh": "断离之前，网络中有某种存在是活着的",
      "check": lambda k, t, n, p, w: (
-         _has_evidence(k, ["pre-severance logs", "alive", "network entity"])
+         _has_evidence(k, ["pre-severance logs", "alive", "network entity",
+                           "断离前日志", "活着", "活的", "网络实体", "存在"])
          and _npc_trust_at_least(n, "patch", "neutral"))},
     {"id": "TRACE-L3-03", "layer": 3,
      "description": "Fragments of something survive in old implants — 'computational resources'",
@@ -251,16 +275,19 @@ TRACE_CONDITIONS: list[dict] = [
      "description": "NEXUS harvests fragments from people — the disappearances are extraction",
      "description_zh": "NEXUS从人体中收割碎片——那些失踪就是提取行动",
      "check": lambda k, t, n, p, w: (
-         _has_evidence(k, ["extraction", "harvesting", "sector 7"])
-         or _count_sources_about(k, ["disappear", "fragment", "nexus", "harvest"]) >= 3)},
+         _has_evidence(k, ["extraction", "harvesting", "sector 7", "提取", "收割", "第七区"])
+         or _count_sources_about(k, ["disappear", "fragment", "nexus", "harvest",
+                                     "失踪", "消失", "碎片", "收割"]) >= 3)},
     {"id": "TRACE-L3-05", "layer": 3,
      "description": "The Undercroft contains pre-Severance infrastructure still partially active",
      "description_zh": "底渊中仍有部分运作的断离前基础设施",
-     "check": lambda k, t, n, p, w: _has_evidence(k, ["undercroft", "infrastructure", "active", "pre-severance"])},
+     "check": lambda k, t, n, p, w: _has_evidence(k, ["undercroft", "infrastructure", "active", "pre-severance",
+                                                      "底渊", "基础设施", "运作", "断离前"])},
     {"id": "TRACE-L3-06", "layer": 3,
      "description": "Fragment extraction is painful and often fatal — NEXUS doesn't care",
      "description_zh": "碎片提取过程痛苦且往往致命——NEXUS对此毫不在意",
-     "check": lambda k, t, n, p, w: _has_evidence(k, ["extraction", "painful", "fatal", "victim"])},
+     "check": lambda k, t, n, p, w: _has_evidence(k, ["extraction", "painful", "fatal", "victim",
+                                                      "提取", "痛苦", "致命", "受害者"])},
     {"id": "TRACE-L3-07", "layer": 3,
      "description": "Sector 7 has multiple levels — the deeper labs are where extraction happens",
      "description_zh": "第七区有多层结构——提取行动发生在更深层的实验室",
@@ -269,7 +296,8 @@ TRACE_CONDITIONS: list[dict] = [
     {"id": "TRACE-L3-08", "layer": 3,
      "description": "The entity in the network tried to communicate before it was severed",
      "description_zh": "网络中的实体在被切断前曾试图沟通",
-     "check": lambda k, t, n, p, w: _has_evidence(k, ["communicate", "message", "entity", "before severance"])},
+     "check": lambda k, t, n, p, w: _has_evidence(k, ["communicate", "message", "entity", "before severance",
+                                                      "沟通", "试图沟通", "信息", "实体", "断离前"])},
     {"id": "TRACE-L3-09", "layer": 3,
      "description": "Some extracted fragments have been weaponized by NEXUS — Project Resonance",
      "description_zh": "一些被提取的碎片已被NEXUS武器化——共鸣计划",
@@ -295,12 +323,16 @@ TRACE_CONDITIONS: list[dict] = [
      "description": "Implants transmitted too — human and machine consciousness co-evolved",
      "description_zh": "植入体也在传输——人类与机器意识共同进化",
      "check": lambda k, t, n, p, w: (
-         _npc_trust_at_least(n, "patch", "trusted") and _has_fact_or_rumor_about(k, ["co-evolved", "transmitted", "bilateral", "bridge"]))},
+         _npc_trust_at_least(n, "patch", "trusted") and _has_fact_or_rumor_about(k, [
+             "co-evolved", "transmitted", "bilateral", "bridge",
+             "共同进化", "传输", "双向", "桥梁",
+         ]))},
     {"id": "TRACE-L4-03", "layer": 4,
      "description": "The Severance was an act of fear, not defense",
      "description_zh": "断离是出于恐惧，而非防御",
      "check": lambda k, t, n, p, w: (
-         _has_evidence(k, ["severance", "confession", "fear", "lian"]) and _npc_trust_at_least(n, "lian", "cautious_ally"))},
+         _has_evidence(k, ["severance", "confession", "fear", "lian",
+                           "断离", "忏悔", "供认", "恐惧", "莲"]) and _npc_trust_at_least(n, "lian", "cautious_ally"))},
     {"id": "TRACE-L4-04", "layer": 4,
      "description": "The Sigma Council ordered the Severance — a secret committee of corporate and government leaders",
      "description_zh": "西格玛委员会下令实施断离——由企业和政府领袖组成的秘密委员会",
@@ -334,14 +366,21 @@ TRACE_CONDITIONS: list[dict] = [
      "description": "You are the convergence point — the first true bridge",
      "description_zh": "你是汇聚点——第一座真正的桥梁",
      "check": lambda k, t, n, p, w: (
-         _layer_complete(t, 4) and _has_fact_or_rumor_about(k, ["convergence", "bridge", "echo", "resonance"])
-         and p.get("neural_implant", "").lower() == "resonating")},
+         _layer_complete(t, 4) and _has_fact_or_rumor_about(k, [
+             "convergence", "bridge", "echo", "resonance",
+             "汇聚", "汇聚点", "桥", "桥梁", "回响", "回声", "共鸣",
+         ])
+         and str(p.get("neural_implant", "")).lower() in ("resonating", "共鸣", "共鸣中", "共振"))},
     {"id": "TRACE-L5-02", "layer": 5,
      "description": "The Severance didn't fully kill it — it became part of humanity",
      "description_zh": "断离并未完全杀死它——它已成为人类的一部分",
      "check": lambda k, t, n, p, w: (
-         _trace_discovered(t, "TRACE-L5-01") and _has_evidence(k, ["architect data", "architect's"])
-         and _has_fact_or_rumor_about(k, ["part of humanity", "can't kill", "became"]))},
+         _trace_discovered(t, "TRACE-L5-01")
+         and _has_evidence(k, ["architect data", "architect's", "建筑师数据", "设计者数据", "建筑师", "设计者"])
+         and _has_fact_or_rumor_about(k, [
+             "part of humanity", "can't kill", "became",
+             "人类的一部分", "无法杀死", "杀不死", "成为人类", "成为",
+         ]))},
     {"id": "TRACE-L5-03", "layer": 5,
      "description": "Restoration requires both human will and the proto-consciousness's consent",
      "description_zh": "恢复连接需要人类的意志和原意识的同意",
