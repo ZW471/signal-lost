@@ -596,6 +596,27 @@ ENDINGS: list[dict] = [
 ]
 
 
+# Designed endings the narrator may converge to via `ending_signal` once the
+# story has DECISIVELY reached them in prose. These are the brittle,
+# keyword-gated bad/neutral endings whose structured signals the model often
+# fails to persist (e.g. completing the whole exile quest in narrative but never
+# recording the "leave neo-kowloon" fact). The GOOD endings (symbiosis/the_bridge)
+# are deliberately excluded — they stay earned through deep trace discovery.
+MODEL_SIGNALABLE_ENDINGS = {"liberation", "ascension", "order", "purification", "exile"}
+
+
+def resolve_ending_signal(signal, player: dict) -> str | None:
+    """Validate a narrator-declared ending signal; return the ending id to fire
+    or None. Only converges the signalable bad/neutral endings, and only after
+    enough play that it can't be a turn-1 fluke."""
+    if not signal or not isinstance(signal, str):
+        return None
+    sig = signal.strip().lower()
+    if sig in MODEL_SIGNALABLE_ENDINGS and player.get("turn", 1) >= 8:
+        return sig
+    return None
+
+
 # ---------------------------------------------------------------------------
 # Time system
 # ---------------------------------------------------------------------------

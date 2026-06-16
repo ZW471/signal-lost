@@ -44,6 +44,7 @@ from engine.game_data import (
     ITEM_SKILL_PENALTIES,
     check_death,
     integrity_warning_text,
+    resolve_ending_signal,
 )
 from engine.tools import (
     decrypt_cipher,
@@ -112,6 +113,7 @@ Return ONLY a single JSON object. No prose, no markdown, no explanation outside 
     ...
   ],
   "state_effects": {"integrity_delta": 0, "nexus_alert_delta": 0, "credits_delta": 0, "fragment_decay_delta": 0, "time_minutes": 0},
+  "ending_signal": null,
   "location_update": null,
   "suggested_actions": ["short next action", "a different next action"]
 }
@@ -197,6 +199,16 @@ code, passphrase, or location → `add_knowledge` (fact/rumor/evidence). This is
 clues persist, become referenceable, and how Traces of Truth are discovered — be \
 generous: record every salient new piece of intel the scene reveals.
 Never narrate a consequence you do not commit.
+
+**ending_signal** (almost always null): set this to a designed-ending id ONLY when \
+the story has DECISIVELY and unambiguously reached that ending in your narrative THIS \
+turn — the player has actually done the defining act, not merely talked about it. Valid \
+ids: `"exile"` (they have genuinely left Neo-Kowloon for good), `"liberation"` (they \
+struck a decisive blow against a NEXUS facility), `"order"` (they threw in with NEXUS), \
+`"purification"` (they destroyed the fragment), `"ascension"` (they force-merged the \
+fragments). Leave it `null` on every ordinary turn. Do NOT signal the good endings \
+(symbiosis / the bridge) — those are earned through deep discovery and the engine \
+decides them. Do not use this to end the game early or to escape a hard moment.
 
 **location_update** (provide when scene changes): Provide this whenever the player \
 moves OR when NPCs arrive/leave OR when time shifts significantly (period change). \
@@ -491,6 +503,7 @@ def _try_json(text: str) -> dict | None:
                 "narrative": str(data.get("narrative", "")),
                 "tool_calls": data.get("tool_calls", []) if isinstance(data.get("tool_calls"), list) else [],
                 "state_effects": data.get("state_effects") if isinstance(data.get("state_effects"), dict) else {},
+                "ending_signal": data.get("ending_signal") if isinstance(data.get("ending_signal"), str) else None,
                 "location_update": data.get("location_update") if isinstance(data.get("location_update"), dict) else None,
                 "suggested_actions": data.get("suggested_actions", []) if isinstance(data.get("suggested_actions"), list) else [],
             }
@@ -1145,11 +1158,38 @@ _INTEGRITY_PRIMER_ZH = (
 # Consequence checker (mirrors graph.py consequence)
 # ---------------------------------------------------------------------------
 
-def _run_consequence(player, traces, world_state, knowledge, npcs):
+def _promote_scene_npcs(location: dict, npcs: dict, turn: int) -> None:
+    """Register NPCs the narration placed in the scene (``location.npcs_present``)
+    into ``npcs.json`` so they are interactable and can satisfy NPC-trust trace
+    gates — even when the model narrates a person but forgets ``update_npc``.
+    Idempotent; only adds names not already on the roster.
+    """
+    present = location.get("npcs_present", []) or []
+    if not isinstance(present, list):
+        return
+    roster = npcs.get("npcs", [])
+    existing = {str(n.get("name", "")).strip().lower() for n in roster}
+    for entry in present:
+        name = entry.get("name") if isinstance(entry, dict) else entry
+        name = str(name or "").strip()
+        key = name.lower()
+        if not name or len(key) < 2 or key in existing:
+            continue
+        if len(roster) >= 50:  # guard against unbounded growth
+            break
+        roster.append({"name": name, "trust": "neutral", "first_seen_turn": turn})
+        existing.add(key)
+    npcs["npcs"] = roster
+
+
+def _run_consequence(player, traces, world_state, knowledge, npcs, ending_signal=None):
     """Check death and ending conditions. Returns (game_over, ending, death_cause).
 
     DEATH is a generic ending reachable multiple ways (see game_data.check_death)
-    and is checked before the designed story endings.
+    and is checked before the designed story endings. As a last step, an explicit
+    narrator `ending_signal` can converge a decisively-concluded arc into a
+    designed (bad/neutral) ending whose brittle keyword check the model failed to
+    persist.
     """
     is_dead, cause = check_death(player, world_state)
     if is_dead:
@@ -1161,6 +1201,10 @@ def _run_consequence(player, traces, world_state, knowledge, npcs):
                 return True, ending["id"], None
         except Exception:
             pass
+
+    signalled = resolve_ending_signal(ending_signal, player)
+    if signalled:
+        return True, signalled, None
 
     return False, None, None
 
@@ -1369,6 +1413,12 @@ def run_turn(session_dir: str, player_input: str, mode: str = "play") -> dict:
             if field in loc_update:
                 location[field] = loc_update[field]
 
+    # Deterministic backstop: register the people the narration placed in the
+    # scene (location.npcs_present) into npcs.json so the player can interact with
+    # them and so NPC-gated traces can fire — even when the model narrates a person
+    # but omits update_npc. Covers both location_update and update_location paths.
+    _promote_scene_npcs(location, npcs, player.get("turn", 1))
+
     # ── Step 9: Run world_ticker ─────────────────────────────────────
     _run_world_ticker(player, world_state, session_dir, skip=is_resume,
                       elapsed_minutes=elapsed_minutes)
@@ -1388,7 +1438,10 @@ def run_turn(session_dir: str, player_input: str, mode: str = "play") -> dict:
     )
 
     # ── Step 12: Run consequence ─────────────────────────────────────
-    game_over, ending, death_cause = _run_consequence(player, traces, world_state, knowledge, npcs)
+    game_over, ending, death_cause = _run_consequence(
+        player, traces, world_state, knowledge, npcs,
+        ending_signal=(parsed.get("ending_signal") if not is_resume else None),
+    )
 
     # ── Step 12b: Build in-chat meter notices (from → to) + low-integrity warning
     system_notices: list[str] = []
