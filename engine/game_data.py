@@ -14,25 +14,39 @@ from __future__ import annotations
 # and returns True if the trace should be discovered.
 # ---------------------------------------------------------------------------
 
+# All recorded knowledge channels feed trace discovery. The model logs
+# investigation findings as facts, rumors, evidence, theories, or connections
+# fairly interchangeably, so scanning only facts/rumors left traces frozen while
+# a rich investigation (lots of evidence/theories) made no trace progress.
+_KNOWLEDGE_TYPES = ("facts", "rumors", "evidence", "theories", "connections")
+
+
+def _entry_text(entry: dict) -> str:
+    """All searchable text on a knowledge entry (description/statement/name)."""
+    parts = (entry.get("description"), entry.get("statement"), entry.get("name"))
+    return " ".join(str(p) for p in parts if p).lower()
+
+
 def _has_fact_or_rumor_about(knowledge: dict, keywords: list[str]) -> bool:
-    """Check if knowledge contains a fact or rumor mentioning any keyword."""
-    for entry_type in ("facts", "rumors"):
+    """True if ANY recorded knowledge entry mentions any keyword."""
+    kws = [kw.lower() for kw in keywords]
+    for entry_type in _KNOWLEDGE_TYPES:
         for entry in knowledge.get(entry_type, []):
-            desc = entry.get("description", "").lower()
-            if any(kw.lower() in desc for kw in keywords):
+            text = _entry_text(entry)
+            if any(kw in text for kw in kws):
                 return True
     return False
 
 
 def _count_sources_about(knowledge: dict, keywords: list[str]) -> int:
-    """Count distinct sources mentioning keywords."""
+    """Count distinct sources/entries across all knowledge mentioning keywords."""
+    kws = [kw.lower() for kw in keywords]
     sources = set()
-    for entry_type in ("facts", "rumors"):
+    for entry_type in _KNOWLEDGE_TYPES:
         for entry in knowledge.get(entry_type, []):
-            desc = entry.get("description", "").lower()
-            if any(kw.lower() in desc for kw in keywords):
-                source = entry.get("source", "unknown")
-                sources.add(source)
+            text = _entry_text(entry)
+            if any(kw in text for kw in kws):
+                sources.add(entry.get("source") or entry.get("id") or text[:40])
     return len(sources)
 
 

@@ -1118,18 +1118,21 @@ def state_writer(state: GameState) -> dict:
         elif mutation_type == "update_inventory":
             action = result.get("action", "")
             if action == "add":
-                item = result.get("item", {})
-                # ⚠️ SYNC: mirrored in claude_code_engine._apply_mutations — dedupe
-                # by name and enforce the slot cap (no 7/6, no duplicates).
+                item = result.get("item") or {}
+                if not isinstance(item, dict):
+                    item = {}
+                # ⚠️ SYNC: mirrored in claude_code_engine._apply_mutations — require
+                # a real name, dedupe by name, enforce the slot cap (no null/empty
+                # slots, no 7/6, no duplicates).
                 items = inventory.get("items", [])
                 slots = inventory.get("slots", {}) or {}
                 max_slots = slots.get("max", 6)
                 new_name = str(item.get("name") or item.get("item") or "").strip().lower()
-                dup = bool(new_name) and any(
+                dup = any(
                     str(i.get("name") or i.get("item") or "").strip().lower() == new_name
                     for i in items
                 )
-                if not dup and len(items) < max_slots:
+                if new_name and not dup and len(items) < max_slots:
                     items.append(item)
                 inventory["items"] = items
                 slots["max"] = max_slots
