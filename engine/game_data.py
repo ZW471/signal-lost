@@ -71,18 +71,26 @@ _TRUST_ALIASES = {
 
 
 def _npc_trust_at_least(npcs: dict, name: str, min_level: str) -> bool:
-    """Check if an NPC's trust is at or above a threshold (bilingual)."""
+    """Check if an NPC's trust is at or above a threshold (bilingual).
+
+    Scans ALL matching entries and uses the HIGHEST trust found — npcs.json can
+    hold more than one entry for the same person (a `neutral` placeholder created
+    when they're first seen, plus the real entry once trust is earned). Returning
+    on the first match read the stale placeholder and reported False even after
+    the player earned full trust, permanently blocking trust-gated traces
+    (e.g. TRACE-L4-02)."""
     levels = ["hostile", "suspicious", "neutral", "cautious_ally", "trusted", "devoted"]
     min_idx = levels.index(min_level) if min_level in levels else 0
     aliases = _NPC_ALIASES.get(name.lower(), [name.lower()])
+    best_idx = None
     for npc in npcs.get("npcs", []):
         npc_name = str(npc.get("name", "")).lower()
         if any(a in npc_name for a in aliases):
             trust = str(npc.get("trust_level", npc.get("trust", "neutral"))).lower()
             trust = _TRUST_ALIASES.get(trust, trust)
             trust_idx = levels.index(trust) if trust in levels else 2
-            return trust_idx >= min_idx
-    return False
+            best_idx = trust_idx if best_idx is None else max(best_idx, trust_idx)
+    return best_idx is not None and best_idx >= min_idx
 
 
 def _has_evidence(knowledge: dict, keywords: list[str]) -> bool:

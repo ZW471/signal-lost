@@ -257,6 +257,34 @@ def test_cli_runner_kills_hung_process_tree():
     print(f"  [PASS] Hung CLI tree killed fast ({elapsed:.1f}s), no turn wedge")
 
 
+def test_trust_gate_reads_highest_of_duplicate_npcs():
+    """A duplicate placeholder NPC entry must not mask earned trust.
+
+    Regression: npcs.json can hold a stale `neutral` placeholder before the real
+    `trusted` entry for the same person; _npc_trust_at_least returned on the first
+    match, read the placeholder, and reported False — permanently blocking
+    trust-gated traces (TRACE-L4-02) even after the player earned full trust.
+    """
+    from engine.game_data import _npc_trust_at_least
+
+    npcs = {"npcs": [
+        {"name": "Patch", "trust_level": "neutral"},    # stale placeholder, first
+        {"name": "Patch", "trust_level": "trusted"},     # the real, earned entry
+    ]}
+    assert _npc_trust_at_least(npcs, "patch", "trusted"), \
+        "placeholder NPC entry masked earned trust (trust-gated trace would stay blocked)"
+    # Order independence: highest wins regardless of position.
+    npcs_rev = {"npcs": [
+        {"name": "Patch", "trust_level": "trusted"},
+        {"name": "Patch", "trust_level": "neutral"},
+    ]}
+    assert _npc_trust_at_least(npcs_rev, "patch", "trusted")
+    # A genuinely-low NPC still fails the gate.
+    assert not _npc_trust_at_least({"npcs": [{"name": "Patch", "trust_level": "neutral"}]},
+                                   "patch", "trusted")
+    print("  [PASS] Trust gate reads highest trust across duplicate NPC entries")
+
+
 def test_districts_unlock_on_trace_and_layer():
     """A district's unlock_trace / unlock_layer gate must actually open it.
 
@@ -367,6 +395,7 @@ def main():
         test_no_signalable_ending_fires_early,
         test_integrity_warning_gives_recovery_window,
         test_cli_runner_kills_hung_process_tree,
+        test_trust_gate_reads_highest_of_duplicate_npcs,
         test_districts_unlock_on_trace_and_layer,
         test_movement_gate_allows_inquiry,
         test_good_endings_reachable_and_not_shadowed,
