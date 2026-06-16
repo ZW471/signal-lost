@@ -72,6 +72,7 @@ from engine.llm_factory import (
     SETTINGS_DIR,
     ZERO_COST_PROVIDERS,
     OAUTH_CLI_PROVIDERS,
+    BYPASS_PROVIDERS,
 )
 
 # ---------------------------------------------------------------------------
@@ -250,7 +251,7 @@ def _configure_llm(provider_cfg: dict, *, persist: bool = True):
     with _llm_lock:
         llm = create_llm(provider, model, **extra)
         set_llm(llm, zero_cost=provider in ZERO_COST_PROVIDERS)
-        _is_cli_bypass = provider in OAUTH_CLI_PROVIDERS
+        _is_cli_bypass = provider in BYPASS_PROVIDERS
         _setup_fast_llm(provider)
         _llm_configured = True
         _active_provider = (provider, model, extra.get("base_url"))
@@ -1210,11 +1211,11 @@ async def _run_turn(sess: PlayerSession, ws: WebSocket, player_input: str | None
                 _current_llm = _get_current_llm()
             except Exception:
                 _current_llm = None
-            _use_bypass = (
-                _is_cli_bypass
-                and sess.session_dir
-                and hasattr(_current_llm, '_call_claude')
-            )
+            # The bypass engine uses llm._call_claude when present (CLI providers)
+            # and falls back to llm.invoke(system, user) otherwise (e.g. openrouter),
+            # so it no longer requires _call_claude — only that this provider is
+            # routed to the bypass.
+            _use_bypass = bool(_is_cli_bypass and sess.session_dir and _current_llm)
             if _use_bypass:
                 return cc_run_turn(
                     session_dir=sess.session_dir,

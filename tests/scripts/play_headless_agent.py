@@ -40,7 +40,8 @@ from langchain_core.messages import HumanMessage
 from engine.graph import compile_graph, set_llm
 from engine.state import create_new_session, initial_state
 from engine.llm_factory import (
-    create_llm, default_model_for, load_env, load_provider_config, OAUTH_CLI_PROVIDERS,
+    create_llm, default_model_for, load_env, load_provider_config,
+    OAUTH_CLI_PROVIDERS, BYPASS_PROVIDERS,
 )
 from engine.claude_code_engine import run_turn as cc_run_turn
 
@@ -141,7 +142,7 @@ def main():
     # single-call BYPASS engine, not the LangGraph pipeline. Match that here so the
     # headless run exercises the SAME code path real players use — otherwise the two
     # diverge and headless tests the wrong engine.
-    use_bypass = (PROVIDER in OAUTH_CLI_PROVIDERS) and hasattr(llm, "_call_claude")
+    use_bypass = PROVIDER in BYPASS_PROVIDERS
     print(f"Engine path: {'BYPASS (claude_code_engine)' if use_bypass else 'LangGraph'}")
     graph = None if use_bypass else compile_graph()
     state = initial_state(SESSION_DIR)
