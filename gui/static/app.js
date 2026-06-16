@@ -143,6 +143,7 @@ const LABELS = {
     settings_langsmith_title: '// LANGSMITH TRACING',
     label_langsmith_key: 'API KEY', label_langsmith_project: 'PROJECT NAME',
     settings_usage_title: '// USAGE TRACKING', label_show_tokens: 'Show token usage in conversation',
+    no_usage_data: 'No usage data yet',
     settings_audio_title: '// AUDIO', label_music_volume: 'MUSIC VOLUME',
     settings_gameplay_title: '// GAMEPLAY',
     label_suggested_actions: 'Suggest actions each turn',
@@ -274,6 +275,7 @@ const LABELS = {
     settings_langsmith_title: '// LangSmith 记录',
     label_langsmith_key: 'API密钥', label_langsmith_project: '项目名称',
     settings_usage_title: '// 用量追踪', label_show_tokens: '在对话中显示令牌用量',
+    no_usage_data: '暂无用量数据',
     settings_audio_title: '// 音频', label_music_volume: '音乐音量',
     settings_gameplay_title: '// 玩法',
     label_suggested_actions: '每回合推荐行动',
@@ -469,21 +471,29 @@ function setLanguage(lang) {
   // Sync session language selector with UI language
   const selectLang = document.getElementById('selectLanguage');
   if (selectLang) selectLang.value = lang;
-  // Background select buttons
+  // Background select buttons. The subtitle must stay in the CURRENT language —
+  // it used to show the Chinese name even in EN mode (a visible i18n leak), so
+  // use a short same-language role tagline instead of the other-language name.
+  const bgNames = {
+    en: { street_runner: 'Street Runner', corporate_exile: 'Corporate Exile', netrunner: 'Netrunner' },
+    zh: { street_runner: '街头行者', corporate_exile: '企业流亡者', netrunner: '网行者' },
+  };
+  const bgTagline = {
+    en: { street_runner: 'Street ops · black markets · debts',
+          corporate_exile: 'Insider turned fugitive',
+          netrunner: 'Deep-dive hacker · signal-chaser' },
+    zh: { street_runner: '街头生存 · 黑市 · 债务',
+          corporate_exile: '叛逃的内部人',
+          netrunner: '深潜黑客 · 信号追猎者' },
+  };
   document.querySelectorAll('.cyber-select').forEach(btn => {
     const bg = btn.dataset.bg;
     const nameEl = btn.querySelector('.select-name');
     const descEl = btn.querySelector('.select-desc');
     if (bg && nameEl && descEl) {
-      if (lang === 'zh') {
-        nameEl.textContent = L('bg_' + bg);
-        descEl.textContent = '';
-      } else {
-        const bgNames = { street_runner: 'Street Runner', corporate_exile: 'Corporate Exile', netrunner: 'Netrunner' };
-        const bgZh = { street_runner: '街头行者', corporate_exile: '企业流亡者', netrunner: '网行者' };
-        nameEl.textContent = bgNames[bg] || bg;
-        descEl.textContent = bgZh[bg] || '';
-      }
+      const l = (lang === 'zh') ? 'zh' : 'en';
+      nameEl.textContent = (bgNames[l][bg]) || bg;
+      descEl.textContent = (bgTagline[l][bg]) || '';
     }
   });
   // Difficulty options
@@ -533,12 +543,18 @@ function setLanguage(lang) {
   if (subtitles[2]) subtitles[2].textContent = L('settings_usage_title');
   if (subtitles[3]) subtitles[3].textContent = L('settings_audio_title');
   if (subtitles[4]) subtitles[4].textContent = L('settings_gameplay_title');
-  // Localize checkbox label (preserve the <input> inside)
+  // Localize checkbox label (preserve the <input> inside). Only the text node
+  // AFTER the checkbox carries the label — setting EVERY text node (the loop used
+  // to) also filled the leading-whitespace node, rendering the label twice.
   const chkLabel = document.querySelector('#chkShowTokens');
   if (chkLabel && chkLabel.parentNode) {
     const lbl = chkLabel.parentNode;
-    // Keep checkbox, replace text
-    lbl.childNodes.forEach(n => { if (n.nodeType === 3) n.textContent = ' ' + L('label_show_tokens'); });
+    let labelNode = chkLabel.nextSibling;
+    while (labelNode && labelNode.nodeType !== 3) labelNode = labelNode.nextSibling;
+    if (labelNode) labelNode.textContent = ' ' + L('label_show_tokens');
+    lbl.childNodes.forEach(n => {
+      if (n.nodeType === 3 && n !== labelNode) n.textContent = '';
+    });
   }
   // Gameplay feature toggle labels (translated by id, not index)
   const lblSA = document.getElementById('lblSuggestedActions');
@@ -1467,7 +1483,7 @@ function _updateUsageStats() {
   const el = document.getElementById('usageStats');
   if (!el) return;
   if (!u || !u.total_calls) {
-    el.innerHTML = '<span class="dim" style="font-size:11px">No usage data yet</span>';
+    el.innerHTML = `<span class="dim" style="font-size:11px">${L('no_usage_data')}</span>`;
     return;
   }
   const costStr = typeof u.cost === 'number' ? ` &nbsp;|&nbsp; Cost: <span class="cyan">${_formatCost(u.cost)}</span>` : '';
@@ -1702,6 +1718,10 @@ function showDiscoveryNotification(msg) {
 function showSystemNotice(text) {
   if (!text) return;
   const container = document.getElementById('chatMessages');
+  // Skip exact duplicates of the most recent system notice — the same meter
+  // change was sometimes emitted twice in a turn, stacking identical lines.
+  const last = container.querySelector('.chat-msg.system-notice:last-of-type .system-notice-text');
+  if (last && last.textContent === text) return;
   const el = document.createElement('div');
   el.className = 'chat-msg system-notice';
   el.innerHTML = `<div class="system-notice-text">${esc(text)}</div>`;
@@ -2867,9 +2887,32 @@ function npcAvatarImg(npc) {
        + `onerror="this.onerror=null;this.src='${fb}'">`;
 }
 
+// Collapse duplicate NPC entries (the engine occasionally promotes the same
+// person twice — e.g. once from a scene mention and once from update_npc — so the
+// tracker showed "Mira" twice with diverging trust/notes). Key by normalized name
+// and merge so the richest, non-empty fields win.
+function _dedupNpcList(list) {
+  const seen = new Map();
+  for (const npc of list) {
+    if (!npc || typeof npc !== 'object') continue;
+    const key = _avNorm(npc.name || npc.id).replace(/\s+/g, '');
+    if (!key) { continue; }
+    const prev = seen.get(key);
+    if (!prev) { seen.set(key, { ...npc }); continue; }
+    const merged = { ...prev };
+    for (const [k, v] of Object.entries(npc)) {
+      const empty = v == null || v === '' || v === 'none'
+        || (Array.isArray(v) && v.length === 0);
+      if (!empty) merged[k] = v;  // later/non-empty value wins
+    }
+    seen.set(key, merged);
+  }
+  return [...seen.values()];
+}
+
 function updateNetworkPanel(npcs) {
   const n = npcs || {};
-  const npcList = n.npcs || [];
+  const npcList = _dedupNpcList(n.npcs || []);
 
   let html = `<div class="panel-section"><div class="panel-section-title">${L('npc_tracker')} (${npcList.length})</div>`;
 
