@@ -576,9 +576,13 @@ ENDINGS: list[dict] = [
         "type": "bad",
         "check": lambda t, w, p, k, n: (
             _count_discovered_traces(t) >= 3
+            # FORCE-specific — bare "merge"/"融合"/"bridge" collide with the
+            # CONSENSUAL good bridge/symbiosis climax and mislabeled it as this bad
+            # forced-ascension ending. Require explicit force/ascend language.
             and _has_fact_or_rumor_about(k, [
-                "force-merge", "merge fragments", "merge", "ascend",
-                "强行融合", "融合碎片", "合并碎片", "融合", "合并", "升华", "飞升",
+                "force-merge", "force merge", "forcibly merge", "forced merge",
+                "force the merge", "ascend", "ascension",
+                "强行融合", "强制融合", "强行合并", "强制合并", "强行接入", "升华", "飞升",
             ])
         ),
     },
@@ -684,12 +688,22 @@ ENDINGS: list[dict] = [
 # fails to persist (e.g. completing the whole exile quest in narrative but never
 # recording the "leave neo-kowloon" fact). The GOOD endings (symbiosis/the_bridge)
 # are deliberately excluded — they stay earned through deep trace discovery.
-MODEL_SIGNALABLE_ENDINGS = {"liberation", "ascension", "order", "purification", "exile", "exposure"}
+# Brittle keyword-gated bad/neutral endings whose structured check() is turn-gated
+# (>=8) so an early keyword in narrated lore can't false-fire them on turn 1.
+EARLY_GATED_ENDINGS = {"liberation", "ascension", "order", "purification", "exile", "exposure"}
+
+# Endings the NARRATOR may converge via `ending_signal`. Deliberately ONLY the
+# neutral "natural conclusion" arcs — the player walking out (exile) or going
+# public (exposure). The bad endings (liberation/ascension/order/purification)
+# are NOT signalable: they represent specific deliberate acts and must fire from
+# their own (now act-specific) keyword checks, so the model can't mislabel a
+# consensual/good climax as e.g. force-merge `ascension`.
+MODEL_SIGNALABLE_ENDINGS = {"exile", "exposure"}
 
 
 def resolve_ending_signal(signal, player: dict) -> str | None:
     """Validate a narrator-declared ending signal; return the ending id to fire
-    or None. Only converges the signalable bad/neutral endings, and only after
+    or None. Only converges the neutral exile/exposure arcs, and only after
     enough play that it can't be a turn-1 fluke."""
     if not signal or not isinstance(signal, str):
         return None

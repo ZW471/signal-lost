@@ -45,7 +45,7 @@ from engine.game_data import (
     check_death,
     integrity_warning_text,
     resolve_ending_signal,
-    MODEL_SIGNALABLE_ENDINGS,
+    EARLY_GATED_ENDINGS,
 )
 from engine.tools import (
     decrypt_cipher,
@@ -212,15 +212,15 @@ GENEROUS and record every salient thing the scene reveals. Use `[]` only on a tu
 where genuinely nothing new is learned. (This is the easy, reliable way to record \
 knowledge — you do not also need add_knowledge tool calls for plain facts.)
 
-**ending_signal** (almost always null): set this to a designed-ending id ONLY when \
-the story has DECISIVELY and unambiguously reached that ending in your narrative THIS \
+**ending_signal** (almost always null): set this ONLY when the story has DECISIVELY \
+and unambiguously reached one of these two NEUTRAL conclusions in your narrative THIS \
 turn — the player has actually done the defining act, not merely talked about it. Valid \
-ids: `"exile"` (they have genuinely left Neo-Kowloon for good), `"liberation"` (they \
-struck a decisive blow against a NEXUS facility), `"order"` (they threw in with NEXUS), \
-`"purification"` (they destroyed the fragment), `"ascension"` (they force-merged the \
-fragments). Leave it `null` on every ordinary turn. Do NOT signal the good endings \
-(symbiosis / the bridge) — those are earned through deep discovery and the engine \
-decides them. Do not use this to end the game early or to escape a hard moment.
+ids: `"exile"` (they have genuinely left Neo-Kowloon for good) or `"exposure"` (they \
+broadcast/leaked authenticated proof of NEXUS's crimes to the public). Leave it `null` \
+on every ordinary turn. Do NOT signal any other ending — the good endings \
+(symbiosis/the bridge) are earned through deep discovery, and the dark endings \
+(liberation/order/purification/ascension) are decided by the engine from the player's \
+actual choices. Never use this to end the game early or to escape a hard moment.
 
 **location_update** (provide when scene changes): Provide this whenever the player \
 moves OR when NPCs arrive/leave OR when time shifts significantly (period change). \
@@ -1274,7 +1274,7 @@ def _run_consequence(player, traces, world_state, knowledge, npcs, ending_signal
         # "exile" backstory firing the exile ending on turn 1). Gate them to
         # turn>=8, mirroring resolve_ending_signal; the good endings (which need
         # deep traces) and silence (turn cap) keep their checks ungated.
-        if ending["id"] in MODEL_SIGNALABLE_ENDINGS and turn < 8:
+        if ending["id"] in EARLY_GATED_ENDINGS and turn < 8:
             continue
         try:
             if ending["check"](traces, world_state, player, knowledge, npcs):
