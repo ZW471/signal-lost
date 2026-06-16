@@ -610,9 +610,13 @@ ENDINGS: list[dict] = [
         "name_zh": "净化",
         "type": "bad",
         "check": lambda t, w, p, k, n: (
+            # Fragment-DESTRUCTION specific — never the bare "净化"/"purify", which
+            # false-match NEXUS's "净化脚本" (anti-broadcast purge scripts) and other
+            # incidental uses, mislabeling broadcast/exposure runs as purification.
             _has_fact_or_rumor_about(k, [
-                "purify", "destroy fragment", "lian alliance",
-                "净化", "销毁碎片", "摧毁碎片", "清除碎片", "莲同盟", "莲联盟",
+                "purify the fragment", "destroy the fragment", "destroy fragment",
+                "purge the fragment", "lian alliance", "joined lian", "join the lian",
+                "净化碎片", "净化了碎片", "销毁碎片", "摧毁碎片", "清除碎片", "莲同盟", "莲联盟",
             ])
         ),
     },
