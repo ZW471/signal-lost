@@ -113,6 +113,7 @@ Return ONLY a single JSON object. No prose, no markdown, no explanation outside 
     {"name": "tool_name", "args": { ... }},
     ...
   ],
+  "state_effects": {"integrity_delta": 0, "nexus_alert_delta": 0, "credits_delta": 0, "fragment_decay_delta": 0, "time_minutes": 0},
   "location_update": null,
   "suggested_actions": ["short next action", "a different next action"]
 }
@@ -163,30 +164,41 @@ Game tools (engine executes these — do NOT use roll_dice, you decide outcomes 
 logic, player skill, difficulty, and what makes the story compelling. Do NOT call \
 roll_dice. Write definitive outcomes in your narrative.
 
-**CRITICAL — COMMIT EVERYTHING YOU NARRATE.** The validator, the meters, the trace \
-system, and next turn's scene only ever see COMMITTED state. If your narrative says \
-something changed, you MUST emit the matching tool_call THIS turn, or mechanically it \
-never happened (this causes soft-locks and frozen meters). Specifically:
-- Player moves into any new area, sub-area, room, or building → `update_location` \
-AND provide the full `location_update` (new description, exits, points_of_interest, \
+**state_effects** (REQUIRED every turn): the numeric consequences of this turn, as \
+DELTAS, applied directly by the engine. This is the ONE place meters change — do NOT \
+rely on tool_calls for these. Whenever your narrative implies any of the following, \
+set the matching delta (0 if unchanged):
+- `integrity_delta`: negative when the player is hurt / strains / pushes the implant / \
+suffers deep Signal resonance (e.g. -1, -2); positive when they rest, heal, or use a \
+stim (usually +1). At 0 integrity the player dies — so if your narrative kills or \
+downs them, you MUST send a delta that brings integrity to 0.
+- `nexus_alert_delta`: POSITIVE on any risky/loud/illegal/detected action — breaching \
+security, hacking, fighting, tripping a sensor, being seen by NEXUS (≈+5-15 minor, \
+≈+20-40 major breach, +100 = captured). Quiet, careful play sends 0. This is the main \
+pressure toward a capture ending.
+- `credits_delta`: negative when the player spends/pays/bribes, positive when they earn \
+or are paid. Every purchase MUST send a negative delta.
+- `fragment_decay_delta`: positive as the Signal fragment degrades over deep resonance.
+- `time_minutes`: in-world minutes elapsed this turn (quick look 1-5, conversation \
+5-15, travel 15-30, deep work/rest 60-480). REQUIRED and non-zero every turn.
+
+**CRITICAL — COMMIT THE WORLD YOU NARRATE (via tool_calls).** The validator and next \
+turn's scene only ever see COMMITTED structured state, so if your narrative changes \
+the world you MUST emit the matching tool_call THIS turn (numbers go in state_effects \
+above; everything else here):
+- Player moves into any new area, sub-area, room, or building → `update_location` AND \
+provide the full `location_update` (description, exits, points_of_interest, \
 npcs_present). Keep structured location in lockstep with the narrated location every \
-time they move.
-- Player takes damage / heals / rests / strains or pushes the implant / suffers deep \
-Signal resonance → `update_player` with the new `integrity`.
-- Player spends, earns, gains, or loses credits → `update_inventory` (update_credits). \
-Any item they pick up, are given, or craft → `update_inventory` action "add" (so it \
-is usable later); items used up or lost → action "remove".
+time they move — otherwise the player gets blocked for "fabricating" the very place \
+you just described.
+- Any item the player picks up, is given, or crafts → `update_inventory` action "add" \
+(so it is usable later); items used up or lost → action "remove".
 - A new NPC appears, speaks, or an existing NPC reacts/changes trust/mood → \
 `update_npc` (create them on first interaction with trust "neutral").
 - The player learns, observes, is told, or deduces ANY new fact, lead, rumor, name, \
 code, passphrase, or location → `add_knowledge` (fact/rumor/evidence). This is how \
-clues persist and become referenceable and how Traces of Truth are discovered — be \
+clues persist, become referenceable, and how Traces of Truth are discovered — be \
 generous: record every salient new piece of intel the scene reveals.
-- A risky, loud, illegal, or detected action — breaching security, hacking, fighting, \
-tripping a sensor, being seen by NEXUS → `update_world_state` with a positive \
-`nexus_alert_delta` (≈5-15 for minor risk, ≈20-40 for a major breach). Quiet, careful, \
-low-profile play does NOT raise it. This is the main pressure toward an ending.
-- ALWAYS call `advance_time` exactly once.
 Never narrate a consequence you do not commit.
 
 **location_update** (provide when scene changes): Provide this whenever the player \
@@ -481,6 +493,7 @@ def _try_json(text: str) -> dict | None:
                 "blocking_reason": data.get("blocking_reason"),
                 "narrative": str(data.get("narrative", "")),
                 "tool_calls": data.get("tool_calls", []) if isinstance(data.get("tool_calls"), list) else [],
+                "state_effects": data.get("state_effects") if isinstance(data.get("state_effects"), dict) else {},
                 "location_update": data.get("location_update") if isinstance(data.get("location_update"), dict) else None,
                 "suggested_actions": data.get("suggested_actions", []) if isinstance(data.get("suggested_actions"), list) else [],
             }
@@ -858,6 +871,71 @@ def _apply_mutations(
             log["entries"] = entries
 
     return knowledge_notifications, elapsed_minutes
+
+
+def _apply_state_effects(effects: dict, player: dict, world_state: dict, inventory: dict) -> int:
+    """Apply the numeric deltas the model reports in ``state_effects``.
+
+    Returns minutes elapsed (from ``time_minutes``). This is the deterministic
+    backstop for the codex bypass: the model reliably reports consequences as
+    simple numbers here even when it forgets the equivalent tool_calls, so meters
+    actually move (and a narrated death/capture can fire an ending).
+    """
+    if not isinstance(effects, dict):
+        return 0
+
+    def _num(v) -> int:
+        try:
+            return int(v)
+        except (TypeError, ValueError):
+            try:
+                return int(float(v))
+            except (TypeError, ValueError):
+                return 0
+
+    di = _num(effects.get("integrity_delta"))
+    if di:
+        ig = player.get("integrity", {})
+        if not isinstance(ig, dict):
+            ig = {"current": ig, "max": ig}
+        mx = ig.get("max", ig.get("current", 3)) or 3
+        cur = ig.get("current", mx)
+        player["integrity"] = {"current": max(0, min(int(mx), int(cur) + di)), "max": int(mx)}
+
+    da = _num(effects.get("nexus_alert_delta"))
+    if da:
+        alert = world_state.get("nexus_alert", {})
+        if isinstance(alert, dict):
+            alert["current"] = max(0, min(100, alert.get("current", 0) + da))
+            val = alert["current"]
+            alert["status"], alert["status_zh"] = "Lockdown", "戒严"
+            for t, en, zh in [(20, "Calm", "平静"), (40, "Watchful", "警觉"),
+                              (60, "Alert", "戒备"), (80, "Manhunt", "追捕")]:
+                if val <= t:
+                    alert["status"], alert["status_zh"] = en, zh
+                    break
+            world_state["nexus_alert"] = alert
+
+    dd = _num(effects.get("fragment_decay_delta"))
+    if dd:
+        decay = world_state.get("fragment_decay", {})
+        if isinstance(decay, dict):
+            decay["current"] = max(0, min(100, decay.get("current", 0) + dd))
+            val = decay["current"]
+            decay["status"], decay["status_zh"] = "Terminal", "终末"
+            for t, en, zh in [(25, "Stable", "稳定"), (50, "Fading", "消散"), (75, "Critical", "危机")]:
+                if val < t:
+                    decay["status"], decay["status_zh"] = en, zh
+                    break
+            world_state["fragment_decay"] = decay
+
+    dc = _num(effects.get("credits_delta"))
+    if dc:
+        new_credits = max(0, inventory.get("credits", 0) + dc)
+        inventory["credits"] = new_credits
+        player["credits"] = new_credits
+
+    return max(0, _num(effects.get("time_minutes")))
 
 
 # ---------------------------------------------------------------------------
@@ -1261,6 +1339,14 @@ def run_turn(session_dir: str, player_input: str, mode: str = "play") -> dict:
     knowledge_notifications, elapsed_minutes = _apply_mutations(
         mutation_calls, player, knowledge, location,
         inventory, npcs, world_state, log, session_dir,
+    )
+
+    # ── Step 7b: Apply numeric state_effects (deterministic meter deltas) ──
+    # The model reports consequences as simple numbers here; applying them in
+    # Python means integrity/NEXUS/credits move even when it omits the tool_calls,
+    # so death/capture endings can actually fire.
+    elapsed_minutes += _apply_state_effects(
+        parsed.get("state_effects", {}), player, world_state, inventory,
     )
 
     # ── Step 8: Apply location_update ────────────────────────────────
