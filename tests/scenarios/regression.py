@@ -205,6 +205,43 @@ def test_no_signalable_ending_fires_early():
     print("  [PASS] Signalable endings gated; exile is action-based, not noun-based")
 
 
+def test_good_endings_reachable_and_not_shadowed():
+    """A deep, good-aligned playthrough must resolve to a GOOD ending.
+
+    Regression #1 (ecc7ca0): evidence-gated deep traces (L3/L4/L5) once scanned
+    only the rarely-used "evidence" channel, so they never fired from recorded
+    FACTS — walling off the good endings and making every run end in death.
+
+    Regression #2 (ending order): even once the traces fired, first-match-wins
+    let the looser keyword-gated bad ending `ascension` (whose force-merge
+    keywords incidentally match the "ascension is a path" lore a deep player is
+    EXPECTED to learn) shadow the good endings. Good endings must be checked
+    first so a fully-earned bridge resolves to the_bridge, not a forced ascension.
+    """
+    from tests.scenarios.good_ending_reachability import (
+        build_state, run_trace_fixpoint,
+    )
+    from engine.game_data import (
+        ENDINGS, EARLY_GATED_ENDINGS, _count_discovered_traces, _trace_discovered,
+    )
+
+    knowledge, npcs, player, world_state = build_state()
+    traces = run_trace_fixpoint(knowledge, npcs, player, world_state)
+
+    assert _count_discovered_traces(traces) >= 18, (
+        f"deep traces did not fire from FACTS: only "
+        f"{_count_discovered_traces(traces)} discovered")
+    assert _trace_discovered(traces, "TRACE-L5-02"), "L5-02 (bridge gate) did not fire"
+
+    fired = [e["id"] for e in ENDINGS
+             if not (e["id"] in EARLY_GATED_ENDINGS and player.get("turn", 1) < 8)
+             and e["check"](traces, world_state, player, knowledge, npcs)]
+    assert fired, "no ending fired for a fully-earned deep good state"
+    assert fired[0] in {"the_bridge", "symbiosis"}, (
+        f"a bad ending shadowed the good one: first match was {fired[0]!r}")
+    print(f"  [PASS] Deep good run resolves to GOOD ending ({fired[0]}), not shadowed")
+
+
 def main():
     print("=" * 60)
     print("Signal Lost — Regression Tests")
@@ -219,6 +256,7 @@ def main():
         test_input_blocked_handler_gives_suggestions,
         test_llm_factory_supports_claude_code,
         test_no_signalable_ending_fires_early,
+        test_good_endings_reachable_and_not_shadowed,
     ]
 
     passed = 0

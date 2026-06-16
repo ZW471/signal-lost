@@ -549,6 +549,45 @@ def integrity_warning_text(difficulty: str, current: int, maximum: int, language
 
 ENDINGS: list[dict] = [
     {
+        # GOOD endings are checked FIRST. They carry the strictest, deepest gates
+        # in the game (18+ traces, a specific Layer-5 trace, low fragment decay)
+        # and represent the intended payoff of a thorough, careful playthrough.
+        # First-match-wins meant the looser keyword-gated BAD endings (esp.
+        # `ascension`, whose force-merge keywords incidentally match the
+        # "ascension is one possible path" lore a deep player is EXPECTED to learn
+        # via TRACE-L5-06) shadowed them — a player who fully earned the bridge got
+        # a forced-ascension bad ending instead. the_bridge before symbiosis: its
+        # gate subsumes symbiosis's, so the more-earned ending wins when both hold.
+        "id": "the_bridge",
+        "name": "The Bridge",
+        "name_zh": "桥",
+        "type": "good",
+        "check": lambda t, w, p, k, n: (
+            _count_discovered_traces(t) >= 18
+            and _trace_discovered(t, "TRACE-L5-02")
+            and _has_evidence(k, [
+                "architect", "echo communion", "resonance chamber",
+                "建筑师", "设计者", "回声交融", "共鸣室", "共振室", "桥",
+            ])
+            and w.get("fragment_decay", {}).get("current", 0) < 25
+        ),
+    },
+    {
+        "id": "symbiosis",
+        "name": "Symbiosis",
+        "name_zh": "共生",
+        "type": "good",
+        "check": lambda t, w, p, k, n: (
+            _count_discovered_traces(t) >= 12
+            and _trace_discovered(t, "TRACE-L5-01")
+            and _has_evidence(k, [
+                "echo", "communion",
+                "回声", "回响", "交融", "共融", "共鸣", "圣餐", "共生",
+            ])
+            and w.get("fragment_decay", {}).get("current", 0) < 40
+        ),
+    },
+    {
         # The natural investigative payoff: expose NEXUS by broadcasting
         # authenticated proof to the city under real heat. Checked FIRST so this
         # deliberate resistance act isn't shadowed by the looser high-alert bad
@@ -658,36 +697,6 @@ ENDINGS: list[dict] = [
                 "fled the city", "fled neo-kowloon", "escaped neo-kowloon", "out of neo-kowloon",
                 "离开新九龙", "逃离新九龙", "逃出新九龙", "离开这座城", "逃出这座城", "远走他乡",
             ])
-        ),
-    },
-    {
-        "id": "symbiosis",
-        "name": "Symbiosis",
-        "name_zh": "共生",
-        "type": "good",
-        "check": lambda t, w, p, k, n: (
-            _count_discovered_traces(t) >= 12
-            and _trace_discovered(t, "TRACE-L5-01")
-            and _has_evidence(k, [
-                "echo", "communion",
-                "回声", "回响", "交融", "共融", "共鸣", "圣餐", "共生",
-            ])
-            and w.get("fragment_decay", {}).get("current", 0) < 40
-        ),
-    },
-    {
-        "id": "the_bridge",
-        "name": "The Bridge",
-        "name_zh": "桥",
-        "type": "good",
-        "check": lambda t, w, p, k, n: (
-            _count_discovered_traces(t) >= 18
-            and _trace_discovered(t, "TRACE-L5-02")
-            and _has_evidence(k, [
-                "architect", "echo communion", "resonance chamber",
-                "建筑师", "设计者", "回声交融", "共鸣室", "共振室", "桥",
-            ])
-            and w.get("fragment_decay", {}).get("current", 0) < 25
         ),
     },
 ]
