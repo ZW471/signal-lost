@@ -39,7 +39,10 @@ from langchain_core.messages import HumanMessage
 
 from engine.graph import compile_graph, set_llm
 from engine.state import create_new_session, initial_state
-from engine.llm_factory import create_llm, default_model_for, load_env, load_provider_config
+from engine.llm_factory import (
+    create_llm, default_model_for, load_env, load_provider_config, OAUTH_CLI_PROVIDERS,
+)
+from engine.claude_code_engine import run_turn as cc_run_turn
 
 # --- Bootstrap ---
 load_env()
@@ -134,7 +137,13 @@ def main():
         language=LANGUAGE,
     )
 
-    graph = compile_graph()
+    # For OAUTH-CLI providers (claude-code / codex) the real game (GUI) runs the
+    # single-call BYPASS engine, not the LangGraph pipeline. Match that here so the
+    # headless run exercises the SAME code path real players use — otherwise the two
+    # diverge and headless tests the wrong engine.
+    use_bypass = (PROVIDER in OAUTH_CLI_PROVIDERS) and hasattr(llm, "_call_claude")
+    print(f"Engine path: {'BYPASS (claude_code_engine)' if use_bypass else 'LangGraph'}")
+    graph = None if use_bypass else compile_graph()
     state = initial_state(SESSION_DIR)
 
     os.makedirs(os.path.dirname(LOG_FILE), exist_ok=True)
@@ -160,14 +169,24 @@ def main():
             write_status("processing", turn)
             print(f"\n{'='*60}\nTURN {turn}: {action}\n{'='*60}")
 
-            state["messages"].append(HumanMessage(content=action))
-
             try:
-                result = graph.invoke(state)
-                state = result
-                narrative = result.get("narrative", "(no narrative)")
-                game_over = result.get("game_over", False)
-                ending = result.get("ending")
+                if use_bypass:
+                    result = cc_run_turn(
+                        session_dir=SESSION_DIR, player_input=action, mode="play",
+                    )
+                    narrative = result.get("narrative", "(no narrative)")
+                    game_over = result.get("game_over", False)
+                    ending = result.get("ending")
+                    # The bypass commits all state to disk; reload it for the response.
+                    state = initial_state(SESSION_DIR)
+                    state["ending"] = ending
+                else:
+                    state["messages"].append(HumanMessage(content=action))
+                    result = graph.invoke(state)
+                    state = result
+                    narrative = result.get("narrative", "(no narrative)")
+                    game_over = result.get("game_over", False)
+                    ending = result.get("ending")
 
                 print(f"\nNARRATIVE:\n{narrative}")
                 write_response(narrative, turn, game_over, state)

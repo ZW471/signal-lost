@@ -1270,7 +1270,11 @@ async def _run_turn(sess: PlayerSession, ws: WebSocket, player_input: str | None
             return result
 
     try:
-        result = await loop.run_in_executor(None, _invoke)
+        # Hard backstop against a wedged turn: if the engine/CLI hangs past this
+        # deadline (well beyond a slow-but-normal ~10-min codex turn), abort so the
+        # except below surfaces an in-fiction error and the client re-enables input
+        # — instead of leaving the player stuck on a dead spinner forever.
+        result = await asyncio.wait_for(loop.run_in_executor(None, _invoke), timeout=960)
 
         # The CLI-bypass engine emits suggested_actions inline (no extra call).
         # The LangGraph path does not, so generate them here as a fallback.
