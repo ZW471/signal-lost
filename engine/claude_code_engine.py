@@ -1203,6 +1203,16 @@ _INTEGRITY_PRIMER_ZH = (
 # Consequence checker (mirrors graph.py consequence)
 # ---------------------------------------------------------------------------
 
+_FACT_KEY_STRIP = re.compile(r"[\s。，、．.,;；:：!！?？\"'“”‘’()（）\-—_]+")
+
+
+def _fact_key(desc: str) -> str:
+    """Normalized dedup key for a recorded fact: lowercased with whitespace and
+    punctuation collapsed, so the model re-recording the same fact with trivial
+    spacing/punctuation differences doesn't pile up near-duplicate entries."""
+    return _FACT_KEY_STRIP.sub("", str(desc).strip().lower())
+
+
 def _apply_record(records, knowledge: dict, turn: int) -> list[dict]:
     """Persist the model's `record` list (short fact strings) into knowledge.facts.
 
@@ -1215,7 +1225,7 @@ def _apply_record(records, knowledge: dict, turn: int) -> list[dict]:
     if not isinstance(records, list):
         return []
     facts = knowledge.setdefault("facts", [])
-    existing = {str(f.get("description", "")).strip().lower() for f in facts}
+    existing = {_fact_key(str(f.get("description", ""))) for f in facts}
     nums = []
     for f in facts:
         fid = f.get("id", "")
@@ -1228,7 +1238,7 @@ def _apply_record(records, knowledge: dict, turn: int) -> list[dict]:
     notifs = []
     for r in records:
         desc = (str(r.get("description", "")) if isinstance(r, dict) else str(r)).strip()
-        key = desc.lower()
+        key = _fact_key(desc)
         if len(desc) < 4 or key in existing:
             continue
         facts.append({

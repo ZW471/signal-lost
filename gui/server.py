@@ -745,13 +745,44 @@ async def _handle_load_game(ws: WebSocket, sess: PlayerSession, msg: dict):
     await _run_turn(sess, ws, mode="resume")
 
 
+async def _try_autoresume(ws: WebSocket, sess: PlayerSession, msg: dict) -> bool:
+    """Rebind to the most-recently-played on-disk session after a reconnect.
+
+    A dropped WebSocket tears down the in-memory PlayerSession (its game_state),
+    but the on-disk session under session/<uid>/ is intact. Without this, the
+    player's next action on the reconnected socket hit a dead "No active game"
+    error even though their game was right there on disk. Returns True if a game
+    is now live and the caller may proceed with the turn.
+    """
+    sessions = _list_sessions(sess.session_root)
+    if not sessions:
+        return False
+    name = sessions[0]["name"]  # most-recently-played (list is mtime-sorted)
+    sess_path = os.path.join(sess.session_root, name)
+    if not os.path.isdir(sess_path):
+        return False
+    try:
+        _ensure_llm(msg.get("provider", load_provider_config()))
+    except Exception:
+        return False
+    sess.session_dir = sess_path
+    sess.graph = _get_graph()
+    sess.game_state = initial_state(sess.session_dir)
+    _start_world_sim_scheduler(sess)
+    await ws.send_json({"type": "game_started", "session": _get_session_data(sess)})
+    return True
+
+
 async def _handle_player_input(ws: WebSocket, sess: PlayerSession, msg: dict, loop):
     text = msg.get("text", "").strip()
     if not text:
         return
     if sess.graph is None or sess.game_state is None:
-        await ws.send_json({"type": "error", "message": "No active game. Start or resume first."})
-        return
+        # The socket reconnected and lost its in-memory game — transparently
+        # rebind to the on-disk session and continue instead of erroring out.
+        if not await _try_autoresume(ws, sess, msg):
+            await ws.send_json({"type": "error", "message": "No active game. Start or resume first."})
+            return
 
     # Fast path: serve a pre-computed suggested-action outcome. Run the
     # lock-guarded validate+promote off the event loop so a background
