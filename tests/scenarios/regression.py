@@ -205,6 +205,34 @@ def test_no_signalable_ending_fires_early():
     print("  [PASS] Signalable endings gated; exile is action-based, not noun-based")
 
 
+def test_cli_runner_kills_hung_process_tree():
+    """A hung CLI subprocess must not wedge a turn forever (BUG-003).
+
+    Regression: ``subprocess.run(timeout=...)`` only SIGKILLs the direct child on
+    timeout; a surviving grandchild that inherited the stdout pipe keeps it open,
+    so run()'s internal communicate() blocks indefinitely waiting for EOF — a real
+    52-minute engine hang was observed. ``_run_cli_pg`` runs the command in its own
+    process group and kills the whole tree, so it raises TimeoutExpired fast.
+    """
+    import subprocess
+    import time
+    from tests.scripts.claude_llm import _run_cli_pg
+
+    # Parent backgrounds a long sleep (the grandchild) that inherits stdout, then
+    # the parent itself sleeps. Classic pipe-EOF wedge for plain subprocess.run.
+    cmd = ["sh", "-c", "sleep 60 & sleep 60"]
+    t0 = time.time()
+    raised = False
+    try:
+        _run_cli_pg(cmd, "", timeout=1, env=os.environ.copy())
+    except subprocess.TimeoutExpired:
+        raised = True
+    elapsed = time.time() - t0
+    assert raised, "_run_cli_pg did not raise TimeoutExpired on a hung command"
+    assert elapsed < 15, f"_run_cli_pg took {elapsed:.1f}s — it wedged instead of killing the tree"
+    print(f"  [PASS] Hung CLI tree killed fast ({elapsed:.1f}s), no turn wedge")
+
+
 def test_good_endings_reachable_and_not_shadowed():
     """A deep, good-aligned playthrough must resolve to a GOOD ending.
 
@@ -256,6 +284,7 @@ def main():
         test_input_blocked_handler_gives_suggestions,
         test_llm_factory_supports_claude_code,
         test_no_signalable_ending_fires_early,
+        test_cli_runner_kills_hung_process_tree,
         test_good_endings_reachable_and_not_shadowed,
     ]
 

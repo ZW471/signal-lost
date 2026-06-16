@@ -17,6 +17,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import signal
 import subprocess
 import time
 from typing import Any, Sequence
@@ -42,6 +43,39 @@ _NESTING_GUARD_VARS = (
 def _clean_env() -> dict[str, str]:
     """Return os.environ with Claude Code nesting-guard vars stripped."""
     return {k: v for k, v in os.environ.items() if k not in _NESTING_GUARD_VARS}
+
+
+def _run_cli_pg(cmd, input_text, timeout, env):
+    """Run *cmd* in its own process group and return (returncode, stdout, stderr).
+
+    Raises ``subprocess.TimeoutExpired`` on timeout — but, unlike
+    ``subprocess.run(timeout=...)``, reliably kills the WHOLE process tree first.
+    The ``claude``/``codex`` CLIs spawn grandchildren that inherit the stdout
+    pipe; ``subprocess.run`` only SIGKILLs the direct child on timeout, then
+    blocks in its internal ``communicate()`` waiting for pipe EOF that never comes
+    because a grandchild still holds the fd open — wedging the turn forever
+    (observed: a 52-minute hang with the engine alive but no ``claude`` child).
+    Launching with ``start_new_session=True`` and ``os.killpg`` on timeout closes
+    the whole tree so the call fails fast and the retry/fallback path can run.
+    """
+    proc = subprocess.Popen(
+        cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        text=True, env=env, start_new_session=True,
+    )
+    try:
+        out, err = proc.communicate(input=input_text, timeout=timeout)
+        return proc.returncode, out, err
+    except subprocess.TimeoutExpired:
+        try:
+            os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+        except (ProcessLookupError, PermissionError, OSError):
+            proc.kill()
+        # Reap with a short grace period so cleanup itself can't re-hang.
+        try:
+            proc.communicate(timeout=10)
+        except subprocess.TimeoutExpired:
+            pass
+        raise
 
 
 def _parse_stream_json(stdout: str) -> tuple[str, str | None]:
@@ -328,17 +362,12 @@ class ClaudeCodeLLM(BaseChatModel):
 
         for attempt in range(self.max_retries + 1):
             try:
-                result = subprocess.run(
-                    cmd,
-                    input=stdin_text,
-                    capture_output=True,
-                    text=True,
-                    timeout=self.timeout,
-                    env=env,
+                returncode, stdout_text, stderr_text = _run_cli_pg(
+                    cmd, stdin_text, self.timeout, env,
                 )
 
-                if result.returncode != 0:
-                    stderr = result.stderr[:500] if result.stderr else ""
+                if returncode != 0:
+                    stderr = stderr_text[:500] if stderr_text else ""
                     # If session resume failed (stale/unknown), retry without it
                     if self._session_id and ("unknown session" in stderr.lower()
                                               or "session" in stderr.lower()):
@@ -354,9 +383,9 @@ class ClaudeCodeLLM(BaseChatModel):
                             "--effort", "low",
                         ]
                         continue
-                    raise RuntimeError(f"claude CLI exited {result.returncode}: {stderr or (result.stdout or '')[:400]}")
+                    raise RuntimeError(f"claude CLI exited {returncode}: {stderr or (stdout_text or '')[:400]}")
 
-                output = result.stdout.strip()
+                output = stdout_text.strip()
                 if not output:
                     raise RuntimeError("claude CLI returned empty response")
 

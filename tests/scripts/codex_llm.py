@@ -22,6 +22,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import signal
 import subprocess
 import time
 from typing import Any, Sequence
@@ -49,6 +50,35 @@ _NESTING_GUARD_VARS = (
 def _clean_env() -> dict[str, str]:
     """Return os.environ with Codex nesting-guard vars stripped."""
     return {k: v for k, v in os.environ.items() if k not in _NESTING_GUARD_VARS}
+
+
+def _run_cli_pg(cmd, input_text, timeout, env):
+    """Run *cmd* in its own process group; return (returncode, stdout, stderr).
+
+    Raises ``subprocess.TimeoutExpired`` on timeout but kills the WHOLE process
+    tree first. ``subprocess.run(timeout=...)`` only SIGKILLs the direct child,
+    then can block forever in its internal ``communicate()`` because a surviving
+    grandchild still holds the stdout pipe open — wedging a turn indefinitely.
+    ``start_new_session=True`` + ``os.killpg`` closes the whole tree so the call
+    fails fast and the retry/fallback path can run.
+    """
+    proc = subprocess.Popen(
+        cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        text=True, env=env, start_new_session=True,
+    )
+    try:
+        out, err = proc.communicate(input=input_text, timeout=timeout)
+        return proc.returncode, out, err
+    except subprocess.TimeoutExpired:
+        try:
+            os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+        except (ProcessLookupError, PermissionError, OSError):
+            proc.kill()
+        try:
+            proc.communicate(timeout=10)
+        except subprocess.TimeoutExpired:
+            pass
+        raise
 
 
 def _parse_json_stream(stdout: str) -> tuple[str, str | None]:
@@ -350,20 +380,15 @@ class CodexCLILLM(BaseChatModel):
 
         for attempt in range(self.max_retries + 1):
             try:
-                result = subprocess.run(
-                    cmd,
-                    input=stdin_text,
-                    capture_output=True,
-                    text=True,
-                    timeout=self.timeout,
-                    env=env,
+                returncode, stdout_text, stderr_text = _run_cli_pg(
+                    cmd, stdin_text, self.timeout, env,
                 )
 
-                if result.returncode != 0:
-                    stderr = (result.stderr or "")[:500]
-                    raise RuntimeError(f"codex CLI exited {result.returncode}: {stderr}")
+                if returncode != 0:
+                    stderr = (stderr_text or "")[:500]
+                    raise RuntimeError(f"codex CLI exited {returncode}: {stderr}")
 
-                output = (result.stdout or "").strip()
+                output = (stdout_text or "").strip()
                 if not output:
                     raise RuntimeError("codex CLI returned empty response")
 
