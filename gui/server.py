@@ -1277,9 +1277,11 @@ async def _run_turn(sess: PlayerSession, ws: WebSocket, player_input: str | None
         # — instead of leaving the player stuck on a dead spinner forever.
         result = await asyncio.wait_for(loop.run_in_executor(None, _invoke), timeout=960)
 
-        # The CLI-bypass engine emits suggested_actions inline (no extra call).
-        # The LangGraph path does not, so generate them here as a fallback.
-        if (not _is_cli_bypass and not result.get("suggested_actions")
+        # The CLI-bypass engine usually emits suggested_actions inline, but some
+        # models/turns omit them (or a parse-fallback zeroes them), leaving the
+        # quick-action buttons missing for the rest of the game. Generate a
+        # fallback whenever they're empty — for the bypass too, not just LangGraph.
+        if (not result.get("suggested_actions")
                 and not result.get("game_over") and not result.get("is_warning")):
             try:
                 feats = read_features(sess.session_dir)

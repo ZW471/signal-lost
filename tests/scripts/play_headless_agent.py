@@ -29,6 +29,15 @@ import os
 import sys
 import time
 
+# Line-buffer stdout/stderr so the engine.log captures progress/errors even when
+# the process is killed mid-turn (OOM, timeout) — block-buffered nohup output was
+# being lost as 0-byte logs, making crashes impossible to diagnose.
+try:
+    sys.stdout.reconfigure(line_buffering=True)
+    sys.stderr.reconfigure(line_buffering=True)
+except Exception:
+    pass
+
 # Ensure game root is on sys.path
 _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 _GAME_ROOT = os.path.abspath(os.path.join(_SCRIPT_DIR, "..", ".."))

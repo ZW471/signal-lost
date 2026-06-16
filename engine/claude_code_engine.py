@@ -395,12 +395,22 @@ def _get_district_status(district_name: str, world_state: dict) -> str:
     return "unknown"
 
 
+# A district name only counts as a travel target when it's the DESTINATION —
+# preceded by a movement cue. Otherwise common nouns (e.g. "the resonance map",
+# "共鸣所的资料") false-trigger the gate and block legitimate actions.
+_DEST_CUE = re.compile(
+    r"\b(to|into|toward|towards|for|reach|enter|inside|through|in)\b\s*(the\s+)?$"
+    r"|(去|前往|进入|潜入|赶往|抵达|穿过|回到|回)\s*$"
+)
+
+
 def _check_movement(content: str, state: dict, language: str) -> str | None:
     if not _MOVE_VERBS.search(content):
         return None
     content_lower = content.lower()
     for pattern, canonical in _DISTRICT_NAMES.items():
-        if pattern in content_lower:
+        idx = content_lower.find(pattern)
+        if idx >= 0 and _DEST_CUE.search(content_lower[:idx]):
             current = state.get("location", {}).get("district", "")
             if canonical.lower() in current.lower():
                 return None

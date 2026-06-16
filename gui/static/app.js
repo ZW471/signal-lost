@@ -1625,6 +1625,10 @@ function startNewGame() {
     difficulty: document.getElementById('selectDifficulty').value,
     language: document.getElementById('selectLanguage').value,
   };
+  // Make the whole UI follow the language you're PLAYING in — otherwise an
+  // English game shows Chinese chrome (and vice-versa) when the display default
+  // differs from the chosen game language.
+  if (config.language) setLanguage(config.language);
   clearChat(); isFirstInput = true; pendingTutorial = true; resumeMessageEl = null;
   _firstSceneArmed = true; _pendingFirstScene = null; // hold opening scene until tutorial ends
   sendWS({ action: 'new_game', config, provider: getProviderConfig() });
@@ -1765,6 +1769,20 @@ function addChatMessage(text, role = 'agent') {
   return msg;
 }
 
+/** Render a SAFE markdown subset (bold, italic, inline code, bullets, line
+ *  breaks). HTML is escaped first so narration can never inject markup. */
+function renderMarkdown(text) {
+  let h = String(text || '')
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  // bullet lines: "- foo" / "* foo" / "• foo" -> • foo
+  h = h.replace(/^[\t ]*[-*•]\s+(.*)$/gm, '<span class="md-li">• $1</span>');
+  h = h.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>');   // **bold**
+  h = h.replace(/`([^`\n]+)`/g, '<code>$1</code>');             // `code`
+  h = h.replace(/(^|[^*\w])\*([^*\n]+)\*(?=[^*\w]|$)/g, '$1<em>$2</em>'); // *italic*
+  h = h.replace(/\n/g, '<br>');
+  return h;
+}
+
 function addTypingMessage(text, role = 'agent', usage = null, elapsedSeconds = null, suggestedActions = null) {
   const container = document.getElementById('chatMessages');
   const msg = document.createElement('div');
@@ -1791,6 +1809,9 @@ function addTypingMessage(text, role = 'agent', usage = null, elapsedSeconds = n
       setTimeout(typeNext, interval);
     } else {
       contentEl.classList.remove('typing');
+      // Re-render the finished narration with a safe markdown subset so
+      // **bold**/lists/`code` don't show as literal asterisks.
+      contentEl.innerHTML = renderMarkdown(text);
       // Build info line: time always shown, tokens optional
       const infoParts = [];
       if (elapsedSeconds != null) {
