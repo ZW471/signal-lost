@@ -261,6 +261,15 @@ class ClaudeCodeLLM(BaseChatModel):
     def _llm_type(self) -> str:
         return "claude-code-cli"
 
+    @property
+    def _cli_model(self) -> str:
+        """Normalize the model alias for the Claude Code CLI. The bare token
+        "claude" (a natural but INVALID value) and empty map to a real default —
+        otherwise `--model claude` returns 404 model_not_found and every turn
+        fails with a cryptic "claude CLI exited 1"."""
+        m = (self.model_name or "").strip()
+        return {"claude": "sonnet", "": "sonnet", "default": "sonnet"}.get(m, m)
+
     def _generate(
         self,
         messages: list[BaseMessage],
@@ -296,7 +305,7 @@ class ClaudeCodeLLM(BaseChatModel):
         """Invoke `claude -p` with stream-json output and session reuse."""
         cmd = [
             "claude", "-p",
-            "--model", self.model_name,
+            "--model", self._cli_model,
             "--output-format", "stream-json",
             "--verbose",
             "--tools", "",
@@ -338,14 +347,14 @@ class ClaudeCodeLLM(BaseChatModel):
                         # Rebuild cmd without --resume
                         cmd = [
                             "claude", "-p",
-                            "--model", self.model_name,
+                            "--model", self._cli_model,
                             "--output-format", "stream-json",
                             "--verbose",
                             "--tools", "",
                             "--effort", "low",
                         ]
                         continue
-                    raise RuntimeError(f"claude CLI exited {result.returncode}: {stderr}")
+                    raise RuntimeError(f"claude CLI exited {result.returncode}: {stderr or (result.stdout or '')[:400]}")
 
                 output = result.stdout.strip()
                 if not output:
