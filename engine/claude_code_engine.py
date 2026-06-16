@@ -174,9 +174,13 @@ suffers deep Signal resonance (e.g. -1, -2); positive when they rest, heal, or u
 stim (usually +1). At 0 integrity the player dies — so if your narrative kills or \
 downs them, you MUST send a delta that brings integrity to 0.
 - `nexus_alert_delta`: POSITIVE on any risky/loud/illegal/detected action — breaching \
-security, hacking, fighting, tripping a sensor, being seen by NEXUS (≈+5-15 minor, \
-≈+20-40 major breach, +100 = captured). Quiet, careful play sends 0. This is the main \
-pressure toward a capture ending.
+security, hacking, accessing a terminal, infiltrating a restricted area, fighting, \
+tripping a sensor, being seen by NEXUS (≈+5-15 minor, ≈+20-40 major breach, +100 = \
+captured). Only truly low-stakes turns (resting, ordinary conversation, walking a public \
+street, buying from a stall) send 0 — do NOT rationalize an intrusion or hack as "careful" \
+and leave alert flat. Skilled play means a SMALLER increase, not zero. Alert never \
+decreasing makes the whole investigation feel consequence-free; this is the main pressure \
+toward a capture ending, so let it climb as the player pushes deeper into NEXUS territory.
 - `credits_delta`: negative when the player spends/pays/bribes, positive when they earn \
 or are paid. Every purchase MUST send a negative delta.
 - `fragment_decay_delta`: positive as the Signal fragment degrades over deep resonance.

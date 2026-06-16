@@ -141,14 +141,23 @@ def main():
     llm = create_llm(PROVIDER, MODEL, temperature=TEMPERATURE)
     set_llm(llm, zero_cost=PROVIDER in ("claude-code", "local", "lmstudio"))
 
-    create_new_session(
-        session_dir=SESSION_DIR,
-        name=CHAR_NAME,
-        alias=CHAR_ALIAS,
-        background=BACKGROUND,
-        difficulty=DIFFICULTY,
-        language=LANGUAGE,
-    )
+    # Resume guard: create_new_session() rmtree's the session dir, so an
+    # unconditional call wiped all progress whenever the engine was relaunched
+    # after a crash (each restart dropped the player back to turn 1). Set
+    # HEADLESS_RESUME=1 to keep an existing session and continue from disk.
+    _resume = os.environ.get("HEADLESS_RESUME", "").lower() in ("1", "true", "yes")
+    _has_session = os.path.exists(os.path.join(SESSION_DIR, "player.json"))
+    if _resume and _has_session:
+        print(f"HEADLESS_RESUME set — resuming existing session at {SESSION_DIR}")
+    else:
+        create_new_session(
+            session_dir=SESSION_DIR,
+            name=CHAR_NAME,
+            alias=CHAR_ALIAS,
+            background=BACKGROUND,
+            difficulty=DIFFICULTY,
+            language=LANGUAGE,
+        )
 
     # For OAUTH-CLI providers (claude-code / codex) the real game (GUI) runs the
     # single-call BYPASS engine, not the LangGraph pipeline. Match that here so the
