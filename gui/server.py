@@ -1317,8 +1317,22 @@ async def _run_turn(sess: PlayerSession, ws: WebSocket, player_input: str | None
         raise
     except Exception as e:
         import traceback
+        import logging
         traceback.print_exc()
+        # Never leak raw engine/CLI internals (e.g. "codex CLI exited 1") into the
+        # player-facing UI. Show a recoverable, in-fiction message in the player's
+        # language and keep the input usable so they can retry the turn.
+        lang = _session_language(sess.session_dir) if sess and sess.session_dir else "en"
+        in_fiction = (
+            "信号一阵刺啦——干扰扭曲了连接。深吸一口气，再试一次。"
+            if lang == "zh" else
+            "The Signal stutters — interference scrambles the link for a moment. "
+            "Steady yourself and try that again."
+        )
+        logging.getLogger(__name__).warning("turn failed (shown in-fiction): %s", e)
         try:
-            await ws.send_json({"type": "error", "message": f"Engine error: {e}"})
+            await ws.send_json({
+                "type": "error", "message": in_fiction, "recoverable": True,
+            })
         except Exception:
             pass  # socket may already be gone

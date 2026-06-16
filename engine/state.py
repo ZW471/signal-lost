@@ -582,8 +582,8 @@ def create_new_session(
     # world_state.json
     _write_json(os.path.join(session_dir, "world_state.json"), {
         "title": L["world_title"],
-        "nexus_alert": {"current": 0, "status": L["calm"]},
-        "fragment_decay": {"current": 0, "status": L["stable"]},
+        "nexus_alert": {"current": 0, "status": "Calm", "status_zh": L["calm"]},
+        "fragment_decay": {"current": 0, "status": "Stable", "status_zh": L["stable"]},
         "district_access": [
             {"name": L["district_sprawl"], "name_zh": "蔓城", "status": L["open"], "notes": L["notes_starting"]},
             {"name": L["district_neon"], "name_zh": "霓虹街", "status": L["open"], "notes": L["notes_entertainment"]},

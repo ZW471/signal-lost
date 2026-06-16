@@ -1320,17 +1320,22 @@ def run_turn(session_dir: str, player_input: str, mode: str = "play") -> dict:
     # ── Step 4: Parse response ───────────────────────────────────────
     parsed = _parse_response(raw_text)
 
-    # ── Step 5: Handle invalid input ─────────────────────────────────
-    if not parsed["input_valid"]:
-        return {
-            "narrative": parsed.get("blocking_reason") or parsed["narrative"] or "Invalid action.",
-            "game_over": False, "ending": None, "is_warning": True,
-            "discovery_notifications": [], "turn_usage": {},
-            "knowledge_notifications": [],
-            "elapsed_seconds": round(_time.time() - _turn_start, 1),
-        }
+    # ── Step 5: Validation is advisory only ──────────────────────────
+    # Python already hard-blocks prompt-injection (Step 1) and impossible
+    # movement (Step 1b) BEFORE the LLM call. By four iterations of playtesting,
+    # the model's input_valid=false is almost always a false-positive that rejects
+    # the game's OWN narrated content (an NPC/place/item it introduced a turn or
+    # two ago that isn't yet in the structured lists), which burned ~1/3-1/2 of
+    # turns and blocked traces, theorize, navigation, and bought-item use. So we no
+    # longer hard-stop the turn on it: we let the scene play out and let the
+    # narrator refuse genuinely impossible actions in-fiction instead.
+    if not parsed.get("input_valid", True):
+        logger.info(
+            "claude_code_engine: model flagged input invalid (advisory, not blocking): %s",
+            parsed.get("blocking_reason"),
+        )
 
-    narrative = parsed["narrative"]
+    narrative = parsed.get("narrative") or parsed.get("blocking_reason") or ""
 
     # ── Step 6: Execute game tools ───────────────────────────────────
     narrative, mutation_calls = _execute_game_tools(parsed["tool_calls"], narrative, inventory)
