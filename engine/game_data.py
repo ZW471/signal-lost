@@ -115,6 +115,12 @@ def _layer_complete(traces: dict, layer: int) -> bool:
     return True
 
 
+def _count_layer_discovered(traces: dict, layer: int) -> int:
+    """How many traces of a given layer have been discovered."""
+    return sum(1 for t in TRACE_CONDITIONS
+               if t["layer"] == layer and _trace_discovered(traces, t["id"]))
+
+
 def reconcile_trace_presentation(traces: dict) -> dict:
     """Sync the display fields (``total_discovered``, per-layer ``progress``,
     per-trace ``status``/``description``) with the authoritative ``discovered``
@@ -366,11 +372,18 @@ TRACE_CONDITIONS: list[dict] = [
      "description": "You are the convergence point — the first true bridge",
      "description_zh": "你是汇聚点——第一座真正的桥梁",
      "check": lambda k, t, n, p, w: (
-         _layer_complete(t, 4) and _has_fact_or_rumor_about(k, [
+         # Reachable-but-deep: most of Layer 4 (6/9, not every trace) + convergence
+         # knowledge + an implant in resonance OR the player having reached deep
+         # resonance lore (so a thorough investigation can actually arrive here).
+         _count_layer_discovered(t, 4) >= 6 and _has_fact_or_rumor_about(k, [
              "convergence", "bridge", "echo", "resonance",
              "汇聚", "汇聚点", "桥", "桥梁", "回响", "回声", "共鸣",
          ])
-         and str(p.get("neural_implant", "")).lower() in ("resonating", "共鸣", "共鸣中", "共振"))},
+         and (str(p.get("neural_implant", "")).lower() in ("resonating", "共鸣", "共鸣中", "共振")
+              or _has_fact_or_rumor_about(k, [
+                  "resonating", "resonance with the signal", "implant resonates",
+                  "共鸣", "共振", "信号共鸣", "植入体共鸣",
+              ])))},
     {"id": "TRACE-L5-02", "layer": 5,
      "description": "The Severance didn't fully kill it — it became part of humanity",
      "description_zh": "断离并未完全杀死它——它已成为人类的一部分",
@@ -607,6 +620,24 @@ ENDINGS: list[dict] = [
         ),
     },
     {
+        # The natural investigative payoff: expose NEXUS by broadcasting
+        # authenticated proof to the city under real heat. Both headless agents
+        # reached this arc in prose but it matched no designed ending and only
+        # bottomed out at exile. Fires on high alert + an expose/broadcast fact.
+        "id": "exposure",
+        "name": "The Broadcast",
+        "name_zh": "广播",
+        "type": "neutral",
+        "check": lambda t, w, p, k, n: (
+            w.get("nexus_alert", {}).get("current", 0) >= 40
+            and _has_fact_or_rumor_about(k, [
+                "broadcast", "broadcasted", "expose", "exposed the truth", "leaked the truth",
+                "went public", "freeband", "public airwaves",
+                "广播", "曝光", "揭露真相", "公之于众", "公开真相", "自由频段", "向全城",
+            ])
+        ),
+    },
+    {
         "id": "symbiosis",
         "name": "Symbiosis",
         "name_zh": "共生",
@@ -645,7 +676,7 @@ ENDINGS: list[dict] = [
 # fails to persist (e.g. completing the whole exile quest in narrative but never
 # recording the "leave neo-kowloon" fact). The GOOD endings (symbiosis/the_bridge)
 # are deliberately excluded — they stay earned through deep trace discovery.
-MODEL_SIGNALABLE_ENDINGS = {"liberation", "ascension", "order", "purification", "exile"}
+MODEL_SIGNALABLE_ENDINGS = {"liberation", "ascension", "order", "purification", "exile", "exposure"}
 
 
 def resolve_ending_signal(signal, player: dict) -> str | None:
