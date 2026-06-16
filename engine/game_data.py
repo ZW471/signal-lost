@@ -538,6 +538,24 @@ def integrity_warning_text(difficulty: str, current: int, maximum: int, language
 
 ENDINGS: list[dict] = [
     {
+        # The natural investigative payoff: expose NEXUS by broadcasting
+        # authenticated proof to the city under real heat. Checked FIRST so this
+        # deliberate resistance act isn't shadowed by the looser high-alert bad
+        # endings (order/liberation) under first-match-wins.
+        "id": "exposure",
+        "name": "The Broadcast",
+        "name_zh": "广播",
+        "type": "neutral",
+        "check": lambda t, w, p, k, n: (
+            w.get("nexus_alert", {}).get("current", 0) >= 40
+            and _has_fact_or_rumor_about(k, [
+                "broadcast", "broadcasted", "expose", "exposed the truth", "leaked the truth",
+                "went public", "freeband", "public airwaves",
+                "广播", "曝光", "揭露真相", "公之于众", "公开真相", "自由频段", "向全城",
+            ])
+        ),
+    },
+    {
         "id": "liberation",
         "name": "Liberation",
         "name_zh": "解放",
@@ -572,8 +590,12 @@ ENDINGS: list[dict] = [
         "check": lambda t, w, p, k, n: (
             (w.get("nexus_alert", {}).get("current", 0) > 80
              and _has_fact_or_rumor_about(k, [
-                 "cooperate", "nexus", "cooperation",
-                 "合作", "配合", "归顺", "效忠", "投靠", "秩序",
+                 # cooperation-SPECIFIC — never the bare token "nexus", which
+                 # false-matches the many facts naming NEXUS as the adversary and
+                 # wrongly fired `order` on high-alert resistance/exposure runs.
+                 "cooperate with nexus", "side with nexus", "join nexus", "serve nexus",
+                 "cooperation", "collaborate",
+                 "与连结合作", "归顺连结", "投靠连结", "效忠连结", "为连结效力", "归顺", "投靠", "效忠",
              ]))
             or (_npc_trust_at_least(n, "orin", "trusted")
                 and _has_fact_or_rumor_about(k, [
@@ -616,24 +638,6 @@ ENDINGS: list[dict] = [
                 "leave neo-kowloon", "left neo-kowloon", "leaving neo-kowloon",
                 "fled the city", "fled neo-kowloon", "escaped neo-kowloon", "out of neo-kowloon",
                 "离开新九龙", "逃离新九龙", "逃出新九龙", "离开这座城", "逃出这座城", "远走他乡",
-            ])
-        ),
-    },
-    {
-        # The natural investigative payoff: expose NEXUS by broadcasting
-        # authenticated proof to the city under real heat. Both headless agents
-        # reached this arc in prose but it matched no designed ending and only
-        # bottomed out at exile. Fires on high alert + an expose/broadcast fact.
-        "id": "exposure",
-        "name": "The Broadcast",
-        "name_zh": "广播",
-        "type": "neutral",
-        "check": lambda t, w, p, k, n: (
-            w.get("nexus_alert", {}).get("current", 0) >= 40
-            and _has_fact_or_rumor_about(k, [
-                "broadcast", "broadcasted", "expose", "exposed the truth", "leaked the truth",
-                "went public", "freeband", "public airwaves",
-                "广播", "曝光", "揭露真相", "公之于众", "公开真相", "自由频段", "向全城",
             ])
         ),
     },
