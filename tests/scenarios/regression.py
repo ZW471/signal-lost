@@ -161,6 +161,50 @@ def test_llm_factory_supports_claude_code():
         raise
 
 
+def test_no_signalable_ending_fires_early():
+    """Brittle keyword-gated bad/neutral endings must not false-fire early.
+
+    Regression: the `exile` ending matched the bare word "exile", which collides
+    with the corporate_exile background's identity lore, so a single early
+    knowledge entry fired the ending on turn 1. The structured check path must
+    gate MODEL_SIGNALABLE_ENDINGS to turn>=8, and `exile` must require an action
+    of leaving the city (not the noun).
+    """
+    from engine.state import create_new_session
+    from engine.claude_code_engine import _run_consequence
+
+    # 1. No ending fires on a fresh seed at turn 1, for every background.
+    for bg in ("netrunner", "street_runner", "corporate_exile"):
+        with tempfile.TemporaryDirectory() as d:
+            create_new_session(session_dir=d, name="T", alias="T",
+                               background=bg, difficulty="standard", language="en")
+            S = {k: json.load(open(os.path.join(d, f"{k}.json")))
+                 for k in ("player", "knowledge", "traces", "world_state", "npcs")}
+            S["player"]["turn"] = 1
+            go, end, _ = _run_consequence(S["player"], S["traces"], S["world_state"],
+                                          S["knowledge"], S["npcs"])
+            assert not go, f"{bg}: ending {end!r} false-fired at turn 1"
+
+    # 2. "exile" lore word never fires the exile ending (de-collided keyword).
+    W = {"nexus_alert": {"current": 0}}
+    T = {"discovered": []}
+    N = {"npcs": []}
+    k_lore = {"facts": [{"description": "You are a corporate exile from NEXUS"}]}
+    go, end, _ = _run_consequence({"turn": 20, "integrity": {"current": 3, "max": 3}},
+                                  T, W, k_lore, N)
+    assert not go, f"bare 'exile' lore wrongly fired ending {end!r}"
+
+    # 3. An actual leaving action fires exile, but only at/after the turn gate.
+    k_leave = {"facts": [{"description": "You finally leave Neo-Kowloon behind for good"}]}
+    go_early, _, _ = _run_consequence({"turn": 3, "integrity": {"current": 3, "max": 3}},
+                                      T, W, k_leave, N)
+    assert not go_early, "exile fired before the turn>=8 gate"
+    go_late, end_late, _ = _run_consequence({"turn": 10, "integrity": {"current": 3, "max": 3}},
+                                            T, W, k_leave, N)
+    assert go_late and end_late == "exile", f"exile did not fire on a real leave action: {end_late!r}"
+    print("  [PASS] Signalable endings gated; exile is action-based, not noun-based")
+
+
 def main():
     print("=" * 60)
     print("Signal Lost — Regression Tests")
@@ -174,6 +218,7 @@ def main():
         test_prompt_includes_economy_engagement,
         test_input_blocked_handler_gives_suggestions,
         test_llm_factory_supports_claude_code,
+        test_no_signalable_ending_fires_early,
     ]
 
     passed = 0

@@ -45,6 +45,7 @@ from engine.game_data import (
     check_death,
     integrity_warning_text,
     resolve_ending_signal,
+    MODEL_SIGNALABLE_ENDINGS,
 )
 from engine.tools import (
     decrypt_cipher,
@@ -113,6 +114,7 @@ Return ONLY a single JSON object. No prose, no markdown, no explanation outside 
     ...
   ],
   "state_effects": {"integrity_delta": 0, "nexus_alert_delta": 0, "credits_delta": 0, "fragment_decay_delta": 0, "time_minutes": 0},
+  "record": ["a short fact the player just learned", "another lead or name"],
   "ending_signal": null,
   "location_update": null,
   "suggested_actions": ["short next action", "a different next action"]
@@ -199,6 +201,16 @@ code, passphrase, or location → `add_knowledge` (fact/rumor/evidence). This is
 clues persist, become referenceable, and how Traces of Truth are discovered — be \
 generous: record every salient new piece of intel the scene reveals.
 Never narrate a consequence you do not commit.
+
+**record** (REQUIRED whenever the player learns anything): a list of short, plain \
+strings — every new fact, lead, name, code, location, or revelation the player \
+learns, is told, observes, or deduces THIS turn. Phrase each as a brief standalone \
+statement (e.g. "Director Orin runs an off-books lab in Sector 7", "the courier was \
+dragged into the service tunnel"). These persist as the player's knowledge — it is \
+how clues become referenceable later AND how Traces of Truth are discovered, so be \
+GENEROUS and record every salient thing the scene reveals. Use `[]` only on a turn \
+where genuinely nothing new is learned. (This is the easy, reliable way to record \
+knowledge — you do not also need add_knowledge tool calls for plain facts.)
 
 **ending_signal** (almost always null): set this to a designed-ending id ONLY when \
 the story has DECISIVELY and unambiguously reached that ending in your narrative THIS \
@@ -503,6 +515,7 @@ def _try_json(text: str) -> dict | None:
                 "narrative": str(data.get("narrative", "")),
                 "tool_calls": data.get("tool_calls", []) if isinstance(data.get("tool_calls"), list) else [],
                 "state_effects": data.get("state_effects") if isinstance(data.get("state_effects"), dict) else {},
+                "record": data.get("record") if isinstance(data.get("record"), list) else [],
                 "ending_signal": data.get("ending_signal") if isinstance(data.get("ending_signal"), str) else None,
                 "location_update": data.get("location_update") if isinstance(data.get("location_update"), dict) else None,
                 "suggested_actions": data.get("suggested_actions", []) if isinstance(data.get("suggested_actions"), list) else [],
@@ -1158,27 +1171,86 @@ _INTEGRITY_PRIMER_ZH = (
 # Consequence checker (mirrors graph.py consequence)
 # ---------------------------------------------------------------------------
 
+def _apply_record(records, knowledge: dict, turn: int) -> list[dict]:
+    """Persist the model's `record` list (short fact strings) into knowledge.facts.
+
+    A low-friction structured channel for "what the player just learned" — the
+    model fills plain strings far more reliably than it constructs verbose
+    add_knowledge tool calls, so revelations actually persist (and, via the
+    broadened trace helpers, advance Traces of Truth). Dedupes by description.
+    Returns knowledge notifications.
+    """
+    if not isinstance(records, list):
+        return []
+    facts = knowledge.setdefault("facts", [])
+    existing = {str(f.get("description", "")).strip().lower() for f in facts}
+    nums = []
+    for f in facts:
+        fid = f.get("id", "")
+        if isinstance(fid, str) and fid.startswith("FACT-"):
+            try:
+                nums.append(int(fid[5:]))
+            except ValueError:
+                pass
+    next_num = max(nums, default=0) + 1
+    notifs = []
+    for r in records:
+        desc = (str(r.get("description", "")) if isinstance(r, dict) else str(r)).strip()
+        key = desc.lower()
+        if len(desc) < 4 or key in existing:
+            continue
+        facts.append({
+            "id": f"FACT-{next_num:03d}", "description": desc,
+            "source": "observed", "turn": turn,
+            "_layer": {"hidden": True, "value": 1},
+        })
+        existing.add(key)
+        next_num += 1
+        notifs.append({"entry_type": "fact"})
+    return notifs
+
+
+# Anonymous-crowd / group markers — these scene entries are not individual NPCs
+# and must not bloat the roster (zh + en).
+_CROWD_RE = re.compile(
+    r"两|三|四|几|一群|一些|多名|数名|众多|人群|围观|路人|顾客们|行人|"
+    r"\b(two|three|four|five|several|a few|some|a pair of|group of|crowd|"
+    r"passers-?by|onlookers|bystanders|patrons|customers|figures|people)\b",
+    re.IGNORECASE,
+)
+
+
+def _npc_norm(s: str) -> str:
+    """Normalize an NPC name for dedup (strip separators/punctuation, lowercase)."""
+    return re.sub(r"[\s,，。、:：()（）\-—\"'’]", "", str(s)).lower()
+
+
 def _promote_scene_npcs(location: dict, npcs: dict, turn: int) -> None:
     """Register NPCs the narration placed in the scene (``location.npcs_present``)
     into ``npcs.json`` so they are interactable and can satisfy NPC-trust trace
     gates — even when the model narrates a person but forgets ``update_npc``.
-    Idempotent; only adds names not already on the roster.
+
+    Dedupes against the existing roster by normalized substring (so "Mira" and
+    "Mira, the noodle vendor" are one NPC) and skips anonymous crowd/groups, to
+    avoid roster bloat.
     """
     present = location.get("npcs_present", []) or []
     if not isinstance(present, list):
         return
     roster = npcs.get("npcs", [])
-    existing = {str(n.get("name", "")).strip().lower() for n in roster}
+    existing_norm = [_npc_norm(n.get("name", "")) for n in roster]
     for entry in present:
         name = entry.get("name") if isinstance(entry, dict) else entry
         name = str(name or "").strip()
-        key = name.lower()
-        if not name or len(key) < 2 or key in existing:
+        if not name or len(name) < 2 or _CROWD_RE.search(name):
             continue
-        if len(roster) >= 50:  # guard against unbounded growth
+        nn = _npc_norm(name)
+        if not nn or any(ex and (nn in ex or ex in nn) for ex in existing_norm):
+            continue
+        if len(roster) >= 40:  # guard against unbounded growth
             break
         roster.append({"name": name, "trust": "neutral", "first_seen_turn": turn})
-        existing.add(key)
+        existing_norm.append(nn)
     npcs["npcs"] = roster
 
 
@@ -1195,7 +1267,15 @@ def _run_consequence(player, traces, world_state, knowledge, npcs, ending_signal
     if is_dead:
         return True, "death", cause
 
+    turn = player.get("turn", 1)
     for ending in ENDINGS:
+        # The brittle keyword-gated bad/neutral endings can false-trigger from a
+        # single early keyword in narrated lore (e.g. the corporate_exile's own
+        # "exile" backstory firing the exile ending on turn 1). Gate them to
+        # turn>=8, mirroring resolve_ending_signal; the good endings (which need
+        # deep traces) and silence (turn cap) keep their checks ungated.
+        if ending["id"] in MODEL_SIGNALABLE_ENDINGS and turn < 8:
+            continue
         try:
             if ending["check"](traces, world_state, player, knowledge, npcs):
                 return True, ending["id"], None
@@ -1395,6 +1475,13 @@ def run_turn(session_dir: str, player_input: str, mode: str = "play") -> dict:
     # so death/capture endings can actually fire.
     elapsed_minutes += _apply_state_effects(
         parsed.get("state_effects", {}), player, world_state, inventory,
+    )
+
+    # ── Step 7c: Persist the model's `record` list as knowledge facts ──────
+    # Low-friction channel so narrated revelations actually persist (and advance
+    # traces) even when the model omits the verbose add_knowledge tool call.
+    knowledge_notifications += _apply_record(
+        parsed.get("record"), knowledge, player.get("turn", 1),
     )
 
     # ── Step 8: Apply location_update ────────────────────────────────

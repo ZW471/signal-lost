@@ -2006,8 +2006,15 @@ def consequence(state: GameState) -> dict:
         warning_text = "[TRAJECTORY WARNING: " + " | ".join(warnings) + "]"
         result["messages"] = [SM(content=warning_text)]
 
-    # Ending checks
+    # Ending checks. ⚠️ SYNC: mirrors claude_code_engine._run_consequence — gate
+    # the brittle keyword-gated bad/neutral endings to turn>=8 so an early keyword
+    # in narrated lore (e.g. corporate_exile's "exile" backstory) can't fire them
+    # on turn 1.
+    from engine.game_data import MODEL_SIGNALABLE_ENDINGS
+    _turn = player.get("turn", 1)
     for ending in ENDINGS:
+        if ending["id"] in MODEL_SIGNALABLE_ENDINGS and _turn < 8:
+            continue
         try:
             if ending["check"](traces, world_state, player, knowledge, npcs):
                 return {"game_over": True, "ending": ending["id"]}

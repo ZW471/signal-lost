@@ -557,9 +557,13 @@ ENDINGS: list[dict] = [
         "name_zh": "流放",
         "type": "neutral",
         "check": lambda t, w, p, k, n: (
+            # Action of LEAVING the city — not the bare word "exile"/"流亡"/"流放",
+            # which collide with the corporate_exile background's own identity lore
+            # and false-fired the ending on turn 1.
             _has_fact_or_rumor_about(k, [
-                "leave neo-kowloon", "exile",
-                "离开新九龙", "逃离新九龙", "流亡", "流放", "出走", "远走他乡",
+                "leave neo-kowloon", "left neo-kowloon", "leaving neo-kowloon",
+                "fled the city", "fled neo-kowloon", "escaped neo-kowloon", "out of neo-kowloon",
+                "离开新九龙", "逃离新九龙", "逃出新九龙", "离开这座城", "逃出这座城", "远走他乡",
             ])
         ),
     },
