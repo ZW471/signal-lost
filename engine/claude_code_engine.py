@@ -399,6 +399,65 @@ def _get_district_status(district_name: str, world_state: dict) -> str:
     return "unknown"
 
 
+_DISTRICT_LOCKED_STATES = ("locked", "hidden", "封锁", "隐藏")
+
+
+def _unlock_districts_by_progress(world_state: dict, traces: dict, language: str) -> list[str]:
+    """Open districts whose machine-checkable unlock condition is now satisfied.
+
+    ``DISTRICTS`` declares ``unlock_trace`` / ``unlock_layer`` gates, but nothing
+    ever evaluated them: a player could discover the gating trace (or reach the
+    layer) and the district stayed Locked forever, soft-locking documented routes
+    (e.g. Mira→Patch→Undercroft, gated on TRACE-L1-03). This promotes such a
+    district from the hidden registry into ``district_access`` as Open the moment
+    its condition is met. Returns the English names newly opened (for notices)."""
+    from engine.game_data import DISTRICTS
+    from engine.prompts import extract_deepest_layer
+
+    discovered_ids = {t.get("id") for t in traces.get("discovered", [])}
+    try:
+        deepest = int(extract_deepest_layer(traces) or 0)
+    except (TypeError, ValueError):
+        deepest = 0
+    open_token = "开放" if language == "zh" else "Open"
+    registry = world_state.setdefault("_district_registry", {})
+    undiscovered = registry.setdefault("undiscovered", [])
+    access = world_state.setdefault("district_access", [])
+    newly: list[str] = []
+
+    def _matches(entry: dict, en_name: str, zh: str) -> bool:
+        nm = str(entry.get("name", "")).lower()
+        return bool((zh and entry.get("name_zh") == zh) or (en_name.lower() in nm) or (zh and zh in nm))
+
+    for en_name, meta in DISTRICTS.items():
+        cond_trace = meta.get("unlock_trace")
+        cond_layer = meta.get("unlock_layer")
+        if not cond_trace and not cond_layer:
+            continue
+        met = bool((cond_trace and cond_trace in discovered_ids)
+                   or (cond_layer and deepest >= cond_layer))
+        if not met:
+            continue
+        zh = meta.get("zh", "")
+        existing = next((e for e in access if _matches(e, en_name, zh)), None)
+        if existing is not None:
+            if str(existing.get("status", "")).lower() in _DISTRICT_LOCKED_STATES:
+                existing["status"] = open_token
+                newly.append(en_name)
+            continue
+        for i, e in enumerate(undiscovered):
+            if _matches(e, en_name, zh):
+                promoted = {"name": e.get("name", en_name),
+                            "name_zh": e.get("name_zh", zh), "status": open_token}
+                if "notes" in e:
+                    promoted["notes"] = e["notes"]
+                access.append(promoted)
+                undiscovered.pop(i)
+                newly.append(en_name)
+                break
+    return newly
+
+
 # A district name only counts as a travel target when it's the DESTINATION —
 # preceded by a movement cue. Otherwise common nouns (e.g. "the resonance map",
 # "共鸣所的资料") false-trigger the gate and block legitimate actions.
@@ -408,8 +467,22 @@ _DEST_CUE = re.compile(
 )
 
 
+# A question ABOUT a place is not an attempt to GO there — "how do I get into the
+# Undercroft?" must not be hard-blocked as a movement attempt (it cost the player a
+# rejected, turn-less action). Inquiry phrasing skips the movement gate.
+_INQUIRY_RE = re.compile(
+    r"^\s*(how|where|what|which|can i|could i|do i|should i|is there|are there|is it|who)\b"
+    r"|^\s*(如何|怎么|怎样|哪里|哪儿|哪个|是否|能不能|能否|有没有|该不该)"
+    r"|[?？]\s*$|(吗|呢)\s*[?？]?\s*$",
+    re.IGNORECASE,
+)
+
+
 def _check_movement(content: str, state: dict, language: str) -> str | None:
     if not _MOVE_VERBS.search(content):
+        return None
+    # Don't gate inquiries — only actual "go there" commands.
+    if _INQUIRY_RE.search(content.strip()):
         return None
     content_lower = content.lower()
     for pattern, canonical in _DISTRICT_NAMES.items():
@@ -1565,6 +1638,11 @@ def run_turn(session_dir: str, player_input: str, mode: str = "play") -> dict:
     traces, discovery_notifications = _run_trace_checker(
         traces, knowledge, npcs, player, world_state, session_dir, language,
     )
+
+    # ── Step 11b: Open districts whose unlock_trace/unlock_layer is now met ──
+    # (trace_checker just ran, so newly-discovered traces are visible here.)
+    if _unlock_districts_by_progress(world_state, traces, language):
+        save_session_file(session_dir, "world_state", world_state)
 
     # ── Step 12: Run consequence ─────────────────────────────────────
     game_over, ending, death_cause = _run_consequence(

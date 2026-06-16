@@ -257,6 +257,63 @@ def test_cli_runner_kills_hung_process_tree():
     print(f"  [PASS] Hung CLI tree killed fast ({elapsed:.1f}s), no turn wedge")
 
 
+def test_districts_unlock_on_trace_and_layer():
+    """A district's unlock_trace / unlock_layer gate must actually open it.
+
+    Regression: DISTRICTS declared unlock_trace=TRACE-L1-03 (Undercroft) and
+    unlock_layer gates, but nothing evaluated them — the trace fired and the
+    district stayed Locked forever, soft-locking the Mira→Patch→Undercroft route.
+    """
+    from engine.claude_code_engine import _unlock_districts_by_progress
+
+    ws = {
+        "district_access": [{"name": "The Sprawl", "name_zh": "蔓城", "status": "Open"}],
+        "_district_registry": {"undiscovered": [
+            {"name": "The Undercroft", "name_zh": "底渊", "status": "Locked"},
+            {"name": "The Resonance", "name_zh": "共鸣所", "status": "Hidden"},
+        ]},
+    }
+    # Only the L1 trace is discovered → Undercroft opens; layer-3 Resonance does not.
+    traces = {"discovered": [{"id": "TRACE-L1-03", "layer": 1}]}
+    newly = _unlock_districts_by_progress(ws, traces, "en")
+    assert "The Undercroft" in newly, "Undercroft did not unlock on TRACE-L1-03"
+    acc_names = [e["name"] for e in ws["district_access"]]
+    assert any("Undercroft" in n for n in acc_names), "Undercroft not promoted to district_access"
+    undisc = ws["_district_registry"]["undiscovered"]
+    assert not any("Undercroft" in e["name"] for e in undisc), "Undercroft still in undiscovered"
+    assert not any("Resonance" in n for n in acc_names), "layer-gated Resonance opened too early"
+
+    # Reaching Layer 3 then opens the Resonance.
+    traces2 = {"discovered": [{"id": "TRACE-L1-03", "layer": 1}, {"id": "TRACE-L3-01", "layer": 3}]}
+    _unlock_districts_by_progress(ws, traces2, "en")
+    assert any("Resonance" in e["name"] for e in ws["district_access"]), "Resonance did not open at Layer 3"
+    print("  [PASS] Districts open when their trace/layer unlock condition is met")
+
+
+def test_movement_gate_allows_inquiry():
+    """A question mentioning a locked district must not be hard-blocked as travel.
+
+    Regression: "how do I get into the Undercroft?" was rejected as a movement
+    attempt (turn-less, frustrating). Inquiries skip the gate; real travel to a
+    still-locked district is still blocked.
+    """
+    from engine.claude_code_engine import _check_movement
+
+    ws = {
+        "district_access": [],
+        "_district_registry": {"undiscovered": [
+            {"name": "The Undercroft", "name_zh": "底渊", "status": "Locked"},
+        ]},
+    }
+    state = {"location": {"district": "The Sprawl"}, "world_state": ws}
+    assert _check_movement("How do I get into the Undercroft?", state, "en") is None, \
+        "inquiry about a locked district was wrongly blocked as movement"
+    # An actual travel command to a still-locked district IS blocked.
+    blocked = _check_movement("Go into the Undercroft.", state, "en")
+    assert blocked, "real travel to a locked district should still be blocked"
+    print("  [PASS] Movement gate lets inquiries through but still blocks real travel")
+
+
 def test_good_endings_reachable_and_not_shadowed():
     """A deep, good-aligned playthrough must resolve to a GOOD ending.
 
@@ -310,6 +367,8 @@ def main():
         test_no_signalable_ending_fires_early,
         test_integrity_warning_gives_recovery_window,
         test_cli_runner_kills_hung_process_tree,
+        test_districts_unlock_on_trace_and_layer,
+        test_movement_gate_allows_inquiry,
         test_good_endings_reachable_and_not_shadowed,
     ]
 
