@@ -86,11 +86,18 @@ def _npc_trust_at_least(npcs: dict, name: str, min_level: str) -> bool:
 
 
 def _has_evidence(knowledge: dict, keywords: list[str]) -> bool:
-    """Check if evidence matching keywords exists."""
-    for entry in knowledge.get("evidence", []):
-        desc = (entry.get("description", "") + " " + entry.get("name", "")).lower()
-        if any(kw.lower() in desc for kw in keywords):
-            return True
+    """True if ANY recorded knowledge (facts/rumors/evidence/theories/connections)
+    matches a keyword.
+
+    The model records investigation findings as FACTS (via the `record` channel)
+    far more often than as formal `evidence`, so the many evidence-gated deep
+    traces (L3/L4/L5) must scan all channels — otherwise they never fire even when
+    the player has clearly reached the lore, walling off the good endings."""
+    kws = [kw.lower() for kw in keywords]
+    for entry_type in _KNOWLEDGE_TYPES:
+        for entry in knowledge.get(entry_type, []):
+            if any(kw in _entry_text(entry) for kw in kws):
+                return True
     return False
 
 
