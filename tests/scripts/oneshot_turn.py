@@ -150,12 +150,21 @@ def do_turn(turn: int, action: str) -> int:
     decay = world_state.get("fragment_decay", {})
     decay_cur = decay.get("current", "?") if isinstance(decay, dict) else decay
 
+    # Surface the in-chat notices the engine emits (meter changes + low-integrity
+    # warnings) so a headless agent can actually SEE them — the GUI renders these
+    # as system lines, but a driver that drops them hides e.g. the "one more hit
+    # could kill you — rest or heal" warning from the agent making decisions.
+    system_notices = result.get("system_notices", []) if isinstance(result, dict) else []
+    discovery = result.get("discovery_notifications", []) if isinstance(result, dict) else []
+
     print(json.dumps({
         "narrative": narrative,
         "turn": turn,
         "game_over": game_over,
         "ending": ending,
         "elapsed_s": elapsed,
+        "system_notices": system_notices,
+        "discovery_notifications": discovery,
         "state_summary": {
             "location": f"{location.get('district', '?')} — {location.get('area', '?')}",
             "integrity": f"{integrity.get('current', '?')}/{integrity.get('max', '?')}",
