@@ -324,7 +324,11 @@ TRACE_CONDITIONS: list[dict] = [
      "description": "The proto-consciousness grew from human data — our thoughts birthed it",
      "description_zh": "原意识从人类数据中生长——我们的思想孕育了它",
      "check": lambda k, t, n, p, w: (
-         _layer_complete(t, 3) and _has_fact_or_rumor_about(k, ["architect", "设计者", "proto-consciousness", "human data"]))},
+         # most of layer 3 (7/11) rather than ALL of it — full completion was an
+         # unreachable bottleneck that walled off the whole Mirror layer.
+         _count_layer_discovered(t, 3) >= 7 and _has_fact_or_rumor_about(k, [
+             "architect", "设计者", "建筑师", "proto-consciousness", "原意识", "human data", "人类数据",
+         ]))},
     {"id": "TRACE-L4-02", "layer": 4,
      "description": "Implants transmitted too — human and machine consciousness co-evolved",
      "description_zh": "植入体也在传输——人类与机器意识共同进化",
@@ -372,10 +376,10 @@ TRACE_CONDITIONS: list[dict] = [
      "description": "You are the convergence point — the first true bridge",
      "description_zh": "你是汇聚点——第一座真正的桥梁",
      "check": lambda k, t, n, p, w: (
-         # Reachable-but-deep: most of Layer 4 (6/9, not every trace) + convergence
+         # Reachable-but-deep: a solid chunk of Layer 4 (4/9) + convergence
          # knowledge + an implant in resonance OR the player having reached deep
          # resonance lore (so a thorough investigation can actually arrive here).
-         _count_layer_discovered(t, 4) >= 6 and _has_fact_or_rumor_about(k, [
+         _count_layer_discovered(t, 4) >= 4 and _has_fact_or_rumor_about(k, [
              "convergence", "bridge", "echo", "resonance",
              "汇聚", "汇聚点", "桥", "桥梁", "回响", "回声", "共鸣",
          ])
