@@ -205,6 +205,30 @@ def test_no_signalable_ending_fires_early():
     print("  [PASS] Signalable endings gated; exile is action-based, not noun-based")
 
 
+def test_integrity_warning_gives_recovery_window():
+    """A standard-difficulty player must be warned BEFORE the lethal last hit.
+
+    Regression: every playtest that reached the climax died to the deep-resonance
+    integrity drain with only a vague one-turn "vision dimming" line at 1/3 and no
+    chance to rest. standard now warns at 2/3 (a real recovery window), and the
+    1/3 "one hit from death" moment escalates to the explicit, actionable warning
+    on every difficulty.
+    """
+    from engine.game_data import integrity_warning_text
+
+    # standard: warns a step earlier, at 2/3.
+    assert integrity_warning_text("standard", 2, 3, "en"), \
+        "standard gave no warning at 2/3 — no recovery window before lethal drain"
+    # 1/3 is the last-chance moment on every difficulty → explicit + actionable.
+    for diff in ("paranoid", "cautious", "standard", "reckless"):
+        w = integrity_warning_text(diff, 1, 3, "en")
+        assert w and ("kill" in w.lower() or "rest or heal" in w.lower()), \
+            f"{diff}: 1/3 warning was not explicit/actionable: {w!r}"
+    # No warning once dead (handled by the death path, not a warning).
+    assert integrity_warning_text("standard", 0, 3, "en") is None
+    print("  [PASS] Integrity warning gives a recovery window and an explicit last-hit alert")
+
+
 def test_cli_runner_kills_hung_process_tree():
     """A hung CLI subprocess must not wedge a turn forever (BUG-003).
 
@@ -284,6 +308,7 @@ def main():
         test_input_blocked_handler_gives_suggestions,
         test_llm_factory_supports_claude_code,
         test_no_signalable_ending_fires_early,
+        test_integrity_warning_gives_recovery_window,
         test_cli_runner_kills_hung_process_tree,
         test_good_endings_reachable_and_not_shadowed,
     ]

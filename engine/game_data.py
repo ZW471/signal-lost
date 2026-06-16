@@ -516,8 +516,12 @@ def check_death(player: dict, world_state: dict) -> tuple[bool, str | None]:
 # threshold: warn when current <= threshold. verbosity: how blunt the warning is.
 INTEGRITY_WARNINGS: dict[str, dict] = {
     "paranoid": {"threshold": 2, "verbosity": "explicit"},
-    "cautious": {"threshold": 1, "verbosity": "moderate"},
-    "standard": {"threshold": 1, "verbosity": "subtle"},
+    "cautious": {"threshold": 2, "verbosity": "moderate"},
+    # standard warns at 2/3 (not 1/3) so the player gets a real recovery window
+    # before the deep-resonance drain kills them — every prior playtest that
+    # reached the climax died here with only a vague one-turn "vision dimming"
+    # line and no chance to rest/heal.
+    "standard": {"threshold": 2, "verbosity": "subtle"},
     "reckless": {"threshold": 1, "verbosity": "subtle"},
 }
 
@@ -527,7 +531,11 @@ def integrity_warning_text(difficulty: str, current: int, maximum: int, language
     cfg = INTEGRITY_WARNINGS.get(difficulty, INTEGRITY_WARNINGS["standard"])
     if current <= 0 or current > cfg["threshold"]:
         return None
-    verbosity = cfg["verbosity"]
+    # One serious hit from death is the critical moment on EVERY difficulty, so
+    # always escalate to the explicit, lethal-and-actionable warning there: no
+    # player should die without being told they were one hit away and could have
+    # rested or healed first.
+    verbosity = "explicit" if current <= 1 else cfg["verbosity"]
     if language == "zh":
         msgs = {
             "explicit": f"⚠ 神经完整度危急（{current}/{maximum}）。再受一次重创——尤其是深度信号共鸣——就可能要了你的命。先休息或治疗，再继续深入。",
