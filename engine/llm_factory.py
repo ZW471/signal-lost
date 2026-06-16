@@ -170,6 +170,10 @@ def create_llm(provider: str, model: str, **kwargs: Any):
             or os.environ.get("OPENROUTER_API_KEY") \
             or os.environ.get("OPENAI_API_KEY") \
             or "not-needed"
+        # Bound each call so a hung/stalled openrouter request can't wedge a turn
+        # for many minutes (observed ~28-min hangs on weak models with no timeout).
+        kwargs.setdefault("timeout", 300)
+        kwargs.setdefault("max_retries", 2)
         return ChatOpenAI(
             model=model,
             base_url=base_url,

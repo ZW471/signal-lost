@@ -467,6 +467,13 @@ def _parse_response(raw: str) -> dict:
             if depth == 0 and start >= 0:
                 parsed = _try_json(text[start:i + 1])
                 if parsed:
+                    # If the JSON block carried no narrative, the model put the
+                    # narrative as prose around it — use that (prefer the prose
+                    # before the block, else after).
+                    if not parsed.get("narrative"):
+                        prose = text[:start].strip() or text[i + 1:].strip()
+                        if prose:
+                            parsed["narrative"] = prose
                     return parsed
                 start = -1
 
@@ -504,11 +511,22 @@ def _parse_response(raw: str) -> dict:
     return _fallback(text)
 
 
+_RESPONSE_KEYS = (
+    "narrative", "input_valid", "tool_calls", "state_effects", "record",
+    "location_update", "suggested_actions", "ending_signal", "blocking_reason",
+)
+
+
 def _try_json(text: str) -> dict | None:
-    """Try to parse text as JSON and validate response structure."""
+    """Try to parse text as JSON and validate response structure.
+
+    Accepts a dict carrying ANY of our response keys — some models (e.g. reasoning
+    models over openrouter) emit the narrative as prose and the structured fields
+    as a separate JSON object WITHOUT a "narrative" key; that JSON is still valid
+    and must not be discarded (the caller supplies the prose narrative)."""
     try:
         data = json.loads(text)
-        if isinstance(data, dict) and ("narrative" in data or "input_valid" in data):
+        if isinstance(data, dict) and any(k in data for k in _RESPONSE_KEYS):
             return {
                 "input_valid": bool(data.get("input_valid", True)),
                 "blocking_reason": data.get("blocking_reason"),
