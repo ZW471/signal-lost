@@ -61,11 +61,14 @@ LOG_FILE = os.environ.get(
     "HEADLESS_LOG", os.path.join(_GAME_ROOT, "logs", f"{SESSION_NAME}_playthrough.md")
 )
 
-# Load provider config
+# Load provider config (env vars override the global provider.json so each
+# headless agent can run its own provider/model in parallel).
 provider_cfg = load_provider_config()
-PROVIDER = provider_cfg.get("provider", "openai")
-MODEL = provider_cfg.get("model", default_model_for(PROVIDER))
-TEMPERATURE = provider_cfg.get("temperature", 0.7)
+PROVIDER = os.environ.get("HEADLESS_PROVIDER") or provider_cfg.get("provider", "openai")
+MODEL = os.environ.get("HEADLESS_MODEL") or (
+    provider_cfg.get("model") if not os.environ.get("HEADLESS_PROVIDER") else None
+) or default_model_for(PROVIDER)
+TEMPERATURE = float(os.environ.get("HEADLESS_TEMPERATURE", provider_cfg.get("temperature", 0.7)))
 
 # --- Communication protocol files ---
 ACTION_FILE = os.path.join(SESSION_DIR, "player_action.json")
