@@ -1,0 +1,24 @@
+{
+  "title": "Current Location",
+  "district": "The Sprawl",
+  "area": "Mira's Noodle Shop",
+  "zone": "Street Level",
+  "description": "Patch's alcove, canvas curtain drawn back. The market floor stretches beyond — cook fires, vendors, the low vault of the pre-Severance transit chamber. Sable near the tunnel mouth, still watching. The implant behind your ear is quieter now. Shaped differently. Ready.",
+  "signal_strength": 10,
+  "danger_level": "low",
+  "nexus_patrol": "none",
+  "exits": {
+    "market floor": "Undercroft market — vendors, cook fires, Cord's grey-tarp stall to the northeast",
+    "tunnel mouth": "Back toward The Sprawl — the grate, the alley, the surface"
+  },
+  "points_of_interest": [
+    "Patch's workbench — tools put away, job complete",
+    "Cord's stall — northeast corner, grey tarps, spectrometer still mounted",
+    "Tunnel mouth — Sable standing watch"
+  ],
+  "npcs_present": [
+    "Patch — wiping his hands, watching you",
+    "Sable — near the tunnel mouth",
+    "Market vendors and residents — at a distance"
+  ]
+}

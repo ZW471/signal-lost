@@ -1,0 +1,31 @@
+{
+  "title": "Current Location",
+  "district": "Neon Row",
+  "area": "Old Ticket Arcade - Ren's Back Room",
+  "zone": "Street Level",
+  "description": "A pressure chamber below the old break where black water hangs in impossible depth, silver echo-sparks choose their own paths, and the severed core listens without command.",
+  "signal_strength": 18,
+  "danger_level": "moderate",
+  "nexus_patrol": "moderate on main streets, lighter in back alleys",
+  "exits": {
+    "back": "Open threshold to the drowned pump cathedral and witness group",
+    "inward": "The listening pressure around the severed core"
+  },
+  "points_of_interest": [
+    "severed core process",
+    "choosing silver echo-sparks",
+    "Archive host record strip",
+    "Observatory Signal map strip",
+    "Sable's cutoff line",
+    "Toma and Vey intake tags"
+  ],
+  "npcs_present": [
+    "Kite",
+    "Sable",
+    "Patch",
+    "Rill",
+    "Toma",
+    "Vey",
+    "Two copper-sleeved contacts"
+  ]
+}

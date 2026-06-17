@@ -1,0 +1,42 @@
+{
+  "title": "Inventory",
+  "credits": 0,
+  "slots": {
+    "used": 6,
+    "max": 6
+  },
+  "items": [
+    {
+      "slot": 1,
+      "item": "Expired NEXUS Keycard",
+      "type": "keycard",
+      "description": "Level 2 clearance, expired 3 years ago. Might still open some doors in Sector 7."
+    },
+    {
+      "name": "Retuned Damper Clamp",
+      "type": "tool",
+      "description": "A NEXUS tunnel editor retuned to spoof a brief maintenance recall pulse.",
+      "uses": 1
+    },
+    {
+      "name": "Toma and Vey Intake Tags",
+      "type": "evidence",
+      "description": "Paper tags marked viable and bound for White Rooms transfer."
+    },
+    {
+      "name": "Stamped Contractor Courier Skin",
+      "description": "Ugly lower-district correction courier papers stamped for Archive sub-intake cargo walk.",
+      "status": "accepted"
+    },
+    {
+      "name": "Archive Host Record Strip",
+      "type": "evidence",
+      "description": "Duplicated Archive strip listing host names, handler chain, Orin division routing, Mirror Hold cross-index, and echoes tied to Ghost."
+    },
+    {
+      "name": "Observatory Signal Map Strip",
+      "type": "evidence",
+      "description": "Duplicated Observatory transfer strip mapping Signal contours from Mirror Hold records toward a hidden below-city coordinate."
+    }
+  ]
+}

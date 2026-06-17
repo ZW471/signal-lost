@@ -1,0 +1,241 @@
+{
+  "title": "Traces of Truth",
+  "total_discovered": 3,
+  "layers": {
+    "layer_1_surface": {
+      "name": "The Surface",
+      "progress": "0/8",
+      "traces": {
+        "TRACE-L1-01": {
+          "status": "undiscovered",
+          "description": "[???]"
+        },
+        "TRACE-L1-02": {
+          "status": "undiscovered",
+          "description": "[???]"
+        },
+        "TRACE-L1-03": {
+          "status": "undiscovered",
+          "description": "[???]"
+        },
+        "TRACE-L1-04": {
+          "status": "undiscovered",
+          "description": "[???]"
+        },
+        "TRACE-L1-05": {
+          "status": "undiscovered",
+          "description": "[???]"
+        },
+        "TRACE-L1-06": {
+          "status": "undiscovered",
+          "description": "[???]"
+        },
+        "TRACE-L1-07": {
+          "status": "undiscovered",
+          "description": "[???]"
+        },
+        "TRACE-L1-08": {
+          "status": "undiscovered",
+          "description": "[???]"
+        }
+      }
+    },
+    "layer_2_conspiracy": {
+      "name": "The Conspiracy",
+      "progress": "0/11",
+      "traces": {
+        "TRACE-L2-01": {
+          "status": "undiscovered",
+          "description": "[???]"
+        },
+        "TRACE-L2-02": {
+          "status": "undiscovered",
+          "description": "[???]"
+        },
+        "TRACE-L2-03": {
+          "status": "undiscovered",
+          "description": "[???]"
+        },
+        "TRACE-L2-04": {
+          "status": "undiscovered",
+          "description": "[???]"
+        },
+        "TRACE-L2-05": {
+          "status": "undiscovered",
+          "description": "[???]"
+        },
+        "TRACE-L2-06": {
+          "status": "undiscovered",
+          "description": "[???]"
+        },
+        "TRACE-L2-07": {
+          "status": "undiscovered",
+          "description": "[???]"
+        },
+        "TRACE-L2-08": {
+          "status": "undiscovered",
+          "description": "[???]"
+        },
+        "TRACE-L2-09": {
+          "status": "undiscovered",
+          "description": "[???]"
+        },
+        "TRACE-L2-10": {
+          "status": "undiscovered",
+          "description": "[???]"
+        },
+        "TRACE-L2-11": {
+          "status": "undiscovered",
+          "description": "[???]"
+        }
+      }
+    },
+    "layer_3_severance_truth": {
+      "name": "The Severance Truth",
+      "progress": "0/11",
+      "traces": {
+        "TRACE-L3-01": {
+          "status": "undiscovered",
+          "description": "[???]"
+        },
+        "TRACE-L3-02": {
+          "status": "undiscovered",
+          "description": "[???]"
+        },
+        "TRACE-L3-03": {
+          "status": "undiscovered",
+          "description": "[???]"
+        },
+        "TRACE-L3-04": {
+          "status": "undiscovered",
+          "description": "[???]"
+        },
+        "TRACE-L3-05": {
+          "status": "undiscovered",
+          "description": "[???]"
+        },
+        "TRACE-L3-06": {
+          "status": "undiscovered",
+          "description": "[???]"
+        },
+        "TRACE-L3-07": {
+          "status": "undiscovered",
+          "description": "[???]"
+        },
+        "TRACE-L3-08": {
+          "status": "undiscovered",
+          "description": "[???]"
+        },
+        "TRACE-L3-09": {
+          "status": "undiscovered",
+          "description": "[???]"
+        },
+        "TRACE-L3-10": {
+          "status": "undiscovered",
+          "description": "[???]"
+        },
+        "TRACE-L3-11": {
+          "status": "undiscovered",
+          "description": "[???]"
+        }
+      }
+    },
+    "layer_4_mirror": {
+      "name": "The Mirror",
+      "progress": "0/9",
+      "traces": {
+        "TRACE-L4-01": {
+          "status": "undiscovered",
+          "description": "[???]"
+        },
+        "TRACE-L4-02": {
+          "status": "undiscovered",
+          "description": "[???]"
+        },
+        "TRACE-L4-03": {
+          "status": "undiscovered",
+          "description": "[???]"
+        },
+        "TRACE-L4-04": {
+          "status": "undiscovered",
+          "description": "[???]"
+        },
+        "TRACE-L4-05": {
+          "status": "undiscovered",
+          "description": "[???]"
+        },
+        "TRACE-L4-06": {
+          "status": "undiscovered",
+          "description": "[???]"
+        },
+        "TRACE-L4-07": {
+          "status": "undiscovered",
+          "description": "[???]"
+        },
+        "TRACE-L4-08": {
+          "status": "undiscovered",
+          "description": "[???]"
+        },
+        "TRACE-L4-09": {
+          "status": "undiscovered",
+          "description": "[???]"
+        }
+      }
+    },
+    "layer_5_full_truth": {
+      "name": "The Full Truth",
+      "progress": "0/8",
+      "traces": {
+        "TRACE-L5-01": {
+          "status": "undiscovered",
+          "description": "[???]"
+        },
+        "TRACE-L5-02": {
+          "status": "undiscovered",
+          "description": "[???]"
+        },
+        "TRACE-L5-03": {
+          "status": "undiscovered",
+          "description": "[???]"
+        },
+        "TRACE-L5-04": {
+          "status": "undiscovered",
+          "description": "[???]"
+        },
+        "TRACE-L5-05": {
+          "status": "undiscovered",
+          "description": "[???]"
+        },
+        "TRACE-L5-06": {
+          "status": "undiscovered",
+          "description": "[???]"
+        },
+        "TRACE-L5-07": {
+          "status": "undiscovered",
+          "description": "[???]"
+        },
+        "TRACE-L5-08": {
+          "status": "undiscovered",
+          "description": "[???]"
+        }
+      }
+    }
+  },
+  "discovered": [
+    {
+      "id": "TRACE-L1-01",
+      "layer": 1,
+      "turn": 6
+    },
+    {
+      "id": "TRACE-L1-02",
+      "layer": 1,
+      "turn": 6
+    },
+    {
+      "id": "TRACE-L2-01",
+      "layer": 2,
+      "turn": 6
+    }
+  ]
+}

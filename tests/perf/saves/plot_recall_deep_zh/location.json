@@ -1,0 +1,23 @@
+{
+  "title": "当前位置",
+  "district": "底渊",
+  "area": "旧控制室",
+  "zone": "街道层",
+  "description": "旧控制室的荧光灯管时明时暗，墙上的断离前设备显示着不断变化的波形图。角落里堆放着聆听者的补给箱，一张折叠床摆在信号分析仪旁边。",
+  "signal_strength": 30,
+  "danger_level": "低",
+  "nexus_patrol": "无",
+  "exits": {
+    "west": "第三交叉口"
+  },
+  "points_of_interest": [
+    "信号分析仪",
+    "手写笔记",
+    "补给箱"
+  ],
+  "npcs_present": [
+    "帕奇",
+    "灰斗篷A",
+    "灰斗篷B"
+  ]
+}

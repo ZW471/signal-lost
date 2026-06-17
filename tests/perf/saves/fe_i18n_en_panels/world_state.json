@@ -1,0 +1,75 @@
+{
+  "title": "World State",
+  "nexus_alert": {
+    "current": 4,
+    "status": "Calm",
+    "status_zh": "平静"
+  },
+  "fragment_decay": {
+    "current": 0,
+    "status": "Stable",
+    "status_zh": "Stable"
+  },
+  "district_access": [
+    {
+      "name": "The Sprawl",
+      "name_zh": "蔓城",
+      "status": "Open",
+      "notes": "Starting area"
+    },
+    {
+      "name": "Neon Row",
+      "name_zh": "霓虹街",
+      "status": "Open",
+      "notes": "Entertainment and intel"
+    },
+    {
+      "name": "The Undercroft",
+      "name_zh": "底渊",
+      "status": "Open",
+      "notes": "Underground Listener territory"
+    },
+    {
+      "name": "The Resonance",
+      "name_zh": "共鸣所",
+      "status": "Open",
+      "notes": "Ancient pre-Severance facility"
+    },
+    {
+      "name": "The Spire",
+      "name_zh": "尖塔",
+      "status": "Open",
+      "notes": "NEXUS HQ — endgame content"
+    }
+  ],
+  "_district_registry": {
+    "hidden": true,
+    "undiscovered": [
+      {
+        "name": "Sector 7",
+        "name_zh": "第七区",
+        "status": "Restricted",
+        "unlock": "Requires keycard or disguise",
+        "notes": "Corporate zone"
+      },
+      {
+        "name": "Chrome Heights",
+        "name_zh": "镀金台",
+        "status": "Restricted",
+        "unlock": "Requires invitation or disguise",
+        "notes": "Elite residential area"
+      }
+    ]
+  },
+  "time": {
+    "day": 1,
+    "period": "Afternoon",
+    "period_minutes": 248,
+    "clock": "16:08"
+  },
+  "global_events": [],
+  "_ending_trajectory": {
+    "hidden": true,
+    "value": "neutral — no direction yet"
+  }
+}

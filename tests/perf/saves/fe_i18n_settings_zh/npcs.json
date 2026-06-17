@@ -1,0 +1,21 @@
+{
+  "title": "已遇NPC",
+  "npcs": [
+    {
+      "name": "米拉",
+      "trust": "cautious_ally",
+      "mood": "紧张",
+      "last_seen": "米拉面馆",
+      "description": "警惕但愿帮忙的面馆老板",
+      "first_seen_turn": 6
+    },
+    {
+      "name": "补丁",
+      "trust": "neutral",
+      "mood": "警惕",
+      "last_seen": "第三栋楼地下室",
+      "description": "地下层的技术修理工",
+      "first_seen_turn": 6
+    }
+  ]
+}

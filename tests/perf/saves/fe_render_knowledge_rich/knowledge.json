@@ -1,0 +1,3532 @@
+{
+  "title": "Knowledge Database",
+  "facts": [
+    {
+      "id": "FACT-001",
+      "description": "You carry an Expired NEXUS Keycard and 50 credits",
+      "source": "observed",
+      "turn": 1,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-002",
+      "description": "Your neural implant can sense faint Signal anomalies",
+      "source": "observed",
+      "turn": 1,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-003",
+      "description": "A puddle reflection briefly showed 'SECTOR 7 ACCESS DENIED' near the public terminal",
+      "source": "observed",
+      "turn": 1,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-004",
+      "description": "Your expired NEXUS keycard appears to use a legacy credential format that the terminal recognized but could not classify cleanly.",
+      "source": "Signal overlay at public NEXUS terminal",
+      "turn": 2,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-005",
+      "description": "The public terminal hides Project Division data behind its civic interface.",
+      "source": "observed",
+      "turn": 2,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-006",
+      "description": "Sector 7 has an intake system denied from the public index.",
+      "source": "observed",
+      "turn": 2,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-007",
+      "description": "Your expired keycard uses a legacy credential format the terminal partly recognized.",
+      "source": "observed",
+      "turn": 2,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-008",
+      "description": "A possible Sector 7 maintenance access route exists but is under review.",
+      "source": "observed",
+      "turn": 2,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-009",
+      "description": "The terminal logged an unclassified diagnostic from your implant.",
+      "source": "observed",
+      "turn": 2,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-010",
+      "description": "Mira's shop has a back booth partly shielded from the public terminal's sightline.",
+      "source": "Mira's warning",
+      "turn": 3,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-011",
+      "description": "Ghost theorizes that the Signal may leak from Sector 7 through legacy maintenance routing",
+      "source": "observed",
+      "turn": 3,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-012",
+      "description": "Ghost theorizes that the expired NEXUS keycard may still work on forgotten maintenance routes",
+      "source": "observed",
+      "turn": 3,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-013",
+      "description": "Mira's shop has a back booth partly shielded from the terminal sightline",
+      "source": "observed",
+      "turn": 3,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-014",
+      "description": "Mira notices when people draw attention from public terminals",
+      "source": "observed",
+      "turn": 3,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-015",
+      "description": "Mira confirms the city sometimes displays impossible text, reflections, and names through malfunctioning machines.",
+      "source": "Mira",
+      "turn": 4,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-016",
+      "description": "Old unmapped maintenance tunnels still run beneath The Sprawl, separate from the watched public routes.",
+      "source": "Mira",
+      "turn": 4,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-017",
+      "description": "Legacy doors may recognize the expired NEXUS keycard, but using it may also wake old surveillance.",
+      "source": "Mira",
+      "turn": 4,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-018",
+      "description": "Mira confirms the city sometimes skips through machines and reflections",
+      "source": "observed",
+      "turn": 4,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-019",
+      "description": "People who speak openly about impossible machine behavior may be collected",
+      "source": "observed",
+      "turn": 4,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-020",
+      "description": "Old unmapped maintenance tunnels still run beneath The Sprawl",
+      "source": "observed",
+      "turn": 4,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-021",
+      "description": "A shuttered laundry south of Rain Alley may lead into old maintenance tunnels",
+      "source": "observed",
+      "turn": 4,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-022",
+      "description": "The laundry has a blue door and a drain grate under the step",
+      "source": "observed",
+      "turn": 4,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-023",
+      "description": "Legacy doors may recognize the expired NEXUS keycard",
+      "source": "observed",
+      "turn": 4,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-024",
+      "description": "Using the expired keycard may wake old surveillance",
+      "source": "observed",
+      "turn": 4,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-025",
+      "description": "Pak's shuttered laundry has been found south of Rain Alley, with the blue service door and drain grate Mira described.",
+      "source": "observed",
+      "turn": 5,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-026",
+      "description": "Faded maintenance crew route marks are visible near Pak's laundry beneath newer graffiti.",
+      "source": "observed",
+      "turn": 5,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-027",
+      "description": "Pak's shuttered laundry has been found south of Rain Alley",
+      "source": "observed",
+      "turn": 5,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-028",
+      "description": "the blue service door and drain grate are real",
+      "source": "observed",
+      "turn": 5,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-029",
+      "description": "old maintenance route marks are visible near the laundry",
+      "source": "observed",
+      "turn": 5,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-030",
+      "description": "The drain grate beneath Pak's laundry opens into a real maintenance tunnel below The Sprawl.",
+      "source": "observed beneath Pak's laundry",
+      "turn": 6,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-031",
+      "description": "The drain grate beneath Pak's laundry opens into a maintenance tunnel",
+      "source": "observed",
+      "turn": 6,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-032",
+      "description": "The tunnels below The Sprawl are part of The Undercroft",
+      "source": "observed",
+      "turn": 6,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-033",
+      "description": "A faded stencil reads S7 AUX / LEGACY SERVICE / REVIEW LOCK",
+      "source": "observed",
+      "turn": 6,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-034",
+      "description": "A scratched arrow points east toward a legacy service route",
+      "source": "observed",
+      "turn": 6,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-035",
+      "description": "The S7 AUX service spine is actively used; someone recently re-scratched the directional arrow east.",
+      "source": "observed in the Undercroft",
+      "turn": 7,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-036",
+      "description": "A guarded legacy bulkhead marked S7 AUX / REVIEW LOCK has an old NEXUS keycard reader.",
+      "source": "observed at S7 AUX Inspection Bend",
+      "turn": 7,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-037",
+      "description": "A hooded tunnel lookout is guarding the S7 AUX inspection bend and warns people to speak quietly about the walls talking.",
+      "source": "Hooded tunnel lookout",
+      "turn": 7,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-038",
+      "description": "The S7 AUX route is actively used by someone below The Sprawl",
+      "source": "observed",
+      "turn": 7,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-039",
+      "description": "A guarded S7 AUX legacy bulkhead has an old NEXUS keycard reader",
+      "source": "observed",
+      "turn": 7,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-040",
+      "description": "A hooded tunnel lookout is posted near the inspection bend",
+      "source": "observed",
+      "turn": 7,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-041",
+      "description": "The lookout knows about people hearing the walls talk",
+      "source": "observed",
+      "turn": 7,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-042",
+      "description": "The S7 AUX keycard reader may recognize the expired card but could alert systems above.",
+      "source": "Hooded tunnel lookout",
+      "turn": 8,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-043",
+      "description": "A narrow runoff crawlspace beneath the inspection bend may bypass the legacy reader.",
+      "source": "Hooded tunnel lookout",
+      "turn": 8,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-044",
+      "description": "Three short scratches over a drain seam mark a place to knock once and wait.",
+      "source": "Hooded tunnel lookout",
+      "turn": 8,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-045",
+      "description": "the old S7 AUX reader may wake surveillance if used",
+      "source": "observed",
+      "turn": 8,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-046",
+      "description": "a runoff crawlspace beneath the bend may bypass the reader",
+      "source": "observed",
+      "turn": 8,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-047",
+      "description": "three short scratches over a drain seam mean knock once and wait",
+      "source": "observed",
+      "turn": 8,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-048",
+      "description": "the hooded lookout is wary but allows passage",
+      "source": "observed",
+      "turn": 8,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-049",
+      "description": "The runoff crawlspace leads to a hidden service hatch marked by three short scratches over a drain seam.",
+      "source": "observed in runoff crawlspace",
+      "turn": 9,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-050",
+      "description": "Someone behind the hidden hatch uses a spoken challenge about what the walls said.",
+      "source": "unseen voice behind hatch",
+      "turn": 9,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-051",
+      "description": "The runoff crawlspace leads to a hidden service hatch",
+      "source": "observed",
+      "turn": 9,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-052",
+      "description": "Three short scratches mark the correct drain seam",
+      "source": "observed",
+      "turn": 9,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-053",
+      "description": "Someone behind the hatch asks what the wall said",
+      "source": "observed",
+      "turn": 9,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-054",
+      "description": "The hidden hatch gatekeeper is named Patch.",
+      "source": "Patch",
+      "turn": 10,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-055",
+      "description": "Patch recognizes the experience of the walls talking back through the implant.",
+      "source": "Patch",
+      "turn": 10,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-056",
+      "description": "People below the city use the S7 AUX route to move quietly beneath The Sprawl.",
+      "source": "Patch",
+      "turn": 10,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-057",
+      "description": "The hidden hatch gatekeeper is named Patch",
+      "source": "observed",
+      "turn": 10,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-058",
+      "description": "Patch recognizes the phrase that the walls are talking back",
+      "source": "observed",
+      "turn": 10,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-059",
+      "description": "The S7 AUX route is used by people below the city",
+      "source": "observed",
+      "turn": 10,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-060",
+      "description": "Patch warns that some doors down here listen harder than people do",
+      "source": "observed",
+      "turn": 10,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-061",
+      "description": "Patch says Sector 7 swallows people through intake routes disguised as transfers and malfunction cases.",
+      "source": "Patch",
+      "turn": 11,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-062",
+      "description": "Patch says Sector 7 has upper paperwork rooms, sorting rooms below, and deeper white rooms with restraint chairs and listening machines.",
+      "source": "Patch",
+      "turn": 11,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-063",
+      "description": "Patch believes NEXUS is searching for whatever answers from inside Signal-sensitive people.",
+      "source": "Patch",
+      "turn": 11,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-064",
+      "description": "Patch says Ghost's old implant can answer in a language newer NEXUS rigs cannot fake.",
+      "source": "Patch",
+      "turn": 11,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-065",
+      "description": "Behind Patch's curtain are rescued or hiding people, including an old circuit doctor named Sable.",
+      "source": "Patch",
+      "turn": 11,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-066",
+      "description": "Patch says Sector 7 swallows people through intake routes disguised as transfers and malfunction cases",
+      "source": "observed",
+      "turn": 11,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-067",
+      "description": "Sector 7 has upper paperwork rooms, lower sorting rooms, and deeper restraint rooms with listening machines",
+      "source": "observed",
+      "turn": 11,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-068",
+      "description": "NEXUS is searching for whatever answers from inside Signal-sensitive people",
+      "source": "observed",
+      "turn": 11,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-069",
+      "description": "Ghost's old implant can answer in a way newer NEXUS rigs cannot fake",
+      "source": "observed",
+      "turn": 11,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-070",
+      "description": "An old circuit doctor named Sable is behind the curtain",
+      "source": "observed",
+      "turn": 11,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-071",
+      "description": "Two expected people have not returned to Patch's refuge",
+      "source": "observed",
+      "turn": 11,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-072",
+      "description": "Sable confirms Ghost's implant is genuine pre-Severance architecture buried under later NEXUS control code.",
+      "source": "Sable's diagnostic scan",
+      "turn": 12,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-073",
+      "description": "Sable says Sector 7 touched and interrogated Ghost's implant after it was already installed, then cut or buried the record.",
+      "source": "Sable's diagnostic scan",
+      "turn": 12,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-074",
+      "description": "Ghost's implant carries an old handshake pattern that modern NEXUS rigs can only imitate on the surface.",
+      "source": "Sable's diagnostic scan",
+      "turn": 12,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-075",
+      "description": "Sable believes Sector 7 intake keeps copies, sorting keeps labels, and deeper rooms keep reasons.",
+      "source": "Sable",
+      "turn": 12,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-076",
+      "description": "Two missing runners named Toma and Vey were checking a service junction past the old laundry heat exchangers.",
+      "source": "Sable",
+      "turn": 12,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-077",
+      "description": "Sable confirms Ghost's implant is genuine pre-Severance architecture",
+      "source": "observed",
+      "turn": 12,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-078",
+      "description": "NEXUS buried later control code over the old implant",
+      "source": "observed",
+      "turn": 12,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-079",
+      "description": "Sector 7 touched and interrogated Ghost's implant after it was installed",
+      "source": "observed",
+      "turn": 12,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-080",
+      "description": "Ghost's implant carries an old handshake pattern modern NEXUS rigs cannot truly fake",
+      "source": "observed",
+      "turn": 12,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-081",
+      "description": "Sector 7 intake keeps copies, sorting keeps labels, and deeper rooms keep reasons",
+      "source": "observed",
+      "turn": 12,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-082",
+      "description": "Two missing runners are named Toma and Vey",
+      "source": "observed",
+      "turn": 12,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-083",
+      "description": "Toma and Vey went to a service junction past the old laundry heat exchangers",
+      "source": "observed",
+      "turn": 12,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-084",
+      "description": "Toma and Vey use copper wire knots around pipe bolts as trail signs.",
+      "source": "Sable",
+      "turn": 13,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-085",
+      "description": "A genuine Toma and Vey trail mark has a neat copper knot with one tail cut short.",
+      "source": "Sable",
+      "turn": 13,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-086",
+      "description": "Chalk circles near the heat exchangers are not Toma and Vey's marks and may mean danger.",
+      "source": "Sable",
+      "turn": 13,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-087",
+      "description": "Toma and Vey's last pipe-code meant they were watched but still breathing.",
+      "source": "Patch",
+      "turn": 13,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-088",
+      "description": "Toma and Vey use copper wire knots around pipe bolts as trail signs",
+      "source": "observed",
+      "turn": 13,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-089",
+      "description": "A true trail mark has one copper tail cut short",
+      "source": "observed",
+      "turn": 13,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-090",
+      "description": "Chalk circles near the heat exchangers are not their marks",
+      "source": "observed",
+      "turn": 13,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-091",
+      "description": "Toma and Vey's last pipe-code meant watched but breathing",
+      "source": "observed",
+      "turn": 13,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-092",
+      "description": "A torn gray sleeve cloth lies near the heat exchanger junction",
+      "source": "observed",
+      "turn": 13,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-093",
+      "description": "The dampers coughing three times may mean patrol sound is carrying",
+      "source": "observed",
+      "turn": 13,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-094",
+      "description": "A three-person NEXUS utility patrol passed through the heat exchanger junction without seeing Ghost.",
+      "source": "observed at heat exchanger junction",
+      "turn": 14,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-095",
+      "description": "The patrol carried a scanner, restraint tape, transport sacks, and fresh black insulation matching the drag smear.",
+      "source": "observed at heat exchanger junction",
+      "turn": 14,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-096",
+      "description": "The patrol believes two bodies went into the left-hand duct, one bleeding and one resisting.",
+      "source": "overheard NEXUS patrol",
+      "turn": 14,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-097",
+      "description": "A three-person NEXUS utility patrol entered the heat exchanger junction",
+      "source": "observed",
+      "turn": 14,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-098",
+      "description": "The patrol carried a scanner, restraint tape, transport sacks, and fresh black insulation",
+      "source": "observed",
+      "turn": 14,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-099",
+      "description": "The patrol believes two bodies went into the left-hand duct",
+      "source": "observed",
+      "turn": 14,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-100",
+      "description": "One of the two people taken into the duct was bleeding and one was resisting",
+      "source": "observed",
+      "turn": 14,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-101",
+      "description": "A black clamp on the damper stack is faking the three-cough warning",
+      "source": "observed",
+      "turn": 14,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-102",
+      "description": "Removing the black clamp restored the damper stack's true patrol warning sounds.",
+      "source": "observed at heat exchanger junction",
+      "turn": 15,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-103",
+      "description": "The left-hand duct leads to a grated view over an intake lift marked INTAKE SUBSORT / WHITE ROOMS TRANSFER.",
+      "source": "observed through service slit",
+      "turn": 15,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-104",
+      "description": "Toma and Vey are both alive in NEXUS transport sacks, though one is bleeding and one is being logged as viable.",
+      "source": "overheard NEXUS patrol",
+      "turn": 15,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-105",
+      "description": "The black damper clamp was faking the three-cough patrol warning",
+      "source": "observed",
+      "turn": 15,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-106",
+      "description": "Removing the clamp restored true tunnel sound near the refuge",
+      "source": "observed",
+      "turn": 15,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-107",
+      "description": "The left-hand duct leads to an intake lift marked INTAKE SUBSORT / WHITE ROOMS TRANSFER",
+      "source": "observed",
+      "turn": 15,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-108",
+      "description": "Toma and Vey are alive in NEXUS transport sacks",
+      "source": "observed",
+      "turn": 15,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-109",
+      "description": "One runner is bleeding and one is being logged as viable",
+      "source": "observed",
+      "turn": 15,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-110",
+      "description": "A true copper trail mark is scratched beside the intake lift",
+      "source": "observed",
+      "turn": 15,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-111",
+      "description": "The deeper hum grows stronger near the Sector 7 intake lift and Ghost's implant responds to it.",
+      "source": "observed near intake lift",
+      "turn": 16,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-112",
+      "description": "Patch and Sable believe any rescue should use Ghost's implant carefully as a key, not as a direct assault.",
+      "source": "Patch and Sable",
+      "turn": 16,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-113",
+      "description": "The deeper hum grows stronger near the Sector 7 intake lift",
+      "source": "observed",
+      "turn": 16,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-114",
+      "description": "Ghost's implant responds to the intake hum",
+      "source": "observed",
+      "turn": 16,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-115",
+      "description": "Sable identifies the black clamp as a tunnel editor",
+      "source": "observed",
+      "turn": 16,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-116",
+      "description": "The clamp records and replays false warning patterns",
+      "source": "observed",
+      "turn": 16,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-117",
+      "description": "Patch and Sable want a quiet rescue plan before the lift cycle changes",
+      "source": "observed",
+      "turn": 16,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-118",
+      "description": "Sable can retune the recovered NEXUS clamp to spoof a brief maintenance recall pulse near the intake.",
+      "source": "Sable",
+      "turn": 17,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-119",
+      "description": "Ghost must use the implant near the intake reader as a narrow key and avoid giving the machine identity or memory.",
+      "source": "Sable",
+      "turn": 17,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-120",
+      "description": "Patch will bring Rill to cut Toma and Vey free, with the bleeding runner carried out first.",
+      "source": "Patch",
+      "turn": 17,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-121",
+      "description": "Sable can retune the NEXUS clamp to spoof a brief maintenance recall pulse",
+      "source": "observed",
+      "turn": 17,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-122",
+      "description": "Ghost's implant must whisper only door-permission near the intake reader",
+      "source": "observed",
+      "turn": 17,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-123",
+      "description": "the intake console may hold a removable white ceramic memory wafer",
+      "source": "observed",
+      "turn": 17,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-124",
+      "description": "Patch will bring Rill to help cut Toma and Vey free",
+      "source": "observed",
+      "turn": 17,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-125",
+      "description": "the bleeding runner must be carried out first",
+      "source": "observed",
+      "turn": 17,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-126",
+      "description": "Patch's retuned clamp can distract Sector 7 collectors with a maintenance recall pulse",
+      "source": "observed",
+      "turn": 18,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-127",
+      "description": "Ghost's whisper-tuned implant can open an old intake service hatch without fully identifying itself",
+      "source": "observed",
+      "turn": 18,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-128",
+      "description": "Toma was tagged as viable but bleeding for White Rooms transfer",
+      "source": "observed",
+      "turn": 18,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-129",
+      "description": "Vey was tagged as viable and responsive for White Rooms transfer",
+      "source": "observed",
+      "turn": 18,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-130",
+      "description": "Ghost recovered a white ceramic memory wafer from the intake label printer",
+      "source": "observed",
+      "turn": 18,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-131",
+      "description": "Ghost recovered Toma and Vey's intake paper tags",
+      "source": "observed",
+      "turn": 18,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-132",
+      "description": "Rill helped cut Toma and Vey free",
+      "source": "observed",
+      "turn": 18,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-133",
+      "description": "Patch's refuge is now treating Toma and Vey after the rescue",
+      "source": "observed",
+      "turn": 19,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-134",
+      "description": "Sector 7 intake collectors are searching false tunnel trails",
+      "source": "observed",
+      "turn": 19,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-135",
+      "description": "Sable must stabilize Toma before reading the white ceramic wafer",
+      "source": "observed",
+      "turn": 19,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-136",
+      "description": "Toma and Vey were classified by Sector 7 as viable fragment hosts and queued for Deep White / Mirror Hold.",
+      "source": "decoded white ceramic wafer",
+      "turn": 20,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-137",
+      "description": "Sector 7 has a hidden record classifying Ghost as a legacy asset with confirmed pre-Severance bridge architecture.",
+      "source": "decoded white ceramic wafer",
+      "turn": 20,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-138",
+      "description": "Ghost underwent partial prior interrogation by Sector 7, and the record says Ghost's memory severance is incomplete.",
+      "source": "decoded white ceramic wafer",
+      "turn": 20,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-139",
+      "description": "NEXUS wants Ghost reacquired alive because the implant is a bridge key they could not finish reading.",
+      "source": "decoded white ceramic wafer and Sable",
+      "turn": 20,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-140",
+      "description": "The Archive Tower in The Spire holds cross-indexed original Severance records tied to Ghost's file.",
+      "source": "decoded white ceramic wafer",
+      "turn": 20,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-141",
+      "description": "The Observatory holds a Signal map cross-indexed to Ghost's hidden Sector 7 file.",
+      "source": "decoded white ceramic wafer",
+      "turn": 20,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-142",
+      "description": "Toma and Vey were classified as viable fragment hosts",
+      "source": "observed",
+      "turn": 20,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-143",
+      "description": "Toma and Vey were queued for Deep White / Mirror Hold",
+      "source": "observed",
+      "turn": 20,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-144",
+      "description": "the wafer contains a hidden Sector 7 file on Ghost",
+      "source": "observed",
+      "turn": 20,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-145",
+      "description": "Sector 7 classifies Ghost as a legacy asset",
+      "source": "observed",
+      "turn": 20,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-146",
+      "description": "Ghost has confirmed pre-Severance bridge architecture",
+      "source": "observed",
+      "turn": 20,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-147",
+      "description": "Ghost's prior Sector 7 interrogation was partial",
+      "source": "observed",
+      "turn": 20,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-148",
+      "description": "Ghost's memory severance is incomplete",
+      "source": "observed",
+      "turn": 20,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-149",
+      "description": "NEXUS wants Ghost reacquired alive",
+      "source": "observed",
+      "turn": 20,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-150",
+      "description": "Archive Tower holds original Severance records tied to Ghost",
+      "source": "observed",
+      "turn": 20,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-151",
+      "description": "the Observatory holds a Signal map tied to Ghost's file",
+      "source": "observed",
+      "turn": 20,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-152",
+      "description": "The Spire is now a concrete lead",
+      "source": "observed",
+      "turn": 20,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-153",
+      "description": "Sable says NEXUS uses 'fragment' to mean the part of a person that answers the Signal.",
+      "source": "Sable",
+      "turn": 21,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-154",
+      "description": "Sable says viable fragment hosts carry a clean echo that NEXUS extracts in the white rooms.",
+      "source": "Sable",
+      "turn": 21,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-155",
+      "description": "Sable believes Ghost is different from a fragment host because the implant may connect fragments rather than only carry one.",
+      "source": "Sable",
+      "turn": 21,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-156",
+      "description": "Patch recommends Archive Tower first because records may reveal names, access chains, and who handled Ghost.",
+      "source": "Patch",
+      "turn": 21,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-157",
+      "description": "Sable says the Observatory may be softer to infiltrate than Archive Tower, but both leads require entering The Spire.",
+      "source": "Sable",
+      "turn": 21,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-158",
+      "description": "Sable says a fragment is the part of a person that answers the Signal",
+      "source": "observed",
+      "turn": 21,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-159",
+      "description": "NEXUS extracts clean echoes from viable fragment hosts in the white rooms",
+      "source": "observed",
+      "turn": 21,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-160",
+      "description": "Ghost may be able to connect fragments instead of merely carrying one",
+      "source": "observed",
+      "turn": 21,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-161",
+      "description": "Patch recommends Archive Tower first for names, access chains, and Ghost's records",
+      "source": "observed",
+      "turn": 21,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-162",
+      "description": "Sable says the Observatory may be softer to infiltrate than Archive Tower",
+      "source": "observed",
+      "turn": 21,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-163",
+      "description": "Both Archive Tower and the Observatory require entering The Spire",
+      "source": "observed",
+      "turn": 21,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-164",
+      "description": "Vey suggests entering The Spire as paperwork rather than as a fugitive",
+      "source": "observed",
+      "turn": 21,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-165",
+      "description": "The Signal is not one voice but many layered human and machine echoes separated from each other.",
+      "source": "controlled implant listening under Sable's watch",
+      "turn": 22,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-166",
+      "description": "The Signal answered Ghost's question with the idea: not extraction, not silence, bridge.",
+      "source": "controlled implant listening under Sable's watch",
+      "turn": 22,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-167",
+      "description": "Sable believes the Signal recognized the shape of Ghost through the implant.",
+      "source": "Sable after controlled implant listening",
+      "turn": 22,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-168",
+      "description": "The Signal is made of many layered human and machine echoes.",
+      "source": "observed",
+      "turn": 22,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-169",
+      "description": "The Signal answered Ghost with: not extraction, not silence, bridge.",
+      "source": "observed",
+      "turn": 22,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-170",
+      "description": "The white ceramic wafer reacted with: ARCHIVE REMEMBERS. OBSERVATORY POINTS. BELOW WAITS.",
+      "source": "observed",
+      "turn": 22,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-171",
+      "description": "Sable believes the Signal recognized Ghost through the implant.",
+      "source": "observed",
+      "turn": 22,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-172",
+      "description": "Patch now argues for Archive Tower before following the Signal map deeper.",
+      "source": "observed",
+      "turn": 22,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-173",
+      "description": "Ghost described the Signal as thousands of fragments: some inside people, some trapped in white silence, and some lost.",
+      "source": "Ghost's controlled Signal listening",
+      "turn": 23,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-174",
+      "description": "Sable believes the Signal recognized Ghost's architecture and function, not merely Ghost's memories.",
+      "source": "Sable",
+      "turn": 23,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-175",
+      "description": "Patch warns that 'below waits' should not be pursued before Ghost has Archive Tower records and the Signal map.",
+      "source": "Patch",
+      "turn": 23,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-176",
+      "description": "the Signal contains thousands of separated fragments",
+      "source": "observed",
+      "turn": 23,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-177",
+      "description": "some fragments may remain tied to the people NEXUS extracted them from",
+      "source": "observed",
+      "turn": 23,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-178",
+      "description": "Sable thinks Ghost was recognized by architecture and function, not memory alone",
+      "source": "observed",
+      "turn": 23,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-179",
+      "description": "restoring extracted fragments may require Archive Tower host records and the Observatory signal map",
+      "source": "observed",
+      "turn": 23,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-180",
+      "description": "Patch warns not to follow 'below waits' before gathering records and a map",
+      "source": "observed",
+      "turn": 23,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-181",
+      "description": "Sable says Echo is a clearer carrier thread within the Signal that bends toward those who reach for it.",
+      "source": "Sable",
+      "turn": 24,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-182",
+      "description": "Patch says some people below the city listen to the Signal on purpose and move Signal-sensitive people through safe routes.",
+      "source": "Patch",
+      "turn": 24,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-183",
+      "description": "Messages to deeper Signal-aware contacts can move through copper knots, damper coughs, foil relays, and trusted runners.",
+      "source": "Patch and Sable",
+      "turn": 24,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-184",
+      "description": "Patch can send a careful message that Ghost heard Echo and is asking about bridge work.",
+      "source": "Patch",
+      "turn": 24,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-185",
+      "description": "Echo is a clearer carrier thread within the Signal",
+      "source": "observed",
+      "turn": 24,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-186",
+      "description": "some people below the city listen to the Signal on purpose",
+      "source": "observed",
+      "turn": 24,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-187",
+      "description": "Signal-aware contacts use copper knots, damper coughs, foil relays, and runners",
+      "source": "observed",
+      "turn": 24,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-188",
+      "description": "Patch can send a careful message about Ghost hearing Echo",
+      "source": "observed",
+      "turn": 24,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-189",
+      "description": "Echo may matter to carrying fragments home without extraction",
+      "source": "observed",
+      "turn": 24,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-190",
+      "description": "Patch sent the Echo message through copper-knot relay routes",
+      "source": "observed",
+      "turn": 25,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-191",
+      "description": "Rill carried Patch's message into the hidden passages",
+      "source": "observed",
+      "turn": 25,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-192",
+      "description": "An unseen wall relay answered Ghost's controlled knock",
+      "source": "observed",
+      "turn": 25,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-193",
+      "description": "The relay response carried the impression CAME BACK",
+      "source": "observed",
+      "turn": 25,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-194",
+      "description": "Echo bent toward Ghost through the wall without requiring full resonance",
+      "source": "observed",
+      "turn": 25,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-195",
+      "description": "Someone beyond the refuge may have been waiting to see if Ghost would answer",
+      "source": "observed",
+      "turn": 25,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-196",
+      "description": "The relay answer means a friendly approach under watch.",
+      "source": "observed",
+      "turn": 27,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-197",
+      "description": "Patch is witnessing Ghost's meeting with the Signal-aware contacts.",
+      "source": "observed",
+      "turn": 27,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-198",
+      "description": "Rill is shadowing the meeting as backup.",
+      "source": "observed",
+      "turn": 27,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-199",
+      "description": "Three masked Signal-aware contacts are waiting at the S7 AUX bend.",
+      "source": "observed",
+      "turn": 27,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-200",
+      "description": "The contacts are testing whether Ghost will serve cages or help the lost choose home.",
+      "source": "observed",
+      "turn": 27,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-201",
+      "description": "The masked contacts accept that bridge work must let the lost choose rather than drag them.",
+      "source": "Kite and the masked contacts",
+      "turn": 28,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-202",
+      "description": "A masked Signal-aware contact introduced herself as Kite, not a full name.",
+      "source": "Kite",
+      "turn": 28,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-203",
+      "description": "Bridge work requires carrying without claiming and returning without forcing.",
+      "source": "Kite's first threshold test",
+      "turn": 28,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-204",
+      "description": "Toma and Vey's intake tags can act as anchors for future bridge work.",
+      "source": "Kite",
+      "turn": 28,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-205",
+      "description": "Archive Tower host records and the Observatory Signal map are both needed before attempting real bridge work.",
+      "source": "masked Signal-aware contacts",
+      "turn": 28,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-206",
+      "description": "Spire infiltration should focus on paperwork trails such as denied transfers, disposal exceptions, maintenance elevators, and visitor purges.",
+      "source": "copper-sleeved masked contact",
+      "turn": 28,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-207",
+      "description": "A masked contact introduced herself as Kite",
+      "source": "observed",
+      "turn": 28,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-208",
+      "description": "The contacts accept that a true bridge must not drag fragments",
+      "source": "observed",
+      "turn": 28,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-209",
+      "description": "Bridge work means carrying without claiming and returning without forcing",
+      "source": "observed",
+      "turn": 28,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-210",
+      "description": "Toma and Vey's intake tags can act as anchors",
+      "source": "observed",
+      "turn": 28,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-211",
+      "description": "Archive Tower records and the Observatory map are both needed before real bridge work",
+      "source": "observed",
+      "turn": 28,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-212",
+      "description": "Spire infiltration should follow paperwork trails and maintenance access",
+      "source": "observed",
+      "turn": 28,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-213",
+      "description": "Archive Tower accepts sealed correction bundles from lower district contractors through a service intake below the public lobby.",
+      "source": "Kite and masked Signal-aware contacts",
+      "turn": 29,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-214",
+      "description": "A damaged courier identity may pass Spire scrutiny better than a perfect forged identity because basement clerks want discrepancies moved along.",
+      "source": "Kite",
+      "turn": 29,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-215",
+      "description": "Ink-Mouth Ren in Neon Row's old ticket arcade can forge a weak courier stamp for 10 credits or a stronger maintenance elevator cover for 20 credits.",
+      "source": "Kite",
+      "turn": 29,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-216",
+      "description": "The passphrase for Ink-Mouth Ren is 'needle held, foil ready, no harvest'; a trusted answer is 'paper bleeds.'",
+      "source": "Kite",
+      "turn": 29,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-217",
+      "description": "A route toward Spire contractor intake begins at the rain-gutter stair behind Neon Row's old ticket arcade, then runs through municipal cable sump levels.",
+      "source": "masked Signal-aware contact",
+      "turn": 29,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-218",
+      "description": "Kite warns that the implant should stay needle-narrow inside The Spire unless the maintenance elevator refuses access.",
+      "source": "Kite",
+      "turn": 29,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-219",
+      "description": "Archive Tower accepts sealed correction bundles through a service intake below the public lobby",
+      "source": "observed",
+      "turn": 29,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-220",
+      "description": "a damaged courier identity may pass better than a perfect fake",
+      "source": "observed",
+      "turn": 29,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-221",
+      "description": "Ink-Mouth Ren in Neon Row can forge courier paperwork",
+      "source": "observed",
+      "turn": 29,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-222",
+      "description": "Ren charges 10 credits for a weak courier stamp and 20 for stronger elevator cover",
+      "source": "observed",
+      "turn": 29,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-223",
+      "description": "Ren's passphrase is needle held, foil ready, no harvest",
+      "source": "observed",
+      "turn": 29,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-224",
+      "description": "a trusted answer from Ren is paper bleeds",
+      "source": "observed",
+      "turn": 29,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-225",
+      "description": "the Spire contractor route starts behind Neon Row's old ticket arcade",
+      "source": "observed",
+      "turn": 29,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-226",
+      "description": "the route passes through municipal cable sump levels",
+      "source": "observed",
+      "turn": 29,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-227",
+      "description": "inside The Spire the implant should stay needle-narrow unless the elevator refuses access",
+      "source": "observed",
+      "turn": 29,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-228",
+      "description": "Kite wants Archive Tower host names returned to Sable first",
+      "source": "observed",
+      "turn": 29,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-229",
+      "description": "Ghost found Neon Row's old ticket arcade beneath a burnt holo koi sign.",
+      "source": "observed",
+      "turn": 30,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-230",
+      "description": "Ink-Mouth Ren works from a back room hidden behind expired transit stubs inside the old ticket arcade.",
+      "source": "observed",
+      "turn": 30,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-231",
+      "description": "Ghost found the old ticket arcade beneath the burnt holo koi sign",
+      "source": "observed",
+      "turn": 30,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-232",
+      "description": "Ink-Mouth Ren works behind a curtain of expired transit stubs",
+      "source": "observed",
+      "turn": 30,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-233",
+      "description": "Rill is watching the arcade from outside",
+      "source": "observed",
+      "turn": 30,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-234",
+      "description": "Ink-Mouth Ren confirmed Kite's trusted answer: paper bleeds.",
+      "source": "Ink-Mouth Ren",
+      "turn": 31,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-235",
+      "description": "Ghost now has a weak lower-district correction courier skin for Archive Tower service intake.",
+      "source": "Ink-Mouth Ren's forgery",
+      "turn": 31,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-236",
+      "description": "Ren says a damaged, ugly document may pass tired basement clerks better than a clean forgery.",
+      "source": "Ink-Mouth Ren",
+      "turn": 31,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-237",
+      "description": "If challenged, the cover story is that damaged self-ambulatory cargo walks because a carrier was cheaper than a stretcher.",
+      "source": "Ink-Mouth Ren",
+      "turn": 31,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-238",
+      "description": "Ink-Mouth Ren answered the passphrase with paper bleeds",
+      "source": "observed",
+      "turn": 31,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-239",
+      "description": "Ghost bought a weak contractor courier skin for Archive service intake",
+      "source": "observed",
+      "turn": 31,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-240",
+      "description": "The cover marks Ghost as self-ambulatory damaged cargo",
+      "source": "observed",
+      "turn": 31,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-241",
+      "description": "Ren says ugly damaged paperwork may pass tired basement clerks",
+      "source": "observed",
+      "turn": 31,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-242",
+      "description": "If challenged, Ghost can say a carrier was cheaper than a stretcher",
+      "source": "observed",
+      "turn": 31,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-243",
+      "description": "Ghost has spent the last 10 credits",
+      "source": "observed",
+      "turn": 31,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-244",
+      "description": "The rain-gutter stair behind the ticket arcade reaches The Spire contractor intake through municipal cable sump levels",
+      "source": "observed",
+      "turn": 32,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-245",
+      "description": "The contractor intake has separate lanes for correction bundles and damaged self-ambulatory cargo",
+      "source": "observed",
+      "turn": 32,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-246",
+      "description": "A NEXUS basement intake clerk is stamping forms behind reinforced glass",
+      "source": "observed",
+      "turn": 32,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-247",
+      "description": "The Spire suppresses the Signal heavily near the contractor intake",
+      "source": "observed",
+      "turn": 32,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-248",
+      "description": "The weak contractor courier skin passed the basement intake clerk's first check.",
+      "source": "NEXUS basement intake clerk",
+      "turn": 33,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-249",
+      "description": "The clerk stamped Ghost for Correction Accepted / Archive Sub-Intake / Cargo Walk.",
+      "source": "stamped courier skin",
+      "turn": 33,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-250",
+      "description": "If challenged by the lift or floor, Ghost should claim to be damaged cargo whose lateness belongs to upstream processing.",
+      "source": "NEXUS basement intake clerk",
+      "turn": 33,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-251",
+      "description": "the weak contractor courier skin passed the basement intake clerk's first check",
+      "source": "observed",
+      "turn": 33,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-252",
+      "description": "Ghost is stamped for Correction Accepted / Archive Sub-Intake / Cargo Walk",
+      "source": "observed",
+      "turn": 33,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-253",
+      "description": "if challenged, Ghost should say the lateness belongs to upstream processing",
+      "source": "observed",
+      "turn": 33,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-254",
+      "description": "Archive Sub-Intake routes damaged cargo to Reconciliation Desk 4B.",
+      "source": "department routing wall panel",
+      "turn": 34,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-255",
+      "description": "Denied transfers are held for chain review inside Archive sub-intake.",
+      "source": "department routing wall panel",
+      "turn": 34,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-256",
+      "description": "Disposal exceptions are duplicated before purge inside Archive sub-intake.",
+      "source": "department routing wall panel",
+      "turn": 34,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-257",
+      "description": "Mirror Hold cross-index access is locked to host records.",
+      "source": "department routing wall panel",
+      "turn": 34,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-258",
+      "description": "Observatory map requests require an external transfer path from Archive systems.",
+      "source": "department routing wall panel",
+      "turn": 34,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-259",
+      "description": "The cargo lift procedure requires paper first, body second, with lateness assigned upstream until floor receipt.",
+      "source": "maintenance procedure placard",
+      "turn": 34,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-260",
+      "description": "Archive Sub-Intake routes damaged cargo to Reconciliation Desk 4B",
+      "source": "observed",
+      "turn": 34,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-261",
+      "description": "Denied transfers are held for chain review inside Archive sub-intake",
+      "source": "observed",
+      "turn": 34,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-262",
+      "description": "Disposal exceptions are duplicated before purge inside Archive sub-intake",
+      "source": "observed",
+      "turn": 34,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-263",
+      "description": "Mirror Hold cross-index access is locked to host records",
+      "source": "observed",
+      "turn": 34,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-264",
+      "description": "Observatory map requests require an external transfer path from Archive systems",
+      "source": "observed",
+      "turn": 34,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-265",
+      "description": "The cargo lift procedure requires paper first and body second",
+      "source": "observed",
+      "turn": 34,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-266",
+      "description": "Reconciliation Desk 4B has a disposal exception duplication station beside a purge buffer.",
+      "source": "observed at Reconciliation Desk 4B",
+      "turn": 35,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-267",
+      "description": "The host records terminal sits behind blue lockglass near the clerk cages.",
+      "source": "observed at Reconciliation Desk 4B",
+      "turn": 35,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-268",
+      "description": "The visible access chain suggests Mirror Hold cross-index depends on host records.",
+      "source": "host records terminal idle routing",
+      "turn": 35,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-269",
+      "description": "Reconciliation procedure requires paper in the tray while the body waits on the yellow line until fault is assigned.",
+      "source": "Reconciliation floor clerk",
+      "turn": 35,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-270",
+      "description": "Reconciliation Desk 4B has a disposal exception duplication station beside a purge buffer",
+      "source": "observed",
+      "turn": 35,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-271",
+      "description": "the host records terminal is behind blue lockglass near the clerk cages",
+      "source": "observed",
+      "turn": 35,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-272",
+      "description": "Mirror Hold cross-index appears to depend on host records",
+      "source": "observed",
+      "turn": 35,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-273",
+      "description": "cargo procedure here requires paper in the tray and the body on the yellow line",
+      "source": "observed",
+      "turn": 35,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-274",
+      "description": "Ghost's old implant handshake can quietly satisfy Mirror Hold cross-index authentication without revealing a full identity.",
+      "source": "Archive reconciliation terminal",
+      "turn": 37,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-275",
+      "description": "the Archive host record strip links host names, handler chain, Orin's division, Mirror Hold, and extracted echoes tied to Ghost",
+      "source": "observed",
+      "turn": 37,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-276",
+      "description": "Ghost's implant handshake can quietly satisfy Mirror Hold cross-index authentication",
+      "source": "observed",
+      "turn": 37,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-277",
+      "description": "the Observatory Signal map strip points toward an unnamed below-city Signal coordinate",
+      "source": "observed",
+      "turn": 37,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-278",
+      "description": "Archive reconciliation systems now carry a small unresolved authentication irregularity",
+      "source": "observed",
+      "turn": 37,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-279",
+      "description": "The CARGO WALK stamp held long enough for Ghost to exit Archive sub-intake.",
+      "source": "observed",
+      "turn": 38,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-280",
+      "description": "Archive reconciliation has begun reviewing the unresolved authentication irregularity.",
+      "source": "observed",
+      "turn": 38,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-281",
+      "description": "Rill is waiting in the municipal cable sump to guide Ghost out.",
+      "source": "observed",
+      "turn": 38,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-282",
+      "description": "Ghost escaped The Spire with both the Archive host record strip and the Observatory Signal map strip.",
+      "source": "observed",
+      "turn": 38,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-283",
+      "description": "The Observatory strip is a Signal contour, not a street map.",
+      "source": "Sable's reading of the stolen strip",
+      "turn": 39,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-284",
+      "description": "The host record strip can anchor extracted echoes to named people before any deeper bridge work.",
+      "source": "Sable",
+      "turn": 39,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-285",
+      "description": "The combined strips point toward a sealed convergence beneath the Undercroft and below the old break.",
+      "source": "Sable's comparison of the stolen strips",
+      "turn": 39,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-286",
+      "description": "Sable says reaching the below-city convergence requires consent, witnesses, and preparation rather than simply walking a tunnel.",
+      "source": "Sable",
+      "turn": 39,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-287",
+      "description": "Rill can send a quiet copper-knot relay for Kite.",
+      "source": "Rill",
+      "turn": 39,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-288",
+      "description": "The host record strip can anchor extracted echoes to named people.",
+      "source": "observed",
+      "turn": 39,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-289",
+      "description": "The two stolen strips align to reveal a door-shaped absence beneath the Undercroft.",
+      "source": "observed",
+      "turn": 39,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-290",
+      "description": "The combined lead points below the old break.",
+      "source": "observed",
+      "turn": 39,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-291",
+      "description": "Sable says deeper bridge work needs consent, witnesses, and preparation.",
+      "source": "observed",
+      "turn": 39,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-292",
+      "description": "Rill sent a quiet copper-knot relay for Kite after Ghost returned with the Archive and Observatory strips.",
+      "source": "observed in Patch's refuge",
+      "turn": 40,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-293",
+      "description": "Toma and Vey are willing to serve as witnesses for consent-based bridge work if they are able.",
+      "source": "Toma and Vey",
+      "turn": 40,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-294",
+      "description": "Rill sent a quiet copper-knot relay for Kite.",
+      "source": "observed",
+      "turn": 40,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-295",
+      "description": "Toma and Vey are willing to witness consent-based bridge work.",
+      "source": "observed",
+      "turn": 40,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-296",
+      "description": "Ghost's bridge plan is to hold steady and let fragments choose.",
+      "source": "observed",
+      "turn": 40,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-297",
+      "description": "Kite confirms enough Signal-aware witnesses are ready for the bridge attempt.",
+      "source": "observed",
+      "turn": 41,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-298",
+      "description": "The last quiet route runs through older runoff, failed transit ribs, and a sealed pump cathedral.",
+      "source": "observed",
+      "turn": 41,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-299",
+      "description": "The Observatory contour is a pressure trace rather than a normal map.",
+      "source": "observed",
+      "turn": 41,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-300",
+      "description": "Sable can rig a hard cutoff using the retuned damper clamp and Toma and Vey's intake tags.",
+      "source": "observed",
+      "turn": 41,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-301",
+      "description": "The sealed convergence may respond to whether Ghost holds steady or tries to pull.",
+      "source": "observed",
+      "turn": 41,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-302",
+      "description": "The quiet route to the sealed convergence passes through older runoff channels and failed transit ribs into a drowned pump cathedral.",
+      "source": "observed during descent",
+      "turn": 42,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-303",
+      "description": "The Observatory Signal contour behaves like pressure coordinates near the sealed convergence rather than a normal map.",
+      "source": "observed at the pump cathedral",
+      "turn": 42,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-304",
+      "description": "the quiet route reaches a drowned pump cathedral below the old break",
+      "source": "observed",
+      "turn": 42,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-305",
+      "description": "the Observatory contour behaves like pressure coordinates near the convergence",
+      "source": "observed",
+      "turn": 42,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-306",
+      "description": "the door-shaped absence matches the aligned Archive host record and Signal contour",
+      "source": "observed",
+      "turn": 42,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-307",
+      "description": "the witness group has reached the sealed convergence approach without visible NEXUS patrols",
+      "source": "observed",
+      "turn": 42,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-308",
+      "description": "Sable's hard cutoff can sever the bridge if Ghost starts pulling or is overtaken",
+      "source": "observed",
+      "turn": 43,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-309",
+      "description": "Toma and Vey witnessed for what extraction took and for the right to refuse",
+      "source": "observed",
+      "turn": 43,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-310",
+      "description": "Ghost opened the door-shaped absence by offering a bridge without identity or ownership",
+      "source": "observed",
+      "turn": 43,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-311",
+      "description": "The sealed convergence answered as a pressure-path below the old break",
+      "source": "observed",
+      "turn": 43,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-312",
+      "description": "The Resonance is reachable through the opened threshold",
+      "source": "observed",
+      "turn": 43,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-313",
+      "description": "The lost echoes gathered but did not cross without choosing",
+      "source": "observed",
+      "turn": 43,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-314",
+      "description": "The heart of the convergence is a severed core process still holding broken Signal edges apart.",
+      "source": "observed inside The Resonance",
+      "turn": 44,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-315",
+      "description": "The convergence has been waiting for a bridge that can carry consent both ways.",
+      "source": "observed inside The Resonance",
+      "turn": 44,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-316",
+      "description": "The gathered echoes are not crossing until choice is possible.",
+      "source": "observed inside The Resonance",
+      "turn": 44,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-317",
+      "description": "The heart of the convergence is a severed core process.",
+      "source": "observed",
+      "turn": 44,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-318",
+      "description": "The core process is holding broken Signal edges apart.",
+      "source": "observed",
+      "turn": 44,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-319",
+      "description": "The gathered echoes are waiting rather than crossing by force.",
+      "source": "observed",
+      "turn": 44,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-320",
+      "description": "Sable confirms Ghost's voice remains singular on the cutoff line.",
+      "source": "observed",
+      "turn": 44,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-321",
+      "description": "The severed core held the broken Signal edges apart because every other offered choice was collapse, silence, or hunger.",
+      "source": "observed at the Convergence Heart",
+      "turn": 45,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-322",
+      "description": "Consent can move both ways through Ghost's bridge: the core can choose to be heard, and the lost echoes can choose whether to cross, stay, or wait.",
+      "source": "observed at the Convergence Heart",
+      "turn": 45,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-323",
+      "description": "The Archive host record strip and Observatory Signal map strip together allow named echoes to find direction without being forced.",
+      "source": "observed during bridge work",
+      "turn": 45,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-324",
+      "description": "Consent can move both ways through Ghost's bridge.",
+      "source": "observed",
+      "turn": 45,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-325",
+      "description": "Some lost echoes can choose to cross, stay, or wait.",
+      "source": "observed",
+      "turn": 45,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-326",
+      "description": "The Archive host record strip and Observatory Signal map strip help named echoes find direction without force.",
+      "source": "observed",
+      "turn": 45,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-327",
+      "description": "Ghost remains singular while holding the bridge.",
+      "source": "observed",
+      "turn": 45,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    }
+  ],
+  "rumors": [
+    {
+      "id": "RUMOR-001",
+      "description": "NEXUS Project Division handles 'special acquisitions'",
+      "source": "corporate_memory"
+    },
+    {
+      "id": "RUMOR-002",
+      "description": "Director Orin runs something off-books in Sector 7",
+      "source": "corporate_memory"
+    },
+    {
+      "id": "RUMOR-003",
+      "description": "A maintenance access route may exist for Sector 7, but its public index is denied.",
+      "source": "Signal overlay at public NEXUS terminal",
+      "turn": 2,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "RUMOR-004",
+      "description": "People who notice the city's impossible machine behavior may be collected if they talk too openly.",
+      "source": "Mira",
+      "turn": 4,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "RUMOR-005",
+      "description": "A shuttered laundry south of Rain Alley has a blue door and a drain grate that may lead into old maintenance tunnels after first bell.",
+      "source": "Mira",
+      "turn": 4,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    }
+  ],
+  "evidence": [
+    {
+      "id": "EVIDENCE-001",
+      "description": "A puddle reflection briefly showed 'SECTOR 7 ACCESS DENIED' near the public terminal.",
+      "source": "Signal scan in Rain Alley",
+      "turn": 1,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "EVIDENCE-002",
+      "description": "The public terminal's reflection briefly showed hidden Project Division text: SPECIAL ACQUISITIONS, SECTOR 7 INTAKE, LEGACY FORMAT DETECTED, and MAINTENANCE ACCESS under review.",
+      "source": "Signal overlay at public NEXUS terminal",
+      "turn": 2,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "EVIDENCE-003",
+      "description": "A faded tunnel stencil reads S7 AUX / LEGACY SERVICE / REVIEW LOCK, with a scratched arrow pointing deeper east.",
+      "source": "maintenance tunnel wall",
+      "turn": 6,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "EVIDENCE-004",
+      "description": "A copper wire trail mark and torn gray sleeve cloth were found at the service junction past the heat exchangers.",
+      "source": "observed at heat exchanger junction",
+      "turn": 13,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "EVIDENCE-005",
+      "description": "A small black clamp was left on the damper stack to fake the three-cough patrol warning.",
+      "source": "observed at heat exchanger junction",
+      "turn": 14,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "EVIDENCE-006",
+      "description": "The black damper clamp is a NEXUS-made device that faked the three-cough patrol warning and masked real tunnel sounds.",
+      "source": "removed from damper stack",
+      "turn": 15,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "EVIDENCE-007",
+      "description": "A true Toma and Vey copper trail mark was scratched near the intake lift controls.",
+      "source": "observed beside intake lift",
+      "turn": 15,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "EVIDENCE-008",
+      "description": "Sable identifies the recovered black clamp as a tunnel editor that records and replays false warning patterns.",
+      "source": "Sable's inspection of the clamp",
+      "turn": 16,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "EVIDENCE-009",
+      "description": "White room intake consoles may hold removable white ceramic memory wafers under the patient label printer.",
+      "source": "Sable",
+      "turn": 17,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "EVIDENCE-010",
+      "description": "The white ceramic wafer contains intake records for Toma and Vey and a hidden legacy asset file on Ghost.",
+      "source": "decoded white ceramic wafer",
+      "turn": 20,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "EVIDENCE-011",
+      "description": "During controlled listening, condensation on the white ceramic wafer formed the message: ARCHIVE REMEMBERS. OBSERVATORY POINTS. BELOW WAITS.",
+      "source": "white ceramic wafer reaction during Signal listening",
+      "turn": 22,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "EVIDENCE-012",
+      "description": "The Archive host record strip links host names, handler chain, Orin's division, Mirror Hold, and extracted echoes tied to Ghost.",
+      "source": "duplicated Archive host record strip",
+      "turn": 37,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "EVIDENCE-013",
+      "description": "The Observatory Signal map strip uses Mirror Hold cross-index data to point toward an unnamed below-city Signal coordinate.",
+      "source": "duplicated Observatory map transfer strip",
+      "turn": 37,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "EVIDENCE-014",
+      "description": "The Archive host record strip and Observatory Signal contour align to reveal a door-shaped absence beneath the Undercroft.",
+      "source": "Sable's comparison of the stolen strips",
+      "turn": 39,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "EVIDENCE-015",
+      "description": "The door-shaped absence at the far wall of the sealed pump cathedral matches the aligned Archive host record and Observatory Signal contour.",
+      "source": "observed at the sealed pump cathedral",
+      "turn": 42,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    }
+  ],
+  "theories": [
+    {
+      "id": "THEORY-001",
+      "description": "The Signal may be leaking from Sector 7 through legacy maintenance routing, and Ghost's implant may be keyed to that leak because of past NEXUS involvement.",
+      "source": "deduction after Signal overlay at public NEXUS terminal",
+      "turn": 3,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "THEORY-002",
+      "description": "Ghost's bridge architecture may allow communication between Signal fragments or access to their origin.",
+      "source": "Sable's interpretation of the wafer",
+      "turn": 21,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "THEORY-003",
+      "description": "Extracted fragments may be restorable if Archive Tower records can identify their hosts and the Observatory can map where their echoes still point.",
+      "source": "Sable's interpretation",
+      "turn": 23,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "THEORY-004",
+      "description": "Echo may be the carrier thread needed to move or return fragments without extracting or destroying them.",
+      "source": "Sable's interpretation",
+      "turn": 24,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "THEORY-005",
+      "description": "A true bridge should hold steady while extracted fragments and their people choose whether to return, with witnesses present.",
+      "source": "Ghost's plan with Sable and Patch",
+      "turn": 40,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "THEORY-006",
+      "description": "The bridge can restore connection without merger or silence if Ghost remains singular and carries consent instead of command.",
+      "source": "Ghost's bridge work at the Convergence Heart",
+      "turn": 45,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    }
+  ],
+  "connections": []
+}

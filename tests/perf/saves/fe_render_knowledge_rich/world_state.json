@@ -1,0 +1,107 @@
+{
+  "title": "World State",
+  "nexus_alert": {
+    "current": 49,
+    "status": "Alert",
+    "status_zh": "戒备"
+  },
+  "fragment_decay": {
+    "current": 3,
+    "status": "Stable",
+    "status_zh": "稳定"
+  },
+  "district_access": [
+    {
+      "name": "The Sprawl",
+      "name_zh": "蔓城",
+      "status": "Open",
+      "notes": "Starting area"
+    },
+    {
+      "name": "Neon Row",
+      "name_zh": "霓虹街",
+      "status": "Open",
+      "notes": "Entertainment and intel"
+    },
+    {
+      "name": "The Undercroft",
+      "name_zh": "底渊",
+      "status": "Locked",
+      "notes": "Underground Listener territory"
+    },
+    {
+      "name": "The Spire",
+      "name_zh": "尖塔",
+      "status": "Hidden",
+      "notes": "NEXUS HQ — endgame content"
+    },
+    {
+      "name": "The Resonance",
+      "name_zh": "共鸣所",
+      "status": "Hidden",
+      "notes": "Ancient pre-Severance facility"
+    }
+  ],
+  "_district_registry": {
+    "hidden": true,
+    "undiscovered": [
+      {
+        "name": "Sector 7",
+        "name_zh": "第七区",
+        "status": "Restricted",
+        "unlock": "Requires keycard or disguise",
+        "notes": "Corporate zone"
+      },
+      {
+        "name": "Chrome Heights",
+        "name_zh": "镀金台",
+        "status": "Restricted",
+        "unlock": "Requires invitation or disguise",
+        "notes": "Elite residential area"
+      }
+    ]
+  },
+  "time": {
+    "day": 2,
+    "period": "Afternoon",
+    "period_minutes": 324,
+    "clock": "17:24"
+  },
+  "global_events": [
+    "Archive Tower is reviewing a ghost-shaped authentication irregularity, but the trail has cooled in the drains.",
+    "Ghost has entered old maintenance tunnels beneath The Sprawl.",
+    "Toma and Vey are overdue after checking a service junction near the old laundry heat exchangers.",
+    "Toma and Vey's trail leads to the old laundry heat exchanger junction, where patrol sound carries through the dampers.",
+    "The false damper warning loop near the refuge has been removed; real patrol sounds can carry again.",
+    "Patch and Sable are preparing a quiet rescue plan before the intake lift cycle changes.",
+    "A covert NEXUS utility patrol remains active near the intake lift below the laundry service ducts.",
+    "Toma and Vey have been cut free from the Sector 7 intake throat, but NEXUS collectors may soon notice the loss.",
+    "Sector 7 intake collectors are searching false tunnel trails after the rescue.",
+    "Sable's refuge holds a decoded Sector 7 wafer pointing Ghost toward Archive Tower records in The Spire.",
+    "Patch's refuge now believes Archive Tower records may be needed before attempting to restore extracted fragments.",
+    "Patch's careful Echo message is moving through hidden copper-knot relays.",
+    "An unseen wall relay has answered Ghost's controlled implant knock.",
+    "Masked Signal-aware contacts have answered Ghost's relay and are testing Ghost at the S7 AUX bend.",
+    "Kite's contacts have given Ghost a Neon Row forging lead and a contractor-intake route toward The Spire.",
+    "Ghost has reached The Spire contractor intake under weak courier cover.",
+    "Ghost has entered The Spire contractor intake under stamped damaged-cargo cover.",
+    "Archive reconciliation systems have a small unresolved authentication irregularity.",
+    "Archive reconciliation is reviewing a delayed authentication irregularity tied to Ghost's exfiltration.",
+    "Archive Tower is reviewing a ghost-shaped authentication irregularity from Reconciliation Desk 4B.",
+    "Patch's refuge now holds both the Archive host record strip and the Observatory Signal contour.",
+    "Rill is ready to send a quiet relay for Kite.",
+    "A quiet copper-knot relay has been sent for Kite while the refuge prepares for deeper bridge work.",
+    "Kite's witnesses are assembled at Patch's refuge to guide Ghost toward the sealed convergence.",
+    "Sable is preparing a hard cutoff using the retuned damper clamp and Toma and Vey's intake tags.",
+    "Ghost's witness group has reached the sealed pump cathedral below the old break.",
+    "Archive review remains active above, but the group's route currently has no visible NEXUS patrol.",
+    "The sealed convergence below the old break has opened cleanly under witness.",
+    "Ghost is inside The Resonance pressure-path while witnesses hold the cutoff line.",
+    "At the Convergence Heart, Ghost has opened a consent-bearing bridge between the severed core and the gathered echoes.",
+    "Some lost echoes have begun choosing their own paths without force, extraction, or merger."
+  ],
+  "_ending_trajectory": {
+    "hidden": true,
+    "value": "neutral — no direction yet"
+  }
+}

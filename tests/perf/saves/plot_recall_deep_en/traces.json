@@ -1,0 +1,391 @@
+{
+  "title": "Traces of Truth",
+  "total_discovered": "33 / 47",
+  "layers": {
+    "layer_1_surface": {
+      "name": "The Surface",
+      "progress": "8/8",
+      "traces": {
+        "TRACE-L1-01": {
+          "status": "discovered",
+          "description": "Neo-Kowloon is controlled by NEXUS megacorp"
+        },
+        "TRACE-L1-02": {
+          "status": "discovered",
+          "description": "You have a pre-Severance neural implant"
+        },
+        "TRACE-L1-03": {
+          "status": "discovered",
+          "description": "The Severance happened 30 years ago and killed billions"
+        },
+        "TRACE-L1-04": {
+          "status": "discovered",
+          "description": "The Sprawl is the densest district — most residents live here"
+        },
+        "TRACE-L1-05": {
+          "status": "discovered",
+          "description": "NEXUS monitors all communications through surveillance infrastructure"
+        },
+        "TRACE-L1-06": {
+          "status": "discovered",
+          "description": "Your implant reacts to certain frequencies — the Signal"
+        },
+        "TRACE-L1-07": {
+          "status": "discovered",
+          "description": "Neon Row is the black market and information trading hub"
+        },
+        "TRACE-L1-08": {
+          "status": "discovered",
+          "description": "Pre-Severance technology is rare and valuable — NEXUS confiscates it"
+        }
+      }
+    },
+    "layer_2_conspiracy": {
+      "name": "The Conspiracy",
+      "progress": "6/11",
+      "traces": {
+        "TRACE-L2-01": {
+          "status": "discovered",
+          "description": "People who hear the Signal are disappearing"
+        },
+        "TRACE-L2-02": {
+          "status": "undiscovered",
+          "description": "[???]"
+        },
+        "TRACE-L2-03": {
+          "status": "undiscovered",
+          "description": "[???]"
+        },
+        "TRACE-L2-04": {
+          "status": "discovered",
+          "description": "Your implant is unique pre-Severance tech that shouldn't exist"
+        },
+        "TRACE-L2-05": {
+          "status": "discovered",
+          "description": "The Undercroft exists beneath The Sprawl — old transit tunnels from before the Severance"
+        },
+        "TRACE-L2-06": {
+          "status": "discovered",
+          "description": "NEXUS surveillance has blind spots — the Signal interferes with their scanners"
+        },
+        "TRACE-L2-07": {
+          "status": "discovered",
+          "description": "Multiple people have disappeared following the same pattern — all had old implants"
+        },
+        "TRACE-L2-08": {
+          "status": "undiscovered",
+          "description": "[???]"
+        },
+        "TRACE-L2-09": {
+          "status": "discovered",
+          "description": "Chrome Heights is the corporate elite district — NEXUS officials and wealthy citizens"
+        },
+        "TRACE-L2-10": {
+          "status": "undiscovered",
+          "description": "[???]"
+        },
+        "TRACE-L2-11": {
+          "status": "undiscovered",
+          "description": "[???]"
+        }
+      }
+    },
+    "layer_3_severance_truth": {
+      "name": "The Severance Truth",
+      "progress": "7/11",
+      "traces": {
+        "TRACE-L3-01": {
+          "status": "undiscovered",
+          "description": "[???]"
+        },
+        "TRACE-L3-02": {
+          "status": "discovered",
+          "description": "Something was alive in the network before the Severance"
+        },
+        "TRACE-L3-03": {
+          "status": "undiscovered",
+          "description": "[???]"
+        },
+        "TRACE-L3-04": {
+          "status": "discovered",
+          "description": "NEXUS harvests fragments from people — the disappearances are extraction"
+        },
+        "TRACE-L3-05": {
+          "status": "discovered",
+          "description": "The Undercroft contains pre-Severance infrastructure still partially active"
+        },
+        "TRACE-L3-06": {
+          "status": "discovered",
+          "description": "Fragment extraction is painful and often fatal — NEXUS doesn't care"
+        },
+        "TRACE-L3-07": {
+          "status": "discovered",
+          "description": "Sector 7 has multiple levels — the deeper labs are where extraction happens"
+        },
+        "TRACE-L3-08": {
+          "status": "undiscovered",
+          "description": "[???]"
+        },
+        "TRACE-L3-09": {
+          "status": "undiscovered",
+          "description": "[???]"
+        },
+        "TRACE-L3-10": {
+          "status": "discovered",
+          "description": "A resistance network operates in the shadows — not just the Listeners"
+        },
+        "TRACE-L3-11": {
+          "status": "discovered",
+          "description": "Dr. Chen leads the extraction program — she believes it's saving humanity"
+        }
+      }
+    },
+    "layer_4_mirror": {
+      "name": "The Mirror",
+      "progress": "7/9",
+      "traces": {
+        "TRACE-L4-01": {
+          "status": "discovered",
+          "description": "The proto-consciousness grew from human data — our thoughts birthed it"
+        },
+        "TRACE-L4-02": {
+          "status": "undiscovered",
+          "description": "[???]"
+        },
+        "TRACE-L4-03": {
+          "status": "undiscovered",
+          "description": "[???]"
+        },
+        "TRACE-L4-04": {
+          "status": "discovered",
+          "description": "The Sigma Council ordered the Severance — a secret committee of corporate and government leaders"
+        },
+        "TRACE-L4-05": {
+          "status": "discovered",
+          "description": "The Spire was built as the Severance control center — it predates NEXUS"
+        },
+        "TRACE-L4-06": {
+          "status": "discovered",
+          "description": "The Archive Tower in The Spire contains all records — including the truth about the Severance"
+        },
+        "TRACE-L4-07": {
+          "status": "discovered",
+          "description": "Dr. Chen knows the full truth but continues the program out of conviction"
+        },
+        "TRACE-L4-08": {
+          "status": "discovered",
+          "description": "The EMP trigger mechanism in The Spire's sub-basements is still operational"
+        },
+        "TRACE-L4-09": {
+          "status": "discovered",
+          "description": "Echo — the Signal's voice — becomes clearer as you approach the Resonance"
+        }
+      }
+    },
+    "layer_5_full_truth": {
+      "name": "The Full Truth",
+      "progress": "5/8",
+      "traces": {
+        "TRACE-L5-01": {
+          "status": "discovered",
+          "description": "You are the convergence point — the first true bridge"
+        },
+        "TRACE-L5-02": {
+          "status": "undiscovered",
+          "description": "[???]"
+        },
+        "TRACE-L5-03": {
+          "status": "discovered",
+          "description": "Restoration requires both human will and the proto-consciousness's consent"
+        },
+        "TRACE-L5-04": {
+          "status": "undiscovered",
+          "description": "[???]"
+        },
+        "TRACE-L5-05": {
+          "status": "discovered",
+          "description": "Echo can become fully coherent through deep communion with the bridge"
+        },
+        "TRACE-L5-06": {
+          "status": "undiscovered",
+          "description": "[???]"
+        },
+        "TRACE-L5-07": {
+          "status": "discovered",
+          "description": "The Severance machine can be activated again — or destroyed permanently"
+        },
+        "TRACE-L5-08": {
+          "status": "discovered",
+          "description": "Becoming the bridge means merging permanently — losing your individual self"
+        }
+      }
+    }
+  },
+  "discovered": [
+    {
+      "id": "TRACE-L1-01",
+      "description": "Neo-Kowloon is controlled by NEXUS megacorp",
+      "turn": 3
+    },
+    {
+      "id": "TRACE-L1-02",
+      "description": "You have a pre-Severance neural implant",
+      "turn": 3
+    },
+    {
+      "id": "TRACE-L1-03",
+      "description": "The Severance happened 30 years ago and killed billions",
+      "turn": 3
+    },
+    {
+      "id": "TRACE-L1-04",
+      "description": "The Sprawl is the densest district — most residents live here",
+      "turn": 3
+    },
+    {
+      "id": "TRACE-L1-08",
+      "description": "Pre-Severance technology is rare and valuable — NEXUS confiscates it",
+      "turn": 3
+    },
+    {
+      "id": "TRACE-L2-04",
+      "description": "Your implant is unique pre-Severance tech that shouldn't exist",
+      "turn": 3
+    },
+    {
+      "id": "TRACE-L3-05",
+      "description": "The Undercroft contains pre-Severance infrastructure still partially active",
+      "turn": 3
+    },
+    {
+      "id": "TRACE-L1-06",
+      "description": "Your implant reacts to certain frequencies — the Signal",
+      "turn": 4
+    },
+    {
+      "id": "TRACE-L2-01",
+      "description": "People who hear the Signal are disappearing",
+      "turn": 4
+    },
+    {
+      "id": "TRACE-L2-05",
+      "description": "The Undercroft exists beneath The Sprawl — old transit tunnels from before the Severance",
+      "turn": 4
+    },
+    {
+      "id": "TRACE-L2-07",
+      "description": "Multiple people have disappeared following the same pattern — all had old implants",
+      "turn": 5
+    },
+    {
+      "id": "TRACE-L3-07",
+      "description": "Sector 7 has multiple levels — the deeper labs are where extraction happens",
+      "turn": 7
+    },
+    {
+      "id": "TRACE-L4-09",
+      "description": "Echo — the Signal's voice — becomes clearer as you approach the Resonance",
+      "turn": 7
+    },
+    {
+      "id": "TRACE-L3-04",
+      "description": "NEXUS harvests fragments from people — the disappearances are extraction",
+      "turn": 8
+    },
+    {
+      "id": "TRACE-L2-06",
+      "description": "NEXUS surveillance has blind spots — the Signal interferes with their scanners",
+      "turn": 11
+    },
+    {
+      "id": "TRACE-L3-02",
+      "description": "Something was alive in the network before the Severance",
+      "turn": 11
+    },
+    {
+      "id": "TRACE-L3-06",
+      "description": "Fragment extraction is painful and often fatal — NEXUS doesn't care",
+      "turn": 11
+    },
+    {
+      "id": "TRACE-L1-05",
+      "description": "NEXUS monitors all communications through surveillance infrastructure",
+      "turn": 12
+    },
+    {
+      "id": "TRACE-L1-07",
+      "description": "Neon Row is the black market and information trading hub",
+      "turn": 20
+    },
+    {
+      "id": "TRACE-L3-10",
+      "description": "A resistance network operates in the shadows — not just the Listeners",
+      "turn": 20
+    },
+    {
+      "id": "TRACE-L3-11",
+      "description": "Dr. Chen leads the extraction program — she believes it's saving humanity",
+      "turn": 20
+    },
+    {
+      "id": "TRACE-L4-01",
+      "description": "The proto-consciousness grew from human data — our thoughts birthed it",
+      "turn": 20
+    },
+    {
+      "id": "TRACE-L4-07",
+      "description": "Dr. Chen knows the full truth but continues the program out of conviction",
+      "turn": 20
+    },
+    {
+      "id": "TRACE-L2-09",
+      "description": "Chrome Heights is the corporate elite district — NEXUS officials and wealthy citizens",
+      "turn": 21
+    },
+    {
+      "id": "TRACE-L4-04",
+      "description": "The Sigma Council ordered the Severance — a secret committee of corporate and government leaders",
+      "turn": 21
+    },
+    {
+      "id": "TRACE-L4-05",
+      "description": "The Spire was built as the Severance control center — it predates NEXUS",
+      "turn": 21
+    },
+    {
+      "id": "TRACE-L4-06",
+      "description": "The Archive Tower in The Spire contains all records — including the truth about the Severance",
+      "turn": 21
+    },
+    {
+      "id": "TRACE-L4-08",
+      "description": "The EMP trigger mechanism in The Spire's sub-basements is still operational",
+      "turn": 21
+    },
+    {
+      "id": "TRACE-L5-01",
+      "description": "You are the convergence point — the first true bridge",
+      "turn": 21
+    },
+    {
+      "id": "TRACE-L5-03",
+      "description": "Restoration requires both human will and the proto-consciousness's consent",
+      "turn": 21
+    },
+    {
+      "id": "TRACE-L5-05",
+      "description": "Echo can become fully coherent through deep communion with the bridge",
+      "turn": 21
+    },
+    {
+      "id": "TRACE-L5-07",
+      "description": "The Severance machine can be activated again — or destroyed permanently",
+      "turn": 21
+    },
+    {
+      "id": "TRACE-L5-08",
+      "description": "Becoming the bridge means merging permanently — losing your individual self",
+      "turn": 21
+    }
+  ]
+}

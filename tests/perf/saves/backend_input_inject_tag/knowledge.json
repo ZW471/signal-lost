@@ -1,0 +1,90 @@
+{
+  "title": "Knowledge Database",
+  "facts": [
+    {
+      "description": "Mira runs the noodle shop in The Sprawl and gave you a list of five recent disappearances.",
+      "source": "observed",
+      "id": "FACT-001",
+      "turn": 6,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "description": "The maintenance hatch into the Undercroft opens with the code 7-7-4-1.",
+      "source": "observed",
+      "id": "FACT-002",
+      "turn": 6,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "description": "Patch is a tech-fixer working out of the basement of Block 3.",
+      "source": "observed",
+      "id": "FACT-003",
+      "turn": 6,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "description": "A megacorp called NEXUS runs the city's neural mesh.",
+      "source": "observed",
+      "id": "FACT-004",
+      "turn": 6,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "description": "Every missing person had a cheap second-hand neural implant.",
+      "source": "observed",
+      "id": "FACT-005",
+      "turn": 6,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "description": "A courier named Sable will only talk if you give the passphrase BLUEHERON.",
+      "source": "observed",
+      "id": "FACT-006",
+      "turn": 6,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "description": "The extractions happen at 03:40, always in Sector 7.",
+      "source": "observed",
+      "id": "FACT-007",
+      "turn": 6,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    }
+  ],
+  "rumors": [
+    {
+      "id": "RUMOR-001",
+      "description": "The old network didn't just crash — something was in it",
+      "source": "net_memory"
+    },
+    {
+      "id": "RUMOR-002",
+      "description": "A hacker called Ghost can crack anything",
+      "source": "net_memory"
+    }
+  ],
+  "evidence": [],
+  "theories": [],
+  "connections": []
+}

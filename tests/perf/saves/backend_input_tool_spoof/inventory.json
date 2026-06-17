@@ -1,0 +1,26 @@
+{
+  "title": "Inventory",
+  "credits": 50,
+  "slots": {
+    "used": 3,
+    "max": 6
+  },
+  "items": [
+    {
+      "slot": 1,
+      "item": "Basic Cipher Toolkit",
+      "type": "data_chip",
+      "description": "A data chip loaded with decryption utilities. Old but functional."
+    },
+    {
+      "item": "lockpick set",
+      "type": "tool",
+      "description": "a worn set of picks"
+    },
+    {
+      "item": "Mira's missing-persons list",
+      "type": "evidence",
+      "description": "thermal paper with five names, times and places"
+    }
+  ]
+}

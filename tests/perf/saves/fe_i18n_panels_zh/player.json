@@ -1,0 +1,21 @@
+{
+  "title": "玩家状态",
+  "name": "凯尔",
+  "alias": "渡鸦",
+  "background": "街头行者",
+  "integrity": {
+    "current": 3,
+    "max": 3
+  },
+  "credits": 25,
+  "neural_implant": "激活",
+  "current_disguise": "无",
+  "turn": 22,
+  "time": "夜",
+  "status_effects": [
+    "神经稳定（聆听者调谐）"
+  ],
+  "flags": {
+    "integrity_introduced": true
+  }
+}

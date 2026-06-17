@@ -1,0 +1,11 @@
+{
+  "title": "Session Log",
+  "entries": [
+    {
+      "turn": 1,
+      "title": "Awakening",
+      "description": "You wake in a rain-soaked alley in The Sprawl with no memory and a humming neural implant.",
+      "signal": true
+    }
+  ]
+}

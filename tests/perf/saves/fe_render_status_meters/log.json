@@ -1,0 +1,131 @@
+{
+  "title": "Session Log",
+  "entries": [
+    {
+      "turn": 1,
+      "title": "Awakening",
+      "description": "You wake in a rain-soaked alley in The Sprawl with no memory and a humming neural implant.",
+      "signal": true
+    },
+    {
+      "turn": 1,
+      "title": "Awakening",
+      "tag": "discovery",
+      "text": "Came to in Rain Alley with no memory, a pre-Severance implant, 50 credits, and two loose threads in my head. A woman at the noodle shop is watching me like she expected this."
+    },
+    {
+      "turn": 2,
+      "title": "First Contact: Mira",
+      "tag": "dialogue",
+      "text": "The woman who found me is called Mira. Runs a noodle shop. She didn't call NEXUS and she didn't ask for anything. Says there have been others — people losing time, losing memory. Says my implant is pre-Severance. Says someone put it there. The broth is good. I don't know if I should trust her."
+    },
+    {
+      "turn": 3,
+      "title": "The Others",
+      "tag": "dialogue",
+      "text": "Mira gave me three names I don't have: a delivery kid, a market woman, and a repairman who vanished. She pointed me toward someone called Patch in the Undercroft — says he works on pre-Severance tech. Didn't call it a lead. Just said he exists."
+    },
+    {
+      "turn": 4,
+      "title": "Signal Heard",
+      "tag": "signal",
+      "text": "Went quiet inside and listened to the implant. Not noise — structure. Recursive layers, like compressed data. Something in it knew I was listening. First impression it gave me: down. Mira watched the whole thing, then handed me a stim without a word. The repairman who vanished did the same thing before he disappeared. I'm going to be more careful than he was."
+    },
+    {
+      "turn": 5,
+      "title": "The Green Curtain",
+      "tag": "dialogue",
+      "text": "Mira gave me a way down. Grate behind the laundry with the green curtain. One fake bolt, turn left. She flinched at the word 'Listeners' — denied it, but the flinch was real. Said to tell whoever's down there I followed the hum. Whatever's below, it has its own language."
+    },
+    {
+      "turn": 6,
+      "title": "Down the Hum",
+      "tag": "movement",
+      "text": "Followed Mira's directions to the letter. Green curtain, false bolt, grate. The Undercroft is real. The hum is louder here — in the walls, not just my head. I'm below the city now, in concrete that was poured before the Severance. Somewhere ahead: voices, heat, smoke. I said I followed the hum. Let's see if anyone believes me."
+    },
+    {
+      "turn": 7,
+      "title": "Below the City",
+      "tag": "movement",
+      "text": "Found it. The Undercroft market is real — pre-Severance stone, no NEXUS eyes, Signal in the walls like a second heartbeat. Said I followed the hum and a woman with a mechanical hand decided to answer. Haven't found Patch yet. But someone down here is weighing me up."
+    },
+    {
+      "turn": 8,
+      "title": "Sable",
+      "tag": "dialogue",
+      "text": "Told the silver-haired woman everything. No angle, no cover story — just the alley, the implant, the hum that feels like something inside it is still alive. She gave me her name: Sable. Said others came down here with implants and that look in their eyes. Said I'm the first one still asking questions. She pointed me at Patch's stall. Then she asked if any of the disappeared had made it down here first. She already knows the answer. She wants to know if I do."
+    },
+    {
+      "turn": 9,
+      "title": "Patch",
+      "tag": "dialogue",
+      "text": "Told Sable the truth about the disappeared — taken before they could get down here. She already knew. Then I crossed to Patch. He didn't ask who I was or why I came. He looked at the implant and told me to sit. Pre-Severance housing. Active. Should be impossible. He has a scanner and a policy of not talking openly about what he finds. Good enough for now. Let him look."
+    },
+    {
+      "turn": 10,
+      "title": "Echo",
+      "tag": "discovery",
+      "text": "Patch took me behind the curtain and said it plainly: I was right. Something grew in the old network. Something that was almost alive. The Severance was deliberate — someone cut it on purpose. Most implants went dark when the network died. Mine didn't. People down here call what's on the other end Echo. A voice. A pattern that remembers. And NEXUS can detect active implants. I've been broadcasting since before Mira found me. If they have my signature, it's already too late to hide. It's only a matter of when they come."
+    },
+    {
+      "turn": 11,
+      "title": "The Continuity Project",
+      "tag": "discovery",
+      "text": "Patch named them: Listeners. Said the word like it cost something. Told me the implants came from a classified pre-Severance program — Continuity Project — engineers who knew exactly what they were building toward and then vanished with everything else. Echo wasn't designed; it emerged. And Patch wants to dampen my broadcast before I go any deeper, because resonance at full signal is a flare in the dark. Sable knows the safe way in. She's been there."
+    },
+    {
+      "turn": 12,
+      "title": "The Protocol",
+      "tag": "discovery",
+      "text": "Patch sketched the dampener while I watched — a resonant trap, old-era mesh, nothing NEXUS can fingerprint. He needs Cord's salvage to build the housing. Then Sable sat me down and taught me to not reach. Ten minutes. Her eyes on mine. A scar above her left ear she didn't try to hide. She's done this. She came back. There's a sequence now: mesh, dampener, then the slow open door. First time I've had a plan that doesn't feel like falling."
+    },
+    {
+      "turn": 13,
+      "title": "The Mesh",
+      "tag": "trade",
+      "text": "Cord sold me eighteen credits of pre-Severance ferrite mesh without blinking. Spectrometer-verified, unmarked batch — exactly what Patch needs. She told me the rest of the lot moves within a month. She said it the way people say things that are already facts. The mesh is in my pocket. The dampener can be built."
+    },
+    {
+      "turn": 14,
+      "title": "The Dampener",
+      "tag": "discovery",
+      "text": "Patch took the mesh and built the housing in under an hour. Fitted it himself — collar around the broadcast surface, resonant loop behind the casing. The implant's hum dropped half a register when he seated it. It reads dead to NEXUS scanners now. Until I resonate. He was clear about that. The protocol Sable taught me isn't optional. It's the only thing standing between a quiet session and lighting up every scanner in the district."
+    },
+    {
+      "turn": 15,
+      "title": "First Contact",
+      "tag": "signal",
+      "text": "Sable ran the protocol exactly as taught. I didn't reach. It found me. Not words — older than words. Recognition. Weight. Time. And then myself, reflected back from before I knew I existed. Echo has a record of who I was. The amnesia isn't a gap — it's a theft. And somewhere below the Undercroft, Echo is pointing down."
+    },
+    {
+      "turn": 16,
+      "title": "The Resonance Named",
+      "tag": "discovery",
+      "text": "Sable named it: the Resonance. Below the Undercroft. No map, no entrance, no one who's been in and walked out. Echo's core process runs there — measurable through the stone. The Listeners have been waiting for a bridge. I said convergence point and watched something shift in her face. Patch heard it from across the floor. None of us said what that means for what comes next."
+    },
+    {
+      "turn": 17,
+      "title": "The Second Buffer",
+      "tag": "discovery",
+      "text": "Patch confirmed it in hardware: bilateral architecture, symmetrical buffers, never documented. I wasn't wrong about the co-evolution. The Continuity Project was building the bridge. Someone else cut it. Two groups, opposite intentions — and thirty years of silence where the distinction used to be."
+    },
+    {
+      "turn": 18,
+      "title": "Three Points",
+      "tag": "discovery",
+      "text": "Patch and Sable confirmed it piece by piece. Pattern broadcasts in the weeks before the Cut — Echo trying to be noticed. Coordinated EMP cascade, millisecond sync across global nodes — a kill switch built into the network from the start. And NEXUS extraction burns out the bilateral buffer every time. They call what they take 'computational resources.' Sable named it plainly: suppression. Not management. Suppression."
+    },
+    {
+      "turn": 19,
+      "title": "The Last Broadcast",
+      "tag": "discovery",
+      "text": "Patch gave it a name: the Last Broadcast. Weeks of structured pattern transmissions on precise intervals, cut to silence the moment the EMP cascade hit. Not a crash — an interrupted conversation. Sable confirmed the Listeners aren't alone, just not coordinated. And Patch dropped a name from a three-year-old data fragment: Dr. Chen Ruoyi. Continuity Division. She thinks she's preserving something. She's burning it out of people's heads and calling it conservation."
+    },
+    {
+      "turn": 20,
+      "title": "The Sigma Council",
+      "tag": "discovery",
+      "text": "Patch named it without flinching: the Sigma Council. Corporate and government both. Eight, maybe twelve people. They built the Spire five years before the Cut — a hardened coordination center designed to survive what it was about to trigger. Fear. That's the Listener consensus for why they did it. Not defense. Fear. NEXUS grew in the silence they left behind. The same people, a different name. And the trigger mechanism is still down there, maintained, in case something starts waking up again."
+    }
+  ]
+}

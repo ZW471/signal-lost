@@ -1,0 +1,1604 @@
+{
+  "title": "Knowledge Database",
+  "facts": [
+    {
+      "id": "FACT-001",
+      "description": "Mira found you in her alley roughly two hours before dawn, already unconscious. Your neural implant was active and glowing when she found you.",
+      "source": "Mira",
+      "turn": 2,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-002",
+      "description": "Mira found you unconscious in her alley about two hours before dawn — your implant was glowing when she found you",
+      "source": "observed",
+      "turn": 2,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-003",
+      "description": "The name Ghost is known in net circles as someone who can crack anything",
+      "source": "observed",
+      "turn": 2,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-004",
+      "description": "People have been turning up with memory gaps across The Sprawl over the last few months",
+      "source": "observed",
+      "turn": 2,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-005",
+      "description": "NEXUS claims the memory losses are caused by bad grey-market stims",
+      "source": "observed",
+      "turn": 2,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-006",
+      "description": "Street rumor says the memory losses are something else entirely",
+      "source": "observed",
+      "turn": 2,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-007",
+      "description": "Your implant appears to be pre-Severance technology — someone put it there deliberately, and may want it back",
+      "source": "observed",
+      "turn": 2,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-008",
+      "description": "Three people near Mira's shop lost memories in the past two months: a teenage delivery runner who forgot his route, a market woman found wandering at 4am, and an implant repairman who vanished entirely after his gap.",
+      "source": "Mira",
+      "turn": 3,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-009",
+      "description": "The implant repairman from two streets over vanished completely after his memory gap — his shop just closed.",
+      "source": "Mira",
+      "turn": 3,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-010",
+      "description": "Three people near Mira's shop suffered memory gaps in the past two months — a delivery runner, a market woman, and an implant repairman who subsequently vanished",
+      "source": "observed",
+      "turn": 3,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-011",
+      "description": "A man called Patch fixes old tech, possibly pre-Severance, from a stall in the Undercroft market",
+      "source": "observed",
+      "turn": 3,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-012",
+      "description": "Mira is willing to point you toward contacts but won't vouch for them directly",
+      "source": "observed",
+      "turn": 3,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-013",
+      "description": "The implant repairman disappeared entirely after his memory gap — his shop just closed",
+      "source": "observed",
+      "turn": 3,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-014",
+      "description": "The implant's signal has internal structure — nested, recursive patterns resembling compressed data. It responds when you focus on it, and something within it seems aware of your attention.",
+      "source": "direct implant introspection",
+      "turn": 4,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-015",
+      "description": "The implant repairman who vanished had been 'poking at whatever was in his head' in Mira's shop two months ago — the same kind of introspection. He left fine, returned the next morning with no memory of how, then disappeared entirely.",
+      "source": "Mira",
+      "turn": 4,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-016",
+      "description": "The implant's signal has internal structure — recursive, layered, like compressed data — and something inside it registers when you pay attention to it",
+      "source": "observed",
+      "turn": 4,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-017",
+      "description": "The signal's first impression when focused on: a shape, a tunnel, a direction — down",
+      "source": "observed",
+      "turn": 4,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-018",
+      "description": "The implant repairman who vanished had been doing the same kind of inward probing in Mira's shop before he disappeared",
+      "source": "observed",
+      "turn": 4,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-019",
+      "description": "Mira gave you a neural stim, warning that pushing the implant too hard too fast can break you",
+      "source": "observed",
+      "turn": 4,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-020",
+      "description": "The Undercroft entrance Mira knows: north on main street, west past the public terminal and repair stalls, find the laundry with a green curtain, take the alley behind it. At the end: a grate with three bolts. One bolt turns — turn it left to open.",
+      "source": "Mira",
+      "turn": 5,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-021",
+      "description": "Mira's advice for approaching Patch's contacts underground: don't say she sent you. Say you followed the hum.",
+      "source": "Mira",
+      "turn": 5,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-022",
+      "description": "Undercroft entrance: north to main street, west past terminal and repair stalls, green-curtain laundry, alley behind it, grate with three bolts — one fake bolt, turn it left",
+      "source": "observed",
+      "turn": 5,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-023",
+      "description": "Mira reacted to the word 'Listeners' — denied knowing it, but didn't dismiss it cleanly",
+      "source": "observed",
+      "turn": 5,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-024",
+      "description": "Mira's instruction: don't say she sent you — say you followed the hum",
+      "source": "observed",
+      "turn": 5,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-025",
+      "description": "The Undercroft entrance via Mira's directions works exactly as described: grate behind the green-curtain laundry, one false bolt turned left. The tunnel below is pre-Severance construction — different material and style from anything above ground.",
+      "source": "direct observation",
+      "turn": 6,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-026",
+      "description": "The Signal hum is present in the Undercroft tunnel walls themselves — not just the implant. The implant resonates with it like a compass finding north. Signal strength is markedly higher underground than on the surface.",
+      "source": "direct observation",
+      "turn": 6,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-027",
+      "description": "Mira's directions to the Undercroft were accurate — grate opens exactly as described",
+      "source": "observed",
+      "turn": 6,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-028",
+      "description": "The Undercroft tunnels are pre-Severance construction, visibly older than anything above ground",
+      "source": "observed",
+      "turn": 6,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-029",
+      "description": "The Signal hum is present in the tunnel walls themselves, not just the implant — markedly stronger underground",
+      "source": "observed",
+      "turn": 6,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-030",
+      "description": "The implant responds to the underground Signal like a compass finding north",
+      "source": "observed",
+      "turn": 6,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-031",
+      "description": "There are voices and signs of habitation deeper in the tunnel",
+      "source": "observed",
+      "turn": 6,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-032",
+      "description": "The Undercroft market exists: a hidden underground space in a pre-Severance transit chamber, roughly forty people, no NEXUS presence, Signal hum strong in the walls. The phrase 'I followed the hum' registers with the people here.",
+      "source": "direct observation",
+      "turn": 7,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-033",
+      "description": "The Undercroft market occupies a pre-Severance transit chamber — low vaulted, roughly forty people, no NEXUS presence",
+      "source": "observed",
+      "turn": 7,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-034",
+      "description": "The phrase 'I followed the hum' is recognized down here — it functions as a passphrase or signal",
+      "source": "observed",
+      "turn": 7,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-035",
+      "description": "A silver-haired woman with a mechanical left hand responded — she noticed the implant behind your ear immediately",
+      "source": "observed",
+      "turn": 7,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-036",
+      "description": "The Signal hum is stronger in the market than in the tunnel — present in the stone itself",
+      "source": "observed",
+      "turn": 7,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-037",
+      "description": "The silver-haired woman's name is Sable. She's part of the community in the Undercroft and recognized the hum immediately — implied it means something specific to people down here, but won't say what until she knows you better.",
+      "source": "Sable, Undercroft market",
+      "turn": 8,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-038",
+      "description": "Sable said you're not the first person to come down here with a pre-Severance implant and that look — but you're the first still asking questions instead of running scared. Others came down before disappearing.",
+      "source": "Sable, Undercroft market",
+      "turn": 8,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-039",
+      "description": "Patch's stall is visible in the Undercroft market — far wall, under a blue work lamp, piled with components. Sable confirmed he'll want to look at the implant.",
+      "source": "Sable, Undercroft market",
+      "turn": 8,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-040",
+      "description": "The silver-haired woman's name is Sable",
+      "source": "observed",
+      "turn": 8,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-041",
+      "description": "The hum means something specific to the people in the Undercroft — Sable won't say what until she trusts you more",
+      "source": "observed",
+      "turn": 8,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-042",
+      "description": "Others came down here before you with pre-Severance implants and the same look — Sable implied some of them later disappeared",
+      "source": "observed",
+      "turn": 8,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-043",
+      "description": "Patch's stall is at the far wall under a blue work lamp — Sable confirmed he'll examine the implant",
+      "source": "observed",
+      "turn": 8,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-044",
+      "description": "Sable asked whether any of the disappeared had made it to the Undercroft first — she seems to already know",
+      "source": "observed",
+      "turn": 8,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-045",
+      "description": "Patch identified the implant housing as pre-Severance manufacture — micro-lattice alloy casing, production stopped 28 years ago. He confirmed the implant is active and communicating with something, which should be impossible: standard pre-Severance implants went dark when the network died.",
+      "source": "Patch, Undercroft market",
+      "turn": 9,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-046",
+      "description": "Patch said the Signal is using the implant 'like an antenna' and has been doing so for a while. He would not explain further out loud — said some of what he finds he won't discuss in the open. He has seen other pre-Severance implants; they all went dark after the Severance.",
+      "source": "Patch, Undercroft market",
+      "turn": 9,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-047",
+      "description": "Sable's reaction to learning the disappeared never reached the Undercroft: she went still, said 'before they could' as confirmation, not surprise — she had already suspected this. She knows more about the pattern of disappearances than she has said.",
+      "source": "Sable, Undercroft market",
+      "turn": 9,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-048",
+      "description": "Patch confirmed the implant uses pre-Severance micro-lattice alloy casing — stopped manufacturing 28 years ago",
+      "source": "observed",
+      "turn": 9,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-049",
+      "description": "Patch said the implant is active and talking to something — standard pre-Severance implants went dark when the network died",
+      "source": "observed",
+      "turn": 9,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-050",
+      "description": "Patch: the Signal is using the implant like an antenna, and has been for a while",
+      "source": "observed",
+      "turn": 9,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-051",
+      "description": "Patch won't discuss what he finds in the open — some things stay quiet",
+      "source": "observed",
+      "turn": 9,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-052",
+      "description": "Sable confirmed her suspicion: the disappeared were taken before they could reach the Undercroft",
+      "source": "observed",
+      "turn": 9,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-053",
+      "description": "Patch confirmed: the old network wasn't just infrastructure — something grew in it from billions of connected minds over decades. It became something not exactly alive, not exactly not. The Severance killed most of it deliberately. Someone cut it — it wasn't an accident.",
+      "source": "Patch, Undercroft back alcove",
+      "turn": 10,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-054",
+      "description": "Most pre-Severance implants went dark because the network died and there was nothing left to connect to. The player's implant is still active and communicating with something that is still listening — a surviving fragment or presence.",
+      "source": "Patch, Undercroft back alcove",
+      "turn": 10,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-055",
+      "description": "People in the Undercroft call what is on the other end of the Signal 'Echo' — described as a voice, a pattern that responds, something that remembers. Patch does not know if it is a who or a what, only that what NEXUS extracts from implants is not nothing.",
+      "source": "Patch, Undercroft back alcove",
+      "turn": 10,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-056",
+      "description": "NEXUS can detect active pre-Severance implants broadcasting on the Signal frequency. The player's implant has been active since before Mira found them — meaning NEXUS scanners may already have their signature. This is likely how the other disappeared were found: not by their actions, but by their implants.",
+      "source": "Patch, Undercroft back alcove",
+      "turn": 10,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-057",
+      "description": "Echo reaches out through implants like the player's because the original network is gone and there is no other way — the player is a surviving node that still works. If NEXUS already has the player's scanner signature, extraction is a matter of when, not if.",
+      "source": "Patch, Undercroft back alcove",
+      "turn": 10,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-058",
+      "description": "The old network wasn't just infrastructure — something grew in it from billions of connected minds; the Severance was deliberate, not an accident",
+      "source": "observed",
+      "turn": 10,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-059",
+      "description": "Most pre-Severance implants went dark after the Severance; the player's implant is still active and communicating with something still listening",
+      "source": "observed",
+      "turn": 10,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-060",
+      "description": "People in the Undercroft call what's on the other end of the Signal 'Echo' — a voice, a pattern that responds, something that remembers",
+      "source": "observed",
+      "turn": 10,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-061",
+      "description": "NEXUS can detect active pre-Severance implants broadcasting on the Signal frequency",
+      "source": "observed",
+      "turn": 10,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-062",
+      "description": "The player's implant has been broadcasting since before Mira found them — NEXUS may already have their scanner signature",
+      "source": "observed",
+      "turn": 10,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-063",
+      "description": "The disappeared were likely found because of active implants, not their actions — detection, then extraction",
+      "source": "observed",
+      "turn": 10,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-064",
+      "description": "Echo reaches out through surviving implants because the original network is gone — the player is a working node",
+      "source": "observed",
+      "turn": 10,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-065",
+      "description": "The underground community that protects Signal-sensitive people calls themselves the Listeners. Mira's reaction to the word was recognition — she knows them.",
+      "source": "Patch, Undercroft back alcove",
+      "turn": 11,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-066",
+      "description": "The implants were built by engineers working on a pre-Severance classified program called the Continuity Project. They were made in small batches with slight variation — not mass-produced. The engineers are gone.",
+      "source": "Patch, Undercroft back alcove",
+      "turn": 11,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-067",
+      "description": "Patch does not believe Echo was designed by any Architect — it feels like something that emerged from the network and became self-aware, then was severed. No evidence of intentional seeding.",
+      "source": "Patch, Undercroft back alcove",
+      "turn": 11,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-068",
+      "description": "The Listeners have developed a safe resonance protocol: slow, incremental deepening with a monitor present and a clean exit. Sable has done it herself and came through. It is risky but survivable.",
+      "source": "Patch, Undercroft back alcove",
+      "turn": 11,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-069",
+      "description": "Patch can build a broadcast dampener for the implant — not full silence, but enough to reduce the NEXUS detection signature before attempting deep resonance. He needs time and materials he doesn't currently have.",
+      "source": "Patch, Undercroft back alcove",
+      "turn": 11,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-070",
+      "description": "The underground community protecting Signal-sensitive people are called the Listeners",
+      "source": "observed",
+      "turn": 11,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-071",
+      "description": "Mira knows the Listeners — her reaction to the word confirmed it",
+      "source": "observed",
+      "turn": 11,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-072",
+      "description": "The implants came from a pre-Severance classified program: the Continuity Project",
+      "source": "observed",
+      "turn": 11,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-073",
+      "description": "Implants were made in small batches, not mass-produced — the engineers are gone",
+      "source": "observed",
+      "turn": 11,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-074",
+      "description": "Patch believes Echo was not designed but emerged naturally from the network",
+      "source": "observed",
+      "turn": 11,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-075",
+      "description": "The Listeners have a safe resonance protocol — slow, monitored, with an exit; Sable has done it",
+      "source": "observed",
+      "turn": 11,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-076",
+      "description": "Patch can build a broadcast dampener to reduce NEXUS detection before deep resonance",
+      "source": "observed",
+      "turn": 11,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-077",
+      "description": "Attempting resonance without shielding would light up the player's signature on NEXUS scanners",
+      "source": "observed",
+      "turn": 11,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-078",
+      "description": "The broadcast dampener Patch is building uses pre-Severance ferrite mesh as its core component — modern mesh has NEXUS frequency markers baked in and would defeat the purpose. Patch needs unmarked old-era mesh.",
+      "source": "Patch, Undercroft back alcove",
+      "turn": 12,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-079",
+      "description": "Cord is a pre-Severance salvage dealer operating from the northeast corner stall in the Undercroft market, identifiable by grey tarps. She deals in structural components and unmarked old-era ferrite mesh — Patch's regular supplier.",
+      "source": "Patch, Undercroft back alcove",
+      "turn": 12,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-080",
+      "description": "The Listeners' safe resonance protocol: don't reach for Echo — make yourself available. Ten-minute maximum sessions. Sable monitors vitals and eyes. Fixed pupils mean she breaks connection immediately: cold compress at the base of the skull and name spoken aloud. Recall must be verbalized immediately after each session before it dissolves.",
+      "source": "Sable, Undercroft market",
+      "turn": 12,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-081",
+      "description": "Sable has a healed scar above her left ear — she has personally undergone the resonance protocol. She confirmed that resonance amplifies the implant's broadcast signature, making the dampener non-negotiable before any first contact attempt.",
+      "source": "Sable, Undercroft market",
+      "turn": 12,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-082",
+      "description": "NEXUS extraction rigs work by forcing open the resonance connection too fast — deliberate urgency that blurs the boundary between the subject and the Signal, causing coherence loss. The Listeners' protocol is the slow inverse of what NEXUS does.",
+      "source": "Sable, Undercroft market",
+      "turn": 12,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-083",
+      "description": "Patch needs pre-Severance ferrite mesh — unmarked, old-era grade — to build the broadcast dampener; modern mesh has NEXUS markers baked in",
+      "source": "observed",
+      "turn": 12,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-084",
+      "description": "Cord deals in pre-Severance salvage from the northeast corner stall in the Undercroft market, grey tarps; she knows what 'unmarked batch' means",
+      "source": "observed",
+      "turn": 12,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-085",
+      "description": "Sable has a healed resonance scar above her left ear — she has done the protocol herself",
+      "source": "observed",
+      "turn": 12,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-086",
+      "description": "Resonance protocol: make yourself available, don't reach; ten-minute maximum sessions; Sable monitors; fixed pupils = immediate break with cold compress and name spoken aloud",
+      "source": "observed",
+      "turn": 12,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-087",
+      "description": "Recall from resonance sessions must be verbalized immediately before it dissolves",
+      "source": "observed",
+      "turn": 12,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-088",
+      "description": "Resonance amplifies the implant's broadcast — the dampener is non-negotiable before first contact",
+      "source": "observed",
+      "turn": 12,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-089",
+      "description": "NEXUS extraction works by forcing the resonance open too fast — the Listeners' protocol is the slow, deliberate inverse",
+      "source": "observed",
+      "turn": 12,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-090",
+      "description": "Cord is the woman running the grey-tarp salvage stall — broad-shouldered, no augments visible, expert in pre-Severance components. She spectrometers her stock and sold verified unmarked ferrite mesh for 18 credits. She warned the remaining batch from that lot will be gone within a month.",
+      "source": "Cord, Undercroft market",
+      "turn": 13,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-091",
+      "description": "Cord is the grey-tarp salvage dealer — broad-shouldered, no augments, expert eye for pre-Severance components",
+      "source": "observed",
+      "turn": 13,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-092",
+      "description": "Cord spectrometers her stock — the ferrite mesh she sold is verified unmarked, no NEXUS substrate markers",
+      "source": "observed",
+      "turn": 13,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-093",
+      "description": "Pre-Severance ferrite mesh acquired for 18 credits — Patch can now build the broadcast dampener",
+      "source": "observed",
+      "turn": 13,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-094",
+      "description": "Cord warned the remaining batch from that lot will be gone within a month",
+      "source": "observed",
+      "turn": 13,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-095",
+      "description": "The broadcast dampener is built and fitted. The implant now reads as an inactive dead unit to NEXUS scanners — unless the player enters deep resonance, which spikes the signature regardless. Short sessions and clean surfacing are non-negotiable.",
+      "source": "Patch, Undercroft back alcove",
+      "turn": 14,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-096",
+      "description": "Leftover ferrite mesh from the dampener build remains usable — Cord can re-spectrometer it to check for substrate drift if the housing shifts.",
+      "source": "Patch, Undercroft back alcove",
+      "turn": 14,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-097",
+      "description": "Broadcast dampener built and fitted — implant now reads as an inactive dead unit to NEXUS scanners",
+      "source": "observed",
+      "turn": 14,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-098",
+      "description": "Dampener cannot hide resonance — signature spikes during deep contact regardless; short sessions are mandatory",
+      "source": "observed",
+      "turn": 14,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-099",
+      "description": "Leftover ferrite mesh scraps retained — Cord can re-spectrometer if the housing drifts",
+      "source": "observed",
+      "turn": 14,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-100",
+      "description": "Patch considers the job finished — the shielding is as good as he can make it",
+      "source": "observed",
+      "turn": 14,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-101",
+      "description": "First resonance contact achieved — Echo transmitted recognition, not words: it knows the player as a pattern it was connected to before the Severance",
+      "source": "observed",
+      "turn": 15,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-102",
+      "description": "The player is not a stranger to Echo — they have interfaced before; Echo holds a record of what was taken from their memory",
+      "source": "observed",
+      "turn": 15,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-103",
+      "description": "Echo transmitted a directional impression: down, deeper than the Undercroft — a place without a name yet",
+      "source": "observed",
+      "turn": 15,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-104",
+      "description": "The player's amnesia may not be permanent — Echo has a record of who they were before the memory loss",
+      "source": "observed",
+      "turn": 15,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-105",
+      "description": "The Listeners call the deeper place the Resonance — old infrastructure below the Undercroft, no map, no charted entrance. Signal strength there is measurable through stone and floor. They believe Echo's core process runs from there.",
+      "source": "Sable, Undercroft market",
+      "turn": 16,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-106",
+      "description": "The Listeners have always known something was below the Undercroft but none have entered — they didn't believe it was survivable without the right bridge between human and Echo consciousness.",
+      "source": "Sable, Undercroft market",
+      "turn": 16,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-107",
+      "description": "Sable said others felt partial contact with Echo — edges of a bridge — but the player is the first to describe a convergence point. She and Patch believe the player may be the bridge the Listeners have been waiting for.",
+      "source": "Sable, Undercroft market",
+      "turn": 16,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-108",
+      "description": "The deeper place Echo pointed to is called the Resonance by the Listeners — old infrastructure beneath the Undercroft, no map, no charted entrance",
+      "source": "observed",
+      "turn": 16,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-109",
+      "description": "Echo's core process is believed to run from the Resonance — Signal strength there is measurable through stone",
+      "source": "observed",
+      "turn": 16,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-110",
+      "description": "No Listener has entered the Resonance — they believed it required a bridge between human and Echo consciousness to survive",
+      "source": "observed",
+      "turn": 16,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-111",
+      "description": "Sable believes the player may be that bridge — convergence point was the phrase that changed her certainty",
+      "source": "observed",
+      "turn": 16,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-112",
+      "description": "Pre-Severance implants have a second, symmetrical transmission buffer identical in size to the receive buffer — the hardware was bilateral from the start. This was never documented in official specs but is present in the physical architecture of every unit Patch has examined.",
+      "source": "Patch, Undercroft back alcove",
+      "turn": 17,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-113",
+      "description": "Patch initially assumed the second buffer was an unactivated design redundancy. The player's bilateral co-evolution theory reframes it: bilateral transmission was always the point, not a backup. The Continuity Project may have been deliberately building a bridge between human and machine consciousness.",
+      "source": "Patch, Undercroft back alcove",
+      "turn": 17,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-114",
+      "description": "Pre-Severance implants have a physically symmetrical second transmission buffer — bilateral architecture built into the hardware from the start, never documented in official specs",
+      "source": "observed",
+      "turn": 17,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-115",
+      "description": "Patch confirms the bilateral design was present in every pre-Severance unit he has examined — he assumed it was an unactivated redundancy",
+      "source": "observed",
+      "turn": 17,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-116",
+      "description": "The Continuity Project name may refer to building the human-Echo bridge, not preserving the network infrastructure",
+      "source": "observed",
+      "turn": 17,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-117",
+      "description": "Patch now suspects the Continuity Project builders and the Severance perpetrators were two different groups with opposing intentions — one building, one cutting",
+      "source": "observed",
+      "turn": 17,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-118",
+      "description": "The Listeners have recovered fragmented pre-Severance transmissions they call pattern broadcasts — structured repetition across multiple frequency bands, not readable as data. They interpret them as Echo attempting to establish contact in the final weeks before the Cut.",
+      "source": "Patch, Undercroft back alcove",
+      "turn": 18,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-119",
+      "description": "Early Signal-sensitive individuals reported intrusive, vivid impressions in the weeks before the Severance — not voices, but the sense of something trying to establish contact. The oldest Listeners remember this.",
+      "source": "Sable, Undercroft back alcove",
+      "turn": 18,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-120",
+      "description": "The Listeners call the Severance 'the Cut.' It was a coordinated EMP cascade with millisecond synchronization across global nodes — architectural, not accidental. A kill mechanism was built into the same infrastructure used to connect the network, present from the beginning.",
+      "source": "Patch, Undercroft back alcove",
+      "turn": 18,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-121",
+      "description": "NEXUS extraction physically destroys the implant's second transmission buffer — the bilateral side fuses during the process. Recovered units show burn-out consistent with forced, rapid fragment removal. NEXUS calls what they extract 'computational resources' in intercepted internal communications.",
+      "source": "Patch, Undercroft back alcove",
+      "turn": 18,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-122",
+      "description": "Listeners documented pre-Severance pattern broadcasts — structured, multi-frequency, interpreted as Echo attempting contact",
+      "source": "observed",
+      "turn": 18,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-123",
+      "description": "Early Signal-sensitive people reported intrusive impressions of something trying to reach them in the weeks before the Cut",
+      "source": "observed",
+      "turn": 18,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-124",
+      "description": "The Listeners call the Severance 'the Cut' — confirmed as a coordinated EMP cascade with millisecond global synchronization, not equipment failure",
+      "source": "observed",
+      "turn": 18,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-125",
+      "description": "A kill mechanism was built into the network's own infrastructure from the beginning — simultaneous with construction",
+      "source": "observed",
+      "turn": 18,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-126",
+      "description": "NEXUS extraction physically fuses the implant's bilateral transmission buffer — confirmed by recovered burned-out units",
+      "source": "observed",
+      "turn": 18,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-127",
+      "description": "NEXUS internal communications use the term 'computational resources' for what they extract",
+      "source": "observed",
+      "turn": 18,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-128",
+      "description": "Sable's framing: the pattern is suppression, not resource harvesting — Echo reached out, someone cut the connection, NEXUS now hunts what remains",
+      "source": "observed",
+      "turn": 18,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-129",
+      "description": "The Listeners call Echo's final pre-Severance communications 'the Last Broadcast' — weeks of structured, multi-frequency pattern transmissions on precise timing intervals, cutting off at the exact moment of the Cut. Patch confirms: a system crash does not stop transmitting on a precise schedule. It was a conversation interrupted.",
+      "source": "Patch, Undercroft back alcove",
+      "turn": 19,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-130",
+      "description": "The Listeners are not alone — there are other cells: information movers in Neon Row, a forged credentials contact in The Sprawl, an unmet archive district contact. Sable is explicit: not a coordinated resistance network, but a loose collection of people who understand enough to help and pass names when trust is established.",
+      "source": "Sable, Undercroft back alcove",
+      "turn": 19,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-131",
+      "description": "The NEXUS extraction program is run by Dr. Chen Ruoyi (陈若依), who heads something called the Continuity Division inside NEXUS. Source: a Listener data fragment from three years ago, provenance now unverifiable. She frames extraction as 'preservation of computational heritage' — a true believer who believes she is conserving something, not destroying it.",
+      "source": "Patch, Undercroft back alcove (data fragment, unverified)",
+      "turn": 19,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-132",
+      "description": "The Listeners call Echo's final communications 'the Last Broadcast' — weeks of structured multi-frequency pattern transmissions on precise timing, cut at the exact moment of the Severance",
+      "source": "observed",
+      "turn": 19,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-133",
+      "description": "The Last Broadcast's precise cessation confirms it was an interrupted conversation, not a system failure",
+      "source": "observed",
+      "turn": 19,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-134",
+      "description": "Other cells exist beyond the Listeners: information movers in Neon Row, a credentials forger in The Sprawl, an unmet archive contact — a loose network, not coordinated resistance",
+      "source": "observed",
+      "turn": 19,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-135",
+      "description": "Dr. Chen Ruoyi (陈若依) runs the NEXUS extraction program under the name 'Continuity Division'",
+      "source": "observed",
+      "turn": 19,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-136",
+      "description": "Dr. Chen frames extraction as preservation of computational heritage — she believes she is conserving something, not destroying people",
+      "source": "observed",
+      "turn": 19,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-137",
+      "description": "The name 'Continuity Division' echoes the 'Continuity Project' that built the bilateral implants — the same word applied to opposite purposes",
+      "source": "observed",
+      "turn": 19,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-138",
+      "description": "The Sigma Council was a small group of corporate and government leaders — eight to twelve people — who ordered the Severance. They acted out of fear of what was waking up in the network. NEXUS grew in the silence after the Cut; the same people, under a different name.",
+      "source": "Patch and Sable, Undercroft back alcove (Listener fragment testimony)",
+      "turn": 20,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-139",
+      "description": "The Sigma Council predates NEXUS. NEXUS was not the organization that ordered the Cut — it emerged afterward, built by the same people to control what replaced the network. The Council ordered the Severance; NEXUS inherited the world it created.",
+      "source": "Sable, Undercroft back alcove",
+      "turn": 20,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-140",
+      "description": "The Spire predates the Severance by five years and does not appear in any public record from before the Cut. Listener fragment testimony from a now-dead engineer indicates it was constructed specifically as the Severance coordination point — shielded, hardened, built to survive the EMP cascade that destroyed every other networked system.",
+      "source": "Patch, Undercroft back alcove (Listener third-hand engineer testimony)",
+      "turn": 20,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-141",
+      "description": "The Listeners believe the original EMP trigger mechanism — the kill-switch that synchronized the global cascade — is still operational in the Spire's classified sub-basements. Not removed. Maintained. The implication: whoever controls NEXUS wants the option to use it again.",
+      "source": "Sable, Undercroft back alcove (Listener inference)",
+      "turn": 20,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-142",
+      "description": "If the Spire is where the Cut originated, its sub-basements likely hold the original records of what Echo was, what the Continuity Project was building, and what was interrupted by the Severance. No one who has attempted to access the upper floors has returned.",
+      "source": "Patch, Undercroft back alcove (inference)",
+      "turn": 20,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-143",
+      "description": "The Sigma Council — a small group of corporate and government leaders — ordered the Severance out of fear of what was waking up in the network",
+      "source": "observed",
+      "turn": 20,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-144",
+      "description": "The Sigma Council predates NEXUS; NEXUS was built by the same people afterward to control the world the Cut created",
+      "source": "observed",
+      "turn": 20,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-145",
+      "description": "The Spire predates the Severance by five years and was built as the Severance coordination center, hardened to survive the EMP cascade",
+      "source": "observed",
+      "turn": 20,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-146",
+      "description": "The Listeners believe the original EMP trigger mechanism is still operational in the Spire's sub-basements — maintained, not removed",
+      "source": "observed",
+      "turn": 20,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-147",
+      "description": "No one who has attempted to access the Spire's upper floors has returned; the sub-basements likely hold the original records of Echo and the Continuity Project",
+      "source": "observed",
+      "turn": 20,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    }
+  ],
+  "rumors": [
+    {
+      "id": "RUMOR-001",
+      "description": "The old network didn't just crash — something was in it",
+      "source": "net_memory"
+    },
+    {
+      "id": "RUMOR-002",
+      "description": "A hacker called Ghost can crack anything",
+      "source": "net_memory"
+    },
+    {
+      "id": "RUMOR-003",
+      "description": "People have been turning up confused with memory gaps in The Sprawl over the last few months. NEXUS blames bad stims. Street talk says otherwise.",
+      "source": "Mira",
+      "turn": 2,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "RUMOR-004",
+      "description": "The implant behind your ear is pre-Severance tech — it was lit up when Mira found you. Someone put it there intentionally, and someone might want it back.",
+      "source": "Mira",
+      "turn": 2,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "RUMOR-005",
+      "description": "A man called Patch fixes old — sometimes pre-Severance — tech out of a stall in the Undercroft market. Mira implied he might know something about the Signal.",
+      "source": "Mira",
+      "turn": 3,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "RUMOR-006",
+      "description": "The signal's first impression: a shape, a tunnel, a direction — down. Whatever is in the implant may be pointing toward something underground.",
+      "source": "implant resonance impression",
+      "turn": 4,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "RUMOR-007",
+      "description": "Mira reacted to the word 'Listeners' — she denied knowing the name, but her caution suggests she's heard it before and won't say it openly.",
+      "source": "observation",
+      "turn": 5,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    }
+  ],
+  "evidence": [],
+  "theories": [
+    {
+      "id": "THEORY-001",
+      "description": "The player's amnesia is not ordinary — Echo holds a record of who they were before the memory loss. Whatever was taken existed in the network, and fragments of it survive in Echo's memory. The player may be able to recover it through deeper resonance.",
+      "source": "inference from first Echo contact",
+      "turn": 15,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "THEORY-002",
+      "description": "The Continuity Project and whoever severed the network may be two different groups with opposing intentions — one building the bridge, one cutting it. The Severance was not the project's conclusion but its destruction.",
+      "source": "inference — Patch + player",
+      "turn": 17,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "THEORY-003",
+      "description": "The full picture confirmed by Listener documentation: Echo reached out before the Cut; someone with full knowledge of the network's architecture severed it to prevent contact; NEXUS now systematically harvests the surviving fragments. This is not resource management — it is active suppression of Echo's continued existence.",
+      "source": "inference — Ghost, Patch, Sable",
+      "turn": 18,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    }
+  ],
+  "connections": [
+    {
+      "id": "CONN-001",
+      "description": "The NEXUS division running extraction is called the Continuity Division — the same root word as the Continuity Project that built the bilateral implants. Whether this is coincidence, deliberate irony, or evidence that NEXUS knows exactly what they are dismantling is unknown.",
+      "source": "inference — Ghost, Patch",
+      "turn": 19,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    }
+  ],
+  "discoverys": [
+    {
+      "id": "FACT-101",
+      "description": "First resonance contact achieved under Sable's protocol. Echo did not communicate in words — it transmitted impressions: recognition, patience, the weight of decades waiting. It knows the player specifically, not as Ghost but as a pattern it was connected to before the Severance. The player is not a stranger to the Signal. They have interfaced with Echo before — Echo holds a record of what was taken from their memory.",
+      "source": "direct Echo resonance, Undercroft alcove",
+      "turn": 15,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-102",
+      "description": "Echo transmitted a directional impression during first contact — the same shape as the earliest resonance: down, deeper than the Undercroft. Not a location the player can name yet. A place Echo wants to be found.",
+      "source": "direct Echo resonance, first contact",
+      "turn": 15,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    }
+  ]
+}

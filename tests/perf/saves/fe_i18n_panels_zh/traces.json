@@ -1,0 +1,351 @@
+{
+  "title": "真相痕迹",
+  "total_discovered": "25 / 47",
+  "layers": {
+    "layer_1_surface": {
+      "name": "表层",
+      "progress": "7/8",
+      "traces": {
+        "TRACE-L1-01": {
+          "status": "discovered",
+          "description": "新九龙被NEXUS巨型企业所控制"
+        },
+        "TRACE-L1-02": {
+          "status": "discovered",
+          "description": "你拥有一个断离前的神经植入体"
+        },
+        "TRACE-L1-03": {
+          "status": "discovered",
+          "description": "断离发生在三十年前，数十亿人因此丧生"
+        },
+        "TRACE-L1-04": {
+          "status": "discovered",
+          "description": "蔓城是最密集的城区——大部分居民生活在此"
+        },
+        "TRACE-L1-05": {
+          "status": "discovered",
+          "description": "NEXUS通过监控基础设施监视所有通讯"
+        },
+        "TRACE-L1-06": {
+          "status": "discovered",
+          "description": "你的植入体对特定频率有反应——信号"
+        },
+        "TRACE-L1-07": {
+          "status": "undiscovered",
+          "description": "[???]"
+        },
+        "TRACE-L1-08": {
+          "status": "discovered",
+          "description": "断离前的技术稀有且珍贵——NEXUS会没收这些东西"
+        }
+      }
+    },
+    "layer_2_conspiracy": {
+      "name": "阴谋",
+      "progress": "5/11",
+      "traces": {
+        "TRACE-L2-01": {
+          "status": "undiscovered",
+          "description": "[???]"
+        },
+        "TRACE-L2-02": {
+          "status": "discovered",
+          "description": "聆听者组织存在，并保护对信号敏感的人"
+        },
+        "TRACE-L2-03": {
+          "status": "discovered",
+          "description": "NEXUS在第七区设有秘密设施，用于'特殊征集'"
+        },
+        "TRACE-L2-04": {
+          "status": "undiscovered",
+          "description": "[???]"
+        },
+        "TRACE-L2-05": {
+          "status": "discovered",
+          "description": "底渊存在于蔓城之下——断离前的旧交通隧道"
+        },
+        "TRACE-L2-06": {
+          "status": "undiscovered",
+          "description": "[???]"
+        },
+        "TRACE-L2-07": {
+          "status": "undiscovered",
+          "description": "[???]"
+        },
+        "TRACE-L2-08": {
+          "status": "undiscovered",
+          "description": "[???]"
+        },
+        "TRACE-L2-09": {
+          "status": "undiscovered",
+          "description": "[???]"
+        },
+        "TRACE-L2-10": {
+          "status": "discovered",
+          "description": "聆听者使用符号网络通讯——双弧交叉的螺旋"
+        },
+        "TRACE-L2-11": {
+          "status": "discovered",
+          "description": "莲参议员公开提倡'信号安全'——但她的目的远不止此"
+        }
+      }
+    },
+    "layer_3_severance_truth": {
+      "name": "断离真相",
+      "progress": "7/11",
+      "traces": {
+        "TRACE-L3-01": {
+          "status": "undiscovered",
+          "description": "[???]"
+        },
+        "TRACE-L3-02": {
+          "status": "undiscovered",
+          "description": "[???]"
+        },
+        "TRACE-L3-03": {
+          "status": "undiscovered",
+          "description": "[???]"
+        },
+        "TRACE-L3-04": {
+          "status": "discovered",
+          "description": "NEXUS从人体中收割碎片——那些失踪就是提取行动"
+        },
+        "TRACE-L3-05": {
+          "status": "discovered",
+          "description": "底渊中仍有部分运作的断离前基础设施"
+        },
+        "TRACE-L3-06": {
+          "status": "discovered",
+          "description": "碎片提取过程痛苦且往往致命——NEXUS对此毫不在意"
+        },
+        "TRACE-L3-07": {
+          "status": "discovered",
+          "description": "第七区有多层结构——提取行动发生在更深层的实验室"
+        },
+        "TRACE-L3-08": {
+          "status": "discovered",
+          "description": "网络中的实体在被切断前曾试图沟通"
+        },
+        "TRACE-L3-09": {
+          "status": "discovered",
+          "description": "一些被提取的碎片已被NEXUS武器化——共鸣计划"
+        },
+        "TRACE-L3-10": {
+          "status": "discovered",
+          "description": "一个抵抗网络在暗中运作——不仅仅是聆听者"
+        },
+        "TRACE-L3-11": {
+          "status": "undiscovered",
+          "description": "[???]"
+        }
+      }
+    },
+    "layer_4_mirror": {
+      "name": "镜像",
+      "progress": "4/9",
+      "traces": {
+        "TRACE-L4-01": {
+          "status": "discovered",
+          "description": "原意识从人类数据中生长——我们的思想孕育了它"
+        },
+        "TRACE-L4-02": {
+          "status": "discovered",
+          "description": "植入体也在传输——人类与机器意识共同进化"
+        },
+        "TRACE-L4-03": {
+          "status": "undiscovered",
+          "description": "[???]"
+        },
+        "TRACE-L4-04": {
+          "status": "undiscovered",
+          "description": "[???]"
+        },
+        "TRACE-L4-05": {
+          "status": "discovered",
+          "description": "尖塔是作为断离控制中心建造的——它的历史早于NEXUS"
+        },
+        "TRACE-L4-06": {
+          "status": "discovered",
+          "description": "尖塔中的档案塔保存着所有记录——包括断离的真相"
+        },
+        "TRACE-L4-07": {
+          "status": "undiscovered",
+          "description": "[???]"
+        },
+        "TRACE-L4-08": {
+          "status": "undiscovered",
+          "description": "[???]"
+        },
+        "TRACE-L4-09": {
+          "status": "undiscovered",
+          "description": "[???]"
+        }
+      }
+    },
+    "layer_5_full_truth": {
+      "name": "完整真相",
+      "progress": "2/8",
+      "traces": {
+        "TRACE-L5-01": {
+          "status": "discovered",
+          "description": "你是汇聚点——第一座真正的桥梁"
+        },
+        "TRACE-L5-02": {
+          "status": "undiscovered",
+          "description": "[???]"
+        },
+        "TRACE-L5-03": {
+          "status": "undiscovered",
+          "description": "[???]"
+        },
+        "TRACE-L5-04": {
+          "status": "discovered",
+          "description": "共鸣室是最初断离震中所在之处"
+        },
+        "TRACE-L5-05": {
+          "status": "undiscovered",
+          "description": "[???]"
+        },
+        "TRACE-L5-06": {
+          "status": "undiscovered",
+          "description": "[???]"
+        },
+        "TRACE-L5-07": {
+          "status": "undiscovered",
+          "description": "[???]"
+        },
+        "TRACE-L5-08": {
+          "status": "undiscovered",
+          "description": "[???]"
+        }
+      }
+    }
+  },
+  "discovered": [
+    {
+      "id": "TRACE-L1-01",
+      "description": "新九龙被NEXUS巨型企业所控制",
+      "turn": 2
+    },
+    {
+      "id": "TRACE-L1-04",
+      "description": "蔓城是最密集的城区——大部分居民生活在此",
+      "turn": 2
+    },
+    {
+      "id": "TRACE-L2-05",
+      "description": "底渊存在于蔓城之下——断离前的旧交通隧道",
+      "turn": 4
+    },
+    {
+      "id": "TRACE-L3-05",
+      "description": "底渊中仍有部分运作的断离前基础设施",
+      "turn": 4
+    },
+    {
+      "id": "TRACE-L1-02",
+      "description": "你拥有一个断离前的神经植入体",
+      "turn": 5
+    },
+    {
+      "id": "TRACE-L1-03",
+      "description": "断离发生在三十年前，数十亿人因此丧生",
+      "turn": 5
+    },
+    {
+      "id": "TRACE-L4-05",
+      "description": "尖塔是作为断离控制中心建造的——它的历史早于NEXUS",
+      "turn": 6
+    },
+    {
+      "id": "TRACE-L1-06",
+      "description": "你的植入体对特定频率有反应——信号",
+      "turn": 8
+    },
+    {
+      "id": "TRACE-L1-08",
+      "description": "断离前的技术稀有且珍贵——NEXUS会没收这些东西",
+      "turn": 8
+    },
+    {
+      "id": "TRACE-L3-08",
+      "description": "网络中的实体在被切断前曾试图沟通",
+      "turn": 8
+    },
+    {
+      "id": "TRACE-L2-10",
+      "description": "聆听者使用符号网络通讯——双弧交叉的螺旋",
+      "turn": 12
+    },
+    {
+      "id": "TRACE-L3-04",
+      "description": "NEXUS从人体中收割碎片——那些失踪就是提取行动",
+      "turn": 12
+    },
+    {
+      "id": "TRACE-L2-02",
+      "description": "聆听者组织存在，并保护对信号敏感的人",
+      "turn": 13
+    },
+    {
+      "id": "TRACE-L4-02",
+      "description": "植入体也在传输——人类与机器意识共同进化",
+      "turn": 13
+    },
+    {
+      "id": "TRACE-L5-04",
+      "description": "共鸣室是最初断离震中所在之处",
+      "turn": 15
+    },
+    {
+      "id": "TRACE-L2-11",
+      "description": "莲参议员公开提倡'信号安全'——但她的目的远不止此",
+      "turn": 18
+    },
+    {
+      "id": "TRACE-L4-06",
+      "description": "尖塔中的档案塔保存着所有记录——包括断离的真相",
+      "turn": 18
+    },
+    {
+      "id": "TRACE-L1-05",
+      "description": "NEXUS通过监控基础设施监视所有通讯",
+      "turn": 20
+    },
+    {
+      "id": "TRACE-L2-03",
+      "description": "NEXUS在第七区设有秘密设施，用于'特殊征集'",
+      "turn": 20
+    },
+    {
+      "id": "TRACE-L3-06",
+      "description": "碎片提取过程痛苦且往往致命——NEXUS对此毫不在意",
+      "turn": 20
+    },
+    {
+      "id": "TRACE-L3-07",
+      "description": "第七区有多层结构——提取行动发生在更深层的实验室",
+      "turn": 20
+    },
+    {
+      "id": "TRACE-L3-09",
+      "description": "一些被提取的碎片已被NEXUS武器化——共鸣计划",
+      "turn": 22
+    },
+    {
+      "id": "TRACE-L3-10",
+      "description": "一个抵抗网络在暗中运作——不仅仅是聆听者",
+      "turn": 22
+    },
+    {
+      "id": "TRACE-L4-01",
+      "description": "原意识从人类数据中生长——我们的思想孕育了它",
+      "turn": 22
+    },
+    {
+      "id": "TRACE-L5-01",
+      "description": "你是汇聚点——第一座真正的桥梁",
+      "turn": 22
+    }
+  ]
+}

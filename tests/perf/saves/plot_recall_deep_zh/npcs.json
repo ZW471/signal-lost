@@ -1,0 +1,61 @@
+{
+  "title": "已遇NPC",
+  "npcs": [
+    {
+      "name": "米拉 — 在面馆柜台后面。注视着。",
+      "trust": "neutral",
+      "first_seen_turn": 1
+    },
+    {
+      "name": "米拉——在柜台后面准备食物",
+      "trust": "neutral",
+      "first_seen_turn": 2
+    },
+    {
+      "name": "米拉",
+      "last_interaction_turn": 5,
+      "trust": "cautious_ally",
+      "description": "面馆老板，知道地下情报，认出特殊植入体",
+      "mood": "nervous"
+    },
+    {
+      "name": "NEXUS职员A——穿着标准制服",
+      "trust": "neutral",
+      "first_seen_turn": 3
+    },
+    {
+      "name": "NEXUS职员B——正在查看数据板",
+      "trust": "neutral",
+      "first_seen_turn": 3
+    },
+    {
+      "name": "帕奇",
+      "last_interaction_turn": 19,
+      "trust": "devoted",
+      "description": "聆听者核心成员，亲眼见过提取设施",
+      "faction": "unknown",
+      "last_seen": "蓝鸟酒吧",
+      "mood": "愤怒"
+    },
+    {
+      "name": "酒保",
+      "trust": "neutral",
+      "first_seen_turn": 10
+    },
+    {
+      "name": "前台老妇人",
+      "trust": "neutral",
+      "first_seen_turn": 15
+    },
+    {
+      "name": "灰斗篷A",
+      "trust": "neutral",
+      "first_seen_turn": 16
+    },
+    {
+      "name": "灰斗篷B",
+      "trust": "neutral",
+      "first_seen_turn": 16
+    }
+  ]
+}

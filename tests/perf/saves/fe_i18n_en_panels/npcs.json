@@ -1,0 +1,73 @@
+{
+  "title": "Encountered NPCs",
+  "npcs": [
+    {
+      "name": "Mira — Behind the counter of her noodle shop. Watching.",
+      "trust": "neutral",
+      "first_seen_turn": 1
+    },
+    {
+      "name": "Various unnamed pedestrians.",
+      "trust": "neutral",
+      "first_seen_turn": 1
+    },
+    {
+      "name": "Mira",
+      "last_interaction_turn": 5,
+      "trust": "cautious_ally",
+      "mood": "watchful",
+      "description": "Noodle shop owner; found you in the alley; gave you the grate location but won't go further — knows more than she says",
+      "last_seen": "Mira's Noodle Shop"
+    },
+    {
+      "name": "Silver-haired woman",
+      "last_interaction_turn": 7,
+      "trust": "neutral",
+      "mood": "appraising",
+      "description": "Older woman, mechanical left hand, patchwork jacket — first to respond in the market"
+    },
+    {
+      "name": "Market vendors and residents — various, watching at a distance",
+      "trust": "neutral",
+      "first_seen_turn": 7
+    },
+    {
+      "name": "Sable",
+      "last_interaction_turn": 16,
+      "trust": "devoted",
+      "mood": "grave, certain",
+      "description": "Silver-haired, mechanical left hand — ran the resonance protocol, pulled you out clean; now believes you may be the bridge to the Resonance",
+      "last_seen": "Undercroft market"
+    },
+    {
+      "name": "Market vendors and residents — at a distance",
+      "trust": "neutral",
+      "first_seen_turn": 8
+    },
+    {
+      "name": "Patch — working at the far stall under a blue lamp",
+      "trust": "neutral",
+      "first_seen_turn": 8
+    },
+    {
+      "name": "Patch",
+      "last_interaction_turn": 16,
+      "trust": "trusted",
+      "mood": "watchful, wary",
+      "location": "Undercroft market — far stall, blue work lamp",
+      "description": "Compact tech veteran — built the dampener, listening from across the market; hears everything"
+    },
+    {
+      "name": "Cord — northeast corner, grey-tarp stall (unmet)",
+      "trust": "neutral",
+      "first_seen_turn": 12
+    },
+    {
+      "name": "Cord",
+      "last_interaction_turn": 13,
+      "trust": "neutral",
+      "mood": "professional",
+      "description": "Broad-shouldered salvage dealer, 50s, bare hands — sorts pre-Severance components with expert precision"
+    }
+  ]
+}

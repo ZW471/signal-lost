@@ -1,0 +1,28 @@
+{
+  "title": "Inventory",
+  "credits": 32,
+  "slots": {
+    "used": 3,
+    "max": 6
+  },
+  "items": [
+    {
+      "slot": 1,
+      "item": "Basic Cipher Toolkit",
+      "type": "data_chip",
+      "description": "A data chip loaded with decryption utilities. Old but functional."
+    },
+    {
+      "name": "Neural Stim (x1)",
+      "description": "Street-grade stimulant ampoule for neural overload. Restores a measure of physical and neural resilience when used. Single use.",
+      "tags": [
+        "consumable",
+        "healing"
+      ]
+    },
+    {
+      "name": "Ferrite Mesh Scraps (salvage)",
+      "description": "Leftover pre-Severance mesh from the dampener build. Unmarked, verified clean. Cord can re-spectrometer if needed."
+    }
+  ]
+}

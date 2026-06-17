@@ -1,0 +1,21 @@
+{
+  "title": "Encountered NPCs",
+  "npcs": [
+    {
+      "name": "Mira",
+      "trust": "cautious_ally",
+      "mood": "tense",
+      "last_seen": "Mira's noodle shop",
+      "description": "wary but willing noodle-shop owner",
+      "first_seen_turn": 6
+    },
+    {
+      "name": "Patch",
+      "trust": "neutral",
+      "mood": "guarded",
+      "last_seen": "Block 3 basement",
+      "description": "underground tech-fixer",
+      "first_seen_turn": 6
+    }
+  ]
+}

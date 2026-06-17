@@ -1,0 +1,185 @@
+{
+  "title": "Encountered NPCs",
+  "npcs": [
+    {
+      "name": "Mira — Behind the counter of her noodle shop. Watching.",
+      "trust": "neutral",
+      "first_seen_turn": 1
+    },
+    {
+      "name": "Various unnamed pedestrians.",
+      "trust": "neutral",
+      "first_seen_turn": 1
+    },
+    {
+      "name": "Repair stall vendor",
+      "trust": "neutral",
+      "first_seen_turn": 2
+    },
+    {
+      "name": "Mira",
+      "last_interaction_turn": 4,
+      "trust": "cautious_ally",
+      "mood": "guarded concern",
+      "description": "Noodle shop owner who shelters terminal-marked people",
+      "last_seen": "Mira's Noodle Shop"
+    },
+    {
+      "name": "None visible",
+      "trust": "neutral",
+      "first_seen_turn": 5
+    },
+    {
+      "name": "Hooded tunnel lookout",
+      "last_interaction_turn": 27,
+      "trust": "cautious_ally",
+      "mood": "watchful",
+      "description": "Tunnel lookout vouching under careful watch",
+      "location": "S7 AUX Inspection Bend",
+      "last_seen": "S7 AUX Inspection Bend"
+    },
+    {
+      "name": "Unseen voice behind the hatch",
+      "last_interaction_turn": 10,
+      "trust": "neutral",
+      "mood": "cautiously convinced",
+      "location": "Runoff Crawlspace Below S7 AUX",
+      "description": "Hidden gatekeeper behind a service hatch",
+      "revealed_as": "Patch"
+    },
+    {
+      "name": "Patch",
+      "last_interaction_turn": 42,
+      "trust": "trusted",
+      "mood": "guarded",
+      "location": "Sealed Pump Cathedral Approach",
+      "description": "Gatekeeper guarding the rear route",
+      "last_seen": "S7 AUX Inspection Bend"
+    },
+    {
+      "name": "Sable",
+      "last_interaction_turn": 45,
+      "trust": "trusted",
+      "mood": "focused",
+      "description": "Circuit doctor holding the cutoff line",
+      "last_seen": "Patch's Shielded Refuge",
+      "location": "Sealed Pump Cathedral Approach"
+    },
+    {
+      "name": "Quiet refugees behind the foil screens",
+      "trust": "neutral",
+      "first_seen_turn": 12
+    },
+    {
+      "name": "NEXUS utility patrol",
+      "last_interaction_turn": 14,
+      "trust": "hostile",
+      "mood": "searching",
+      "last_seen": "Entering the low left-hand duct",
+      "description": "Three covert tunnel operators hunting missing runners"
+    },
+    {
+      "name": "Toma and Vey",
+      "last_interaction_turn": 15,
+      "trust": "neutral",
+      "mood": "captured",
+      "description": "Missing runners alive in NEXUS custody",
+      "location": "Intake lift below service slit"
+    },
+    {
+      "name": "Rill",
+      "last_interaction_turn": 42,
+      "trust": "trusted",
+      "mood": "watchful",
+      "description": "Runner shadowing the witness group",
+      "last_seen": "Municipal Cable Sump",
+      "location": "Sealed Pump Cathedral Approach"
+    },
+    {
+      "name": "Toma",
+      "last_interaction_turn": 45,
+      "trust": "trusted",
+      "mood": "overwhelmed",
+      "description": "Rescued runner witnessing chosen return",
+      "last_seen": "Sector 7 Intake Throat",
+      "location": "Sealed Pump Cathedral Approach"
+    },
+    {
+      "name": "Vey",
+      "last_interaction_turn": 45,
+      "trust": "trusted",
+      "mood": "steadfast",
+      "description": "Rescued runner guarding the right to refuse",
+      "last_seen": "Sector 7 Intake Throat",
+      "location": "Sealed Pump Cathedral Approach"
+    },
+    {
+      "name": "NEXUS utility collectors",
+      "trust": "neutral",
+      "first_seen_turn": 18
+    },
+    {
+      "name": "Unseen wall relay contact",
+      "last_interaction_turn": 25,
+      "trust": "neutral",
+      "mood": "watchful",
+      "description": "Hidden Signal-aware contact using wall knocks"
+    },
+    {
+      "name": "Three masked Signal-aware contacts",
+      "last_interaction_turn": 29,
+      "trust": "cautious_ally",
+      "mood": "watchful and cooperative",
+      "last_seen": "S7 AUX Inspection Bend",
+      "description": "Contacts sharing careful Spire access seams"
+    },
+    {
+      "name": "Kite",
+      "last_interaction_turn": 45,
+      "trust": "trusted",
+      "mood": "reverent",
+      "description": "Masked guide witnessing the bridge threshold",
+      "last_seen": "S7 AUX inspection bend",
+      "location": "Sealed Pump Cathedral Approach"
+    },
+    {
+      "name": "Ink-Mouth Ren",
+      "last_interaction_turn": 31,
+      "trust": "cautious_ally",
+      "mood": "professionally wary",
+      "description": "Broker who stamped Ghost as damaged cargo"
+    },
+    {
+      "name": "NEXUS basement intake clerk",
+      "last_interaction_turn": 33,
+      "trust": "neutral",
+      "mood": "irritated",
+      "location": "Contractor Intake Below Public Lobby",
+      "description": "Tired clerk moving basement errors upward"
+    },
+    {
+      "name": "Reconciliation floor clerk",
+      "last_interaction_turn": 35,
+      "trust": "neutral",
+      "mood": "bored",
+      "location": "Archive Tower - Reconciliation Desk 4B",
+      "description": "Bored clerk assigning cargo paperwork fault"
+    },
+    {
+      "name": "Sleeping archive clerk",
+      "last_interaction_turn": 35,
+      "trust": "neutral",
+      "mood": "asleep",
+      "location": "Archive Tower - Reconciliation Desk 4B",
+      "description": "Exhausted clerk sleeping behind frosted glass"
+    },
+    {
+      "name": "Two copper-sleeved contacts",
+      "last_interaction_turn": 42,
+      "trust": "cautious_ally",
+      "mood": "silent",
+      "location": "Sealed Pump Cathedral Approach",
+      "description": "Quiet guides marking the route"
+    }
+  ]
+}

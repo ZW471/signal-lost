@@ -1,0 +1,30 @@
+{
+  "title": "Knowledge Database",
+  "facts": [
+    {
+      "description": "Mira runs the noodle shop in The Sprawl and gave you a list of five recent disappearances.",
+      "source": "observed",
+      "id": "FACT-001",
+      "turn": 2,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    }
+  ],
+  "rumors": [
+    {
+      "id": "RUMOR-001",
+      "description": "The old network didn't just crash — something was in it",
+      "source": "net_memory"
+    },
+    {
+      "id": "RUMOR-002",
+      "description": "A hacker called Ghost can crack anything",
+      "source": "net_memory"
+    }
+  ],
+  "evidence": [],
+  "theories": [],
+  "connections": []
+}

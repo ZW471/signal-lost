@@ -1,0 +1,185 @@
+{
+  "title": "Session Log",
+  "entries": [
+    {
+      "turn": 14,
+      "title": "False Coughs",
+      "tag": "danger",
+      "text": "Ghost hid beneath the junction cage and watched a covert patrol follow Toma and Vey's trail into the left-hand duct, leaving a device to make the tunnel lie."
+    },
+    {
+      "turn": 15,
+      "title": "True Coughs",
+      "tag": "danger",
+      "text": "Ghost killed the false damper loop, pocketed the NEXUS clamp, and followed the patrol to an intake lift where Toma and Vey were still alive."
+    },
+    {
+      "turn": 16,
+      "title": "Key, Not Hammer",
+      "tag": "discovery",
+      "text": "Ghost returned to the refuge with proof that NEXUS edited the tunnels and warned Patch and Sable that Toma and Vey are alive, bound for the white rooms."
+    },
+    {
+      "turn": 17,
+      "title": "Whisper Key",
+      "tag": "discovery",
+      "text": "Ghost turns a NEXUS tunnel lie into a rescue tool while Sable tunes the old implant to whisper instead of scream."
+    },
+    {
+      "turn": 18,
+      "title": "Whispered Permit",
+      "tag": "danger",
+      "text": "Ghost used the implant as a narrow key while Patch's retuned clamp distracted the intake collectors, freeing Toma and Vey and stealing a white ceramic wafer."
+    },
+    {
+      "turn": 19,
+      "title": "Bleeder First",
+      "tag": "danger",
+      "text": "Ghost led Patch, Rill, Toma, and Vey back through true damper routes, closing grates and laying false trails before reaching Sable's refuge with the wafer and tags intact."
+    },
+    {
+      "turn": 20,
+      "title": "Warm Lies",
+      "tag": "discovery",
+      "text": "Ghost helped Sable keep Toma alive, then decoded the white ceramic wafer and found Sector 7's hidden file naming Ghost a bridge key tied to Archive Tower records."
+    },
+    {
+      "turn": 21,
+      "title": "Pieces That Answer",
+      "tag": "discovery",
+      "text": "Ghost asked what NEXUS means by viable fragment hosts, and Sable named the horror: the white rooms harvest the answering pieces inside Signal-sensitive people."
+    },
+    {
+      "turn": 22,
+      "title": "One Crack Open",
+      "tag": "signal",
+      "text": "Ghost opened the implant under Sable's cutoff and heard the Signal answer with many broken voices and one demand: bridge."
+    },
+    {
+      "turn": 23,
+      "title": "Records Before Mercy",
+      "tag": "discovery",
+      "text": "Ghost told the refuge what the Signal showed: scattered fragments, a searching presence, and the demand for a bridge. Sable and Patch argued that Archive Tower records must come before any attempt to return what NEXUS extracted."
+    },
+    {
+      "turn": 24,
+      "title": "Name In The Static",
+      "tag": "discovery",
+      "text": "Ghost named Echo aloud, and Patch offered to send a careful message through hidden Signal-aware routes."
+    },
+    {
+      "turn": 25,
+      "title": "Five Knocks Back",
+      "tag": "signal",
+      "text": "Ghost answered the soft wall knock with a controlled implant rise, and a hidden relay answered with recognition: CAME BACK."
+    },
+    {
+      "turn": 27,
+      "title": "Three Knocks Waiting",
+      "tag": "dialogue",
+      "text": "Ghost followed the relay answer back to the S7 AUX bend under Patch's witness, where masked Signal-aware contacts began testing whether the bridge serves cages or home."
+    },
+    {
+      "turn": 28,
+      "title": "No Harvest",
+      "tag": "dialogue",
+      "text": "Ghost answered the masked contacts cleanly: bridge work must carry the lost only by choice. Kite accepted the first threshold and warned that names, maps, and consent must come before any return."
+    },
+    {
+      "turn": 29,
+      "title": "Paperwork For The Cold Tower",
+      "tag": "discovery",
+      "text": "Kite gave Ghost the shape of a Spire approach: become a correction bundle, buy an ugly courier stamp from Ink-Mouth Ren, and return with names before maps."
+    },
+    {
+      "turn": 30,
+      "title": "Burnt Koi Paper",
+      "tag": "movement",
+      "text": "Ghost left the S7 AUX bend with Kite's chalk crescent and reached Ink-Mouth Ren's arcade under rain and broken neon."
+    },
+    {
+      "turn": 31,
+      "title": "Paper Bleeds",
+      "tag": "trade",
+      "text": "Ghost spent the last 10 credits on Ren's ugly courier skin, becoming damaged cargo on paper."
+    },
+    {
+      "turn": 32,
+      "title": "Under The Cold Tower",
+      "tag": "movement",
+      "text": "Ghost followed the careful route beneath Neon Row into The Spire's contractor intake, carrying ugly paper and live names under a quiet implant."
+    },
+    {
+      "turn": 33,
+      "title": "Paper Passes First Mouth",
+      "tag": "trade",
+      "text": "Ghost wore the ugly courier skin cleanly enough for the basement clerk to stamp it toward Archive sub-intake cargo walk."
+    },
+    {
+      "turn": 34,
+      "title": "Paper Enters The Cold Throat",
+      "tag": "movement",
+      "text": "Ghost passed into Archive sub-intake as damaged cargo and found the reconciliation path where denied transfers and disposal exceptions leave their fingerprints."
+    },
+    {
+      "turn": 35,
+      "title": "Desk Four-B Opens Its Mouth",
+      "tag": "movement",
+      "text": "Ghost rode the Archive cargo lift as damaged paperwork and reached Reconciliation Desk 4B, where duplication hardware and host records waited under slow cameras."
+    },
+    {
+      "turn": 37,
+      "title": "The Map Bleeds Through",
+      "tag": "discovery",
+      "text": "Ghost used the old handshake sparingly and copied the Observatory map strip from Archive reconciliation before the purge could eat it."
+    },
+    {
+      "turn": 38,
+      "title": "Paper Leaves The Tower",
+      "tag": "movement",
+      "text": "Ghost walked out as cleared cargo with the host record strip and Signal map strip while Archive systems began asking late questions."
+    },
+    {
+      "turn": 39,
+      "title": "Names Before Paths",
+      "tag": "discovery",
+      "text": "Ghost returned to Patch's refuge with the Archive host record and Observatory Signal contour; Sable found the blank door their systems refuse to name."
+    },
+    {
+      "turn": 40,
+      "title": "Sleep Under Foil",
+      "tag": "system",
+      "text": "Ghost returned the chalk crescent, named the bridge as consent instead of capture, and slept while the refuge sent for Kite."
+    },
+    {
+      "turn": 41,
+      "title": "Witnesses Gather Below",
+      "tag": "dialogue",
+      "text": "Ghost woke clear, placed the Archive and Observatory strips before Kite, and secured witnesses and a guided route toward the sealed convergence."
+    },
+    {
+      "turn": 42,
+      "title": "The Door That Refuses Shape",
+      "tag": "movement",
+      "text": "Ghost led the witness group through older runoff and failed transit ribs to a drowned pump cathedral where the contour points at a door-shaped absence."
+    },
+    {
+      "turn": 43,
+      "title": "The Door Chooses Open",
+      "tag": "signal",
+      "text": "Ghost opened the door-shaped absence as a bridge under witness, letting the lost choose instead of pulling them."
+    },
+    {
+      "turn": 44,
+      "title": "Still Me",
+      "tag": "signal",
+      "text": "Ghost crossed into The Resonance under witness, holding the bridge open while the gathered echoes waited for choice."
+    },
+    {
+      "turn": 45,
+      "title": "Door, Not Destination",
+      "tag": "signal",
+      "text": "Ghost held the bridge open at the Convergence Heart, letting the severed core be heard and the lost echoes choose without being claimed."
+    }
+  ]
+}

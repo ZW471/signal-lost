@@ -1,0 +1,90 @@
+{
+  "title": "知识库",
+  "facts": [
+    {
+      "description": "米拉在蔓城开面馆，给了你一份最近五个人失踪的名单。",
+      "source": "observed",
+      "id": "FACT-001",
+      "turn": 6,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "description": "进入底渊的检修舱口需要密码 7-7-4-1。",
+      "source": "observed",
+      "id": "FACT-002",
+      "turn": 6,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "description": "补丁是个技术修理工，在第三栋楼的地下室干活。",
+      "source": "observed",
+      "id": "FACT-003",
+      "turn": 6,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "description": "一家叫 NEXUS 的巨型企业控制着全城的神经网络。",
+      "source": "observed",
+      "id": "FACT-004",
+      "turn": 6,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "description": "每个失踪者都装着廉价的二手神经植入体。",
+      "source": "observed",
+      "id": "FACT-005",
+      "turn": 6,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "description": "一个叫黑鹭的信使只有在你说出暗号「蓝鹭」时才肯开口。",
+      "source": "observed",
+      "id": "FACT-006",
+      "turn": 6,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "description": "抽取行动都发生在凌晨 03:40，地点总是第七区。",
+      "source": "observed",
+      "id": "FACT-007",
+      "turn": 6,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    }
+  ],
+  "rumors": [
+    {
+      "id": "RUMOR-001",
+      "description": "旧网络不只是崩溃了——里面有东西",
+      "source": "网络记忆"
+    },
+    {
+      "id": "RUMOR-002",
+      "description": "一个叫幽灵的黑客能破解任何东西",
+      "source": "网络记忆"
+    }
+  ],
+  "evidence": [],
+  "theories": [],
+  "connections": []
+}

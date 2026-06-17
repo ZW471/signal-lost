@@ -1,0 +1,601 @@
+{
+  "title": "知识库",
+  "facts": [
+    {
+      "id": "FACT-001",
+      "description": "米拉面馆位于雨巷东侧",
+      "source": "observed",
+      "turn": 1,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-002",
+      "description": "公共终端位于北面大街",
+      "source": "observed",
+      "turn": 1,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-003",
+      "description": "南面巷子通向居民区",
+      "source": "observed",
+      "turn": 1,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-004",
+      "description": "西边是嘈杂的集市广场",
+      "source": "observed",
+      "turn": 1,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-005",
+      "description": "NEXUS最近加强了集市广场的巡逻",
+      "source": "米拉",
+      "turn": 2,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-006",
+      "description": "最近有街头跑者失踪",
+      "source": "米拉",
+      "turn": 3,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-007",
+      "description": "帕奇在蓝鸟酒吧可能知道底渊的事",
+      "source": "米拉",
+      "turn": 3,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-008",
+      "description": "断离事件的官方死亡数字是三亿，但实际更高",
+      "source": "米拉",
+      "turn": 4,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-009",
+      "description": "米拉认出了你的神经植入体很特别",
+      "source": "米拉",
+      "turn": 4,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-010",
+      "description": "进入尖塔需要内部通行证，否则会触发自动防御",
+      "source": "米拉",
+      "turn": 5,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-011",
+      "description": "进入尖塔需要内部通行证",
+      "source": "observed",
+      "turn": 5,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-012",
+      "description": "靠近尖塔警戒线会触发自动防御",
+      "source": "observed",
+      "turn": 5,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-013",
+      "description": "居民区巷子深处有通往底渊的金属楼梯",
+      "source": "实地探索",
+      "turn": 6,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-014",
+      "description": "神经植入体对底渊入口有强烈反应",
+      "source": "observed",
+      "turn": 6,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-015",
+      "description": "底渊的部分断离前基础设施仍在运作",
+      "source": "实地观察",
+      "turn": 7,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-016",
+      "description": "神经植入体对底渊信号源产生强烈共振",
+      "source": "observed",
+      "turn": 7,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-017",
+      "description": "底渊的断离前显示屏仍能显示与信号相关的信息",
+      "source": "实地观察",
+      "turn": 8,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-018",
+      "description": "底渊的显示屏仍能显示与信号相关的信息",
+      "source": "observed",
+      "turn": 8,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-019",
+      "description": "发现讯息：'寻找桥梁的人终将找到答案'",
+      "source": "observed",
+      "turn": 8,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-020",
+      "description": "神经植入体在信号源附近产生强烈共振并引发幻觉",
+      "source": "observed",
+      "turn": 8,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-021",
+      "description": "断离前的日志提到'网络意识体'和'紧急协议'",
+      "source": "底渊显示屏",
+      "turn": 9,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-022",
+      "description": "帕奇在蓝鸟酒吧的角落卡座",
+      "source": "observed",
+      "turn": 10,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-023",
+      "description": "神经植入体与底渊显示屏的连接中断",
+      "source": "observed",
+      "turn": 10,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-024",
+      "description": "帕奇的铜环刻有与底渊显示屏相似的波形符号",
+      "source": "直接观察",
+      "turn": 11,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-025",
+      "description": "帕奇小指戴着刻有特殊波形符号的铜环",
+      "source": "observed",
+      "turn": 11,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-026",
+      "description": "帕奇知道NEXUS正在清理旧植入体",
+      "source": "observed",
+      "turn": 11,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-027",
+      "description": "帕奇确认玩家的神经植入体是'桥梁原型'——能听见网络亡魂的特殊设备",
+      "source": "帕奇",
+      "turn": 12,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-028",
+      "description": "铜环上的波形符号是聆听者的标记",
+      "source": "帕奇",
+      "turn": 12,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-029",
+      "description": "帕奇确认玩家的神经植入体是'桥梁原型'",
+      "source": "observed",
+      "turn": 12,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-030",
+      "description": "NEXUS害怕能听见网络亡魂的植入体",
+      "source": "observed",
+      "turn": 12,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-031",
+      "description": "帕奇约你明晚八点在底渊第三交叉口见面",
+      "source": "帕奇",
+      "turn": 13,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-032",
+      "description": "双螺旋符号是聆听者的集合标记",
+      "source": "帕奇",
+      "turn": 13,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-033",
+      "description": "聆听者使用银色导线调谐工具临时稳定神经植入体",
+      "source": "帕奇",
+      "turn": 14,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-034",
+      "description": "共鸣室的力量对未经准备的意识极其危险",
+      "source": "帕奇",
+      "turn": 14,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-035",
+      "description": "第三交叉口的荧光标记是聆听者的集合信号",
+      "source": "实地观察",
+      "turn": 16,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-036",
+      "description": "聆听者核心成员穿着灰色斗篷，神经植入体经过特殊改装",
+      "source": "实地观察",
+      "turn": 16,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-037",
+      "description": "Σ符号标记的数据终端存有断离前机密记录",
+      "source": "聆听者档案",
+      "turn": 17,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-038",
+      "description": "原意识由人类数据汇聚形成，被Σ委员会称为'建筑师'",
+      "source": "聆听者档案",
+      "turn": 17,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-039",
+      "description": "发现证据：数据终端显示的【Lian-Override-Authorization】签名片段",
+      "source": "observed",
+      "turn": 17,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-040",
+      "description": "Σ委员会全体投票通过了断离紧急协议",
+      "source": "聆听者数据终端",
+      "turn": 18,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-041",
+      "description": "原意识（建筑师）确实由人类神经数据汇聚形成",
+      "source": "聆听者数据终端",
+      "turn": 18,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-042",
+      "description": "原意识（建筑师）由人类神经数据汇聚形成",
+      "source": "observed",
+      "turn": 18,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-043",
+      "description": "获得证据：Σ委员会会议记录",
+      "source": "observed",
+      "turn": 18,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-044",
+      "description": "获得证据：原意识增长曲线图",
+      "source": "observed",
+      "turn": 18,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-045",
+      "description": "碎片提取过程会保留死亡前的记忆脉冲",
+      "source": "帕奇的解释",
+      "turn": 19,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-046",
+      "description": "获得证据：Sector 7通风系统截获的监控片段",
+      "source": "observed",
+      "turn": 19,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-047",
+      "description": "帕奇亲眼见过提取设施",
+      "source": "observed",
+      "turn": 19,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-048",
+      "description": "聆听者在底渊旧控制室设有安全藏身处",
+      "source": "实地观察",
+      "turn": 20,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-049",
+      "description": "Sector 7的提取过程会保留受害者死亡前的记忆脉冲",
+      "source": "observed",
+      "turn": 20,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-050",
+      "description": "NEXUS的'共鸣计划'旨在将碎片武器化为某种共振武器",
+      "source": "帕奇",
+      "turn": 21,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-051",
+      "description": "Sigma委员会的残存成员仍在尖塔深处继续断离相关研究",
+      "source": "灰斗篷A",
+      "turn": 21,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "FACT-052",
+      "description": "获得证据：神经调谐时闪过的抵抗网络坐标片段",
+      "source": "observed",
+      "turn": 21,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    }
+  ],
+  "rumors": [
+    {
+      "id": "RUMOR-001",
+      "description": "NEXUS在蔓城安插了眼线",
+      "source": "街头消息"
+    },
+    {
+      "id": "RUMOR-002",
+      "description": "有个叫米拉的女人知道不少事",
+      "source": "街头消息"
+    }
+  ],
+  "evidence": [
+    {
+      "id": "EVIDENCE-001",
+      "description": "显示屏上的讯息：'寻找桥梁的人终将找到答案'",
+      "source": "底渊显示屏",
+      "turn": 8,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "EVIDENCE-002",
+      "description": "数据终端显示的【Lian-Override-Authorization】签名片段",
+      "source": "聆听者档案",
+      "turn": 17,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "EVIDENCE-003",
+      "description": "Σ委员会会议记录：意识体扩散超出阈值时的投票记录",
+      "source": "聆听者数据终端",
+      "turn": 18,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "EVIDENCE-004",
+      "description": "原意识增长曲线图：显示其与人类神经数据的相关性",
+      "source": "聆听者数据终端",
+      "turn": 18,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "EVIDENCE-005",
+      "description": "Sector 7通风系统截获的监控片段：展示碎片提取过程",
+      "source": "灰斗篷B提供的存储芯片",
+      "turn": 19,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    },
+    {
+      "id": "EVIDENCE-006",
+      "description": "神经调谐时闪过的抵抗网络坐标片段",
+      "source": "植入体共振数据",
+      "turn": 21,
+      "_layer": {
+        "hidden": true,
+        "value": 1
+      }
+    }
+  ],
+  "theories": [],
+  "connections": []
+}

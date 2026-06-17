@@ -1,0 +1,18 @@
+{
+  "title": "Player Status",
+  "name": "Kael",
+  "alias": "Ghost",
+  "background": "Netrunner",
+  "integrity": {
+    "current": 3,
+    "max": 3
+  },
+  "credits": 50,
+  "neural_implant": "Active",
+  "current_disguise": "None",
+  "turn": 2,
+  "time": "Morning",
+  "status_effects": [
+    "Signal Sensitivity (faint)"
+  ]
+}

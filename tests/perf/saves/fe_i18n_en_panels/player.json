@@ -1,0 +1,21 @@
+{
+  "title": "Player Status",
+  "name": "Kael",
+  "alias": "Ghost",
+  "background": "Netrunner",
+  "integrity": {
+    "current": 2,
+    "max": 3
+  },
+  "credits": 32,
+  "neural_implant": "Active — Broadcast Dampened (pre-Severance ferrite mesh housing; reads as inactive to NEXUS scanners; signature spikes during resonance)",
+  "current_disguise": "None",
+  "turn": 21,
+  "time": "Afternoon",
+  "status_effects": [
+    "Signal Sensitivity (faint)"
+  ],
+  "flags": {
+    "integrity_introduced": true
+  }
+}
