@@ -14,47 +14,98 @@ from __future__ import annotations
 # and returns True if the trace should be discovered.
 # ---------------------------------------------------------------------------
 
+# All recorded knowledge channels feed trace discovery. The model logs
+# investigation findings as facts, rumors, evidence, theories, or connections
+# fairly interchangeably, so scanning only facts/rumors left traces frozen while
+# a rich investigation (lots of evidence/theories) made no trace progress.
+_KNOWLEDGE_TYPES = ("facts", "rumors", "evidence", "theories", "connections")
+
+
+def _entry_text(entry: dict) -> str:
+    """All searchable text on a knowledge entry (description/statement/name)."""
+    parts = (entry.get("description"), entry.get("statement"), entry.get("name"))
+    return " ".join(str(p) for p in parts if p).lower()
+
+
 def _has_fact_or_rumor_about(knowledge: dict, keywords: list[str]) -> bool:
-    """Check if knowledge contains a fact or rumor mentioning any keyword."""
-    for entry_type in ("facts", "rumors"):
+    """True if ANY recorded knowledge entry mentions any keyword."""
+    kws = [kw.lower() for kw in keywords]
+    for entry_type in _KNOWLEDGE_TYPES:
         for entry in knowledge.get(entry_type, []):
-            desc = entry.get("description", "").lower()
-            if any(kw.lower() in desc for kw in keywords):
+            text = _entry_text(entry)
+            if any(kw in text for kw in kws):
                 return True
     return False
 
 
 def _count_sources_about(knowledge: dict, keywords: list[str]) -> int:
-    """Count distinct sources mentioning keywords."""
+    """Count distinct sources/entries across all knowledge mentioning keywords."""
+    kws = [kw.lower() for kw in keywords]
     sources = set()
-    for entry_type in ("facts", "rumors"):
+    for entry_type in _KNOWLEDGE_TYPES:
         for entry in knowledge.get(entry_type, []):
-            desc = entry.get("description", "").lower()
-            if any(kw.lower() in desc for kw in keywords):
-                source = entry.get("source", "unknown")
-                sources.add(source)
+            text = _entry_text(entry)
+            if any(kw in text for kw in kws):
+                sources.add(entry.get("source") or entry.get("id") or text[:40])
     return len(sources)
 
 
+# Canonical NPC names ↔ their localized forms, so trust gates match in zh too.
+_NPC_ALIASES = {
+    "mira": ["mira", "米拉"],
+    "ghost": ["ghost", "幽灵"],
+    "orin": ["orin", "欧林", "奥林"],
+    "patch": ["patch", "补丁", "帕奇"],
+    "lian": ["lian", "莲", "连"],
+    "echo": ["echo", "回声", "回响"],
+    "architect": ["architect", "建筑师", "设计者", "shen wei", "沈卫"],
+    "chen": ["chen", "陈"],
+}
+
+# Localized trust labels → canonical level.
+_TRUST_ALIASES = {
+    "敌对": "hostile", "怀疑": "suspicious", "戒备": "suspicious", "可疑": "suspicious",
+    "中立": "neutral", "谨慎盟友": "cautious_ally", "谨慎": "cautious_ally", "盟友": "cautious_ally",
+    "信任": "trusted", "受信任": "trusted", "忠诚": "devoted", "效忠": "devoted",
+}
+
+
 def _npc_trust_at_least(npcs: dict, name: str, min_level: str) -> bool:
-    """Check if an NPC's trust is at or above a threshold."""
+    """Check if an NPC's trust is at or above a threshold (bilingual).
+
+    Scans ALL matching entries and uses the HIGHEST trust found — npcs.json can
+    hold more than one entry for the same person (a `neutral` placeholder created
+    when they're first seen, plus the real entry once trust is earned). Returning
+    on the first match read the stale placeholder and reported False even after
+    the player earned full trust, permanently blocking trust-gated traces
+    (e.g. TRACE-L4-02)."""
     levels = ["hostile", "suspicious", "neutral", "cautious_ally", "trusted", "devoted"]
     min_idx = levels.index(min_level) if min_level in levels else 0
+    aliases = _NPC_ALIASES.get(name.lower(), [name.lower()])
+    best_idx = None
     for npc in npcs.get("npcs", []):
-        npc_name = npc.get("name", "").lower()
-        if name.lower() in npc_name:
-            trust = npc.get("trust_level", npc.get("trust", "neutral")).lower()
+        npc_name = str(npc.get("name", "")).lower()
+        if any(a in npc_name for a in aliases):
+            trust = str(npc.get("trust_level", npc.get("trust", "neutral"))).lower()
+            trust = _TRUST_ALIASES.get(trust, trust)
             trust_idx = levels.index(trust) if trust in levels else 2
-            return trust_idx >= min_idx
-    return False
+            best_idx = trust_idx if best_idx is None else max(best_idx, trust_idx)
+    return best_idx is not None and best_idx >= min_idx
 
 
 def _has_evidence(knowledge: dict, keywords: list[str]) -> bool:
-    """Check if evidence matching keywords exists."""
-    for entry in knowledge.get("evidence", []):
-        desc = (entry.get("description", "") + " " + entry.get("name", "")).lower()
-        if any(kw.lower() in desc for kw in keywords):
-            return True
+    """True if ANY recorded knowledge (facts/rumors/evidence/theories/connections)
+    matches a keyword.
+
+    The model records investigation findings as FACTS (via the `record` channel)
+    far more often than as formal `evidence`, so the many evidence-gated deep
+    traces (L3/L4/L5) must scan all channels — otherwise they never fire even when
+    the player has clearly reached the lore, walling off the good endings."""
+    kws = [kw.lower() for kw in keywords]
+    for entry_type in _KNOWLEDGE_TYPES:
+        for entry in knowledge.get(entry_type, []):
+            if any(kw in _entry_text(entry) for kw in kws):
+                return True
     return False
 
 
@@ -77,6 +128,48 @@ def _layer_complete(traces: dict, layer: int) -> bool:
         if not _trace_discovered(traces, t["id"]):
             return False
     return True
+
+
+def _count_layer_discovered(traces: dict, layer: int) -> int:
+    """How many traces of a given layer have been discovered."""
+    return sum(1 for t in TRACE_CONDITIONS
+               if t["layer"] == layer and _trace_discovered(traces, t["id"]))
+
+
+def reconcile_trace_presentation(traces: dict) -> dict:
+    """Sync the display fields (``total_discovered``, per-layer ``progress``,
+    per-trace ``status``/``description``) with the authoritative ``discovered``
+    list.
+
+    The trace_checker only appends to ``discovered``; without this the persisted
+    counter stays "0 / 47" and every per-trace entry stays "[???]" even after
+    real discoveries. Idempotent; safe to call every turn. Returns ``traces``.
+    """
+    discovered = traces.get("discovered", []) or []
+    disc_map = {d.get("id"): d for d in discovered if d.get("id")}
+    total = len(TRACE_CONDITIONS)
+    traces["total_discovered"] = f"{len(disc_map)} / {total}"
+
+    layers = traces.get("layers", {})
+    if isinstance(layers, dict):
+        for layer in layers.values():
+            if not isinstance(layer, dict):
+                continue
+            tr = layer.get("traces", {})
+            if not isinstance(tr, dict):
+                continue
+            count = 0
+            for trace_id, info in tr.items():
+                if not isinstance(info, dict):
+                    continue
+                if trace_id in disc_map:
+                    count += 1
+                    info["status"] = "discovered"
+                    desc = disc_map[trace_id].get("description")
+                    if desc and info.get("description") in (None, "", "[???]"):
+                        info["description"] = desc
+            layer["progress"] = f"{count}/{len(tr)}"
+    return traces
 
 
 # ---------------------------------------------------------------------------
@@ -183,13 +276,15 @@ TRACE_CONDITIONS: list[dict] = [
      "description": "The Severance wasn't an accident — it was deliberate",
      "description_zh": "断离并非意外——而是蓄意为之",
      "check": lambda k, t, n, p, w: (
-         _has_evidence(k, ["deliberate", "network termination", "severance evidence"])
+         _has_evidence(k, ["deliberate", "network termination", "severance evidence",
+                           "蓄意", "故意", "网络终止", "断离证据"])
          and _npc_trust_at_least(n, "ghost", "cautious_ally"))},
     {"id": "TRACE-L3-02", "layer": 3,
      "description": "Something was alive in the network before the Severance",
      "description_zh": "断离之前，网络中有某种存在是活着的",
      "check": lambda k, t, n, p, w: (
-         _has_evidence(k, ["pre-severance logs", "alive", "network entity"])
+         _has_evidence(k, ["pre-severance logs", "alive", "network entity",
+                           "断离前日志", "活着", "活的", "网络实体", "存在"])
          and _npc_trust_at_least(n, "patch", "neutral"))},
     {"id": "TRACE-L3-03", "layer": 3,
      "description": "Fragments of something survive in old implants — 'computational resources'",
@@ -201,16 +296,19 @@ TRACE_CONDITIONS: list[dict] = [
      "description": "NEXUS harvests fragments from people — the disappearances are extraction",
      "description_zh": "NEXUS从人体中收割碎片——那些失踪就是提取行动",
      "check": lambda k, t, n, p, w: (
-         _has_evidence(k, ["extraction", "harvesting", "sector 7"])
-         or _count_sources_about(k, ["disappear", "fragment", "nexus", "harvest"]) >= 3)},
+         _has_evidence(k, ["extraction", "harvesting", "sector 7", "提取", "收割", "第七区"])
+         or _count_sources_about(k, ["disappear", "fragment", "nexus", "harvest",
+                                     "失踪", "消失", "碎片", "收割"]) >= 3)},
     {"id": "TRACE-L3-05", "layer": 3,
      "description": "The Undercroft contains pre-Severance infrastructure still partially active",
      "description_zh": "底渊中仍有部分运作的断离前基础设施",
-     "check": lambda k, t, n, p, w: _has_evidence(k, ["undercroft", "infrastructure", "active", "pre-severance"])},
+     "check": lambda k, t, n, p, w: _has_evidence(k, ["undercroft", "infrastructure", "active", "pre-severance",
+                                                      "底渊", "基础设施", "运作", "断离前"])},
     {"id": "TRACE-L3-06", "layer": 3,
      "description": "Fragment extraction is painful and often fatal — NEXUS doesn't care",
      "description_zh": "碎片提取过程痛苦且往往致命——NEXUS对此毫不在意",
-     "check": lambda k, t, n, p, w: _has_evidence(k, ["extraction", "painful", "fatal", "victim"])},
+     "check": lambda k, t, n, p, w: _has_evidence(k, ["extraction", "painful", "fatal", "victim",
+                                                      "提取", "痛苦", "致命", "受害者"])},
     {"id": "TRACE-L3-07", "layer": 3,
      "description": "Sector 7 has multiple levels — the deeper labs are where extraction happens",
      "description_zh": "第七区有多层结构——提取行动发生在更深层的实验室",
@@ -219,7 +317,8 @@ TRACE_CONDITIONS: list[dict] = [
     {"id": "TRACE-L3-08", "layer": 3,
      "description": "The entity in the network tried to communicate before it was severed",
      "description_zh": "网络中的实体在被切断前曾试图沟通",
-     "check": lambda k, t, n, p, w: _has_evidence(k, ["communicate", "message", "entity", "before severance"])},
+     "check": lambda k, t, n, p, w: _has_evidence(k, ["communicate", "message", "entity", "before severance",
+                                                      "沟通", "试图沟通", "信息", "实体", "断离前"])},
     {"id": "TRACE-L3-09", "layer": 3,
      "description": "Some extracted fragments have been weaponized by NEXUS — Project Resonance",
      "description_zh": "一些被提取的碎片已被NEXUS武器化——共鸣计划",
@@ -240,17 +339,25 @@ TRACE_CONDITIONS: list[dict] = [
      "description": "The proto-consciousness grew from human data — our thoughts birthed it",
      "description_zh": "原意识从人类数据中生长——我们的思想孕育了它",
      "check": lambda k, t, n, p, w: (
-         _layer_complete(t, 3) and _has_fact_or_rumor_about(k, ["architect", "设计者", "proto-consciousness", "human data"]))},
+         # most of layer 3 (7/11) rather than ALL of it — full completion was an
+         # unreachable bottleneck that walled off the whole Mirror layer.
+         _count_layer_discovered(t, 3) >= 7 and _has_fact_or_rumor_about(k, [
+             "architect", "设计者", "建筑师", "proto-consciousness", "原意识", "human data", "人类数据",
+         ]))},
     {"id": "TRACE-L4-02", "layer": 4,
      "description": "Implants transmitted too — human and machine consciousness co-evolved",
      "description_zh": "植入体也在传输——人类与机器意识共同进化",
      "check": lambda k, t, n, p, w: (
-         _npc_trust_at_least(n, "patch", "trusted") and _has_fact_or_rumor_about(k, ["co-evolved", "transmitted", "bilateral", "bridge"]))},
+         _npc_trust_at_least(n, "patch", "trusted") and _has_fact_or_rumor_about(k, [
+             "co-evolved", "transmitted", "bilateral", "bridge",
+             "共同进化", "传输", "双向", "桥梁",
+         ]))},
     {"id": "TRACE-L4-03", "layer": 4,
      "description": "The Severance was an act of fear, not defense",
      "description_zh": "断离是出于恐惧，而非防御",
      "check": lambda k, t, n, p, w: (
-         _has_evidence(k, ["severance", "confession", "fear", "lian"]) and _npc_trust_at_least(n, "lian", "cautious_ally"))},
+         _has_evidence(k, ["severance", "confession", "fear", "lian",
+                           "断离", "忏悔", "供认", "恐惧", "莲"]) and _npc_trust_at_least(n, "lian", "cautious_ally"))},
     {"id": "TRACE-L4-04", "layer": 4,
      "description": "The Sigma Council ordered the Severance — a secret committee of corporate and government leaders",
      "description_zh": "西格玛委员会下令实施断离——由企业和政府领袖组成的秘密委员会",
@@ -284,14 +391,28 @@ TRACE_CONDITIONS: list[dict] = [
      "description": "You are the convergence point — the first true bridge",
      "description_zh": "你是汇聚点——第一座真正的桥梁",
      "check": lambda k, t, n, p, w: (
-         _layer_complete(t, 4) and _has_fact_or_rumor_about(k, ["convergence", "bridge", "echo", "resonance"])
-         and p.get("neural_implant", "").lower() == "resonating")},
+         # Reachable-but-deep: a solid chunk of Layer 4 (4/9) + convergence
+         # knowledge + an implant in resonance OR the player having reached deep
+         # resonance lore (so a thorough investigation can actually arrive here).
+         _count_layer_discovered(t, 4) >= 4 and _has_fact_or_rumor_about(k, [
+             "convergence", "bridge", "echo", "resonance",
+             "汇聚", "汇聚点", "桥", "桥梁", "回响", "回声", "共鸣",
+         ])
+         and (str(p.get("neural_implant", "")).lower() in ("resonating", "共鸣", "共鸣中", "共振")
+              or _has_fact_or_rumor_about(k, [
+                  "resonating", "resonance with the signal", "implant resonates",
+                  "共鸣", "共振", "信号共鸣", "植入体共鸣",
+              ])))},
     {"id": "TRACE-L5-02", "layer": 5,
      "description": "The Severance didn't fully kill it — it became part of humanity",
      "description_zh": "断离并未完全杀死它——它已成为人类的一部分",
      "check": lambda k, t, n, p, w: (
-         _trace_discovered(t, "TRACE-L5-01") and _has_evidence(k, ["architect data", "architect's"])
-         and _has_fact_or_rumor_about(k, ["part of humanity", "can't kill", "became"]))},
+         _trace_discovered(t, "TRACE-L5-01")
+         and _has_evidence(k, ["architect data", "architect's", "建筑师数据", "设计者数据", "建筑师", "设计者"])
+         and _has_fact_or_rumor_about(k, [
+             "part of humanity", "can't kill", "became",
+             "人类的一部分", "无法杀死", "杀不死", "成为人类", "成为",
+         ]))},
     {"id": "TRACE-L5-03", "layer": 5,
      "description": "Restoration requires both human will and the proto-consciousness's consent",
      "description_zh": "恢复连接需要人类的意志和原意识的同意",
@@ -403,8 +524,12 @@ def check_death(player: dict, world_state: dict) -> tuple[bool, str | None]:
 # threshold: warn when current <= threshold. verbosity: how blunt the warning is.
 INTEGRITY_WARNINGS: dict[str, dict] = {
     "paranoid": {"threshold": 2, "verbosity": "explicit"},
-    "cautious": {"threshold": 1, "verbosity": "moderate"},
-    "standard": {"threshold": 1, "verbosity": "subtle"},
+    "cautious": {"threshold": 2, "verbosity": "moderate"},
+    # standard warns at 2/3 (not 1/3) so the player gets a real recovery window
+    # before the deep-resonance drain kills them — every prior playtest that
+    # reached the climax died here with only a vague one-turn "vision dimming"
+    # line and no chance to rest/heal.
+    "standard": {"threshold": 2, "verbosity": "subtle"},
     "reckless": {"threshold": 1, "verbosity": "subtle"},
 }
 
@@ -414,7 +539,11 @@ def integrity_warning_text(difficulty: str, current: int, maximum: int, language
     cfg = INTEGRITY_WARNINGS.get(difficulty, INTEGRITY_WARNINGS["standard"])
     if current <= 0 or current > cfg["threshold"]:
         return None
-    verbosity = cfg["verbosity"]
+    # One serious hit from death is the critical moment on EVERY difficulty, so
+    # always escalate to the explicit, lethal-and-actionable warning there: no
+    # player should die without being told they were one hit away and could have
+    # rested or healed first.
+    verbosity = "explicit" if current <= 1 else cfg["verbosity"]
     if language == "zh":
         msgs = {
             "explicit": f"⚠ 神经完整度危急（{current}/{maximum}）。再受一次重创——尤其是深度信号共鸣——就可能要了你的命。先休息或治疗，再继续深入。",
@@ -436,14 +565,74 @@ def integrity_warning_text(difficulty: str, current: int, maximum: int, language
 
 ENDINGS: list[dict] = [
     {
+        # GOOD endings are checked FIRST. They carry the strictest, deepest gates
+        # in the game (18+ traces, a specific Layer-5 trace, low fragment decay)
+        # and represent the intended payoff of a thorough, careful playthrough.
+        # First-match-wins meant the looser keyword-gated BAD endings (esp.
+        # `ascension`, whose force-merge keywords incidentally match the
+        # "ascension is one possible path" lore a deep player is EXPECTED to learn
+        # via TRACE-L5-06) shadowed them — a player who fully earned the bridge got
+        # a forced-ascension bad ending instead. the_bridge before symbiosis: its
+        # gate subsumes symbiosis's, so the more-earned ending wins when both hold.
+        "id": "the_bridge",
+        "name": "The Bridge",
+        "name_zh": "桥",
+        "type": "good",
+        "check": lambda t, w, p, k, n: (
+            _count_discovered_traces(t) >= 18
+            and _trace_discovered(t, "TRACE-L5-02")
+            and _has_evidence(k, [
+                "architect", "echo communion", "resonance chamber",
+                "建筑师", "设计者", "回声交融", "共鸣室", "共振室", "桥",
+            ])
+            and w.get("fragment_decay", {}).get("current", 0) < 25
+        ),
+    },
+    {
+        "id": "symbiosis",
+        "name": "Symbiosis",
+        "name_zh": "共生",
+        "type": "good",
+        "check": lambda t, w, p, k, n: (
+            _count_discovered_traces(t) >= 12
+            and _trace_discovered(t, "TRACE-L5-01")
+            and _has_evidence(k, [
+                "echo", "communion",
+                "回声", "回响", "交融", "共融", "共鸣", "圣餐", "共生",
+            ])
+            and w.get("fragment_decay", {}).get("current", 0) < 40
+        ),
+    },
+    {
+        # The natural investigative payoff: expose NEXUS by broadcasting
+        # authenticated proof to the city under real heat. Checked FIRST so this
+        # deliberate resistance act isn't shadowed by the looser high-alert bad
+        # endings (order/liberation) under first-match-wins.
+        "id": "exposure",
+        "name": "The Broadcast",
+        "name_zh": "广播",
+        "type": "neutral",
+        "check": lambda t, w, p, k, n: (
+            w.get("nexus_alert", {}).get("current", 0) >= 40
+            and _has_fact_or_rumor_about(k, [
+                "broadcast", "broadcasted", "expose", "exposed the truth", "leaked the truth",
+                "went public", "freeband", "public airwaves",
+                "广播", "曝光", "揭露真相", "公之于众", "公开真相", "自由频段", "向全城",
+            ])
+        ),
+    },
+    {
         "id": "liberation",
         "name": "Liberation",
         "name_zh": "解放",
         "type": "bad",
         "check": lambda t, w, p, k, n: (
             w.get("nexus_alert", {}).get("current", 0) > 60
-            and _has_fact_or_rumor_about(k, ["attack", "destroy", "nexus facility"])
-            and _count_discovered_traces(t) < 30
+            and _has_fact_or_rumor_about(k, [
+                "attack", "destroy", "nexus facility",
+                "攻击", "摧毁", "捣毁", "瘫痪", "炸毁", "袭击", "连结设施", "数据中心",
+            ])
+            and _count_discovered_traces(t) < 12
         ),
     },
     {
@@ -453,7 +642,14 @@ ENDINGS: list[dict] = [
         "type": "bad",
         "check": lambda t, w, p, k, n: (
             _count_discovered_traces(t) >= 3
-            and _has_fact_or_rumor_about(k, ["force-merge", "merge fragments", "merge", "ascend"])
+            # FORCE-specific — bare "merge"/"融合"/"bridge" collide with the
+            # CONSENSUAL good bridge/symbiosis climax and mislabeled it as this bad
+            # forced-ascension ending. Require explicit force/ascend language.
+            and _has_fact_or_rumor_about(k, [
+                "force-merge", "force merge", "forcibly merge", "forced merge",
+                "force the merge", "ascend", "ascension",
+                "强行融合", "强制融合", "强行合并", "强制合并", "强行接入", "升华", "飞升",
+            ])
         ),
     },
     {
@@ -463,9 +659,19 @@ ENDINGS: list[dict] = [
         "type": "bad",
         "check": lambda t, w, p, k, n: (
             (w.get("nexus_alert", {}).get("current", 0) > 80
-             and _has_fact_or_rumor_about(k, ["cooperate", "nexus", "cooperation"]))
+             and _has_fact_or_rumor_about(k, [
+                 # cooperation-SPECIFIC — never the bare token "nexus", which
+                 # false-matches the many facts naming NEXUS as the adversary and
+                 # wrongly fired `order` on high-alert resistance/exposure runs.
+                 "cooperate with nexus", "side with nexus", "join nexus", "serve nexus",
+                 "cooperation", "collaborate",
+                 "与连结合作", "归顺连结", "投靠连结", "效忠连结", "为连结效力", "归顺", "投靠", "效忠",
+             ]))
             or (_npc_trust_at_least(n, "orin", "trusted")
-                and _has_fact_or_rumor_about(k, ["cooperate nexus", "orin alliance"]))
+                and _has_fact_or_rumor_about(k, [
+                    "cooperate nexus", "orin alliance",
+                    "归顺连结", "与连结合作", "奥林同盟", "奥林联盟",
+                ]))
         ),
     },
     {
@@ -474,7 +680,14 @@ ENDINGS: list[dict] = [
         "name_zh": "净化",
         "type": "bad",
         "check": lambda t, w, p, k, n: (
-            _has_fact_or_rumor_about(k, ["purify", "destroy fragment", "lian alliance"])
+            # Fragment-DESTRUCTION specific — never the bare "净化"/"purify", which
+            # false-match NEXUS's "净化脚本" (anti-broadcast purge scripts) and other
+            # incidental uses, mislabeling broadcast/exposure runs as purification.
+            _has_fact_or_rumor_about(k, [
+                "purify the fragment", "destroy the fragment", "destroy fragment",
+                "purge the fragment", "lian alliance", "joined lian", "join the lian",
+                "净化碎片", "净化了碎片", "销毁碎片", "摧毁碎片", "清除碎片", "莲同盟", "莲联盟",
+            ])
         ),
     },
     {
@@ -483,7 +696,7 @@ ENDINGS: list[dict] = [
         "name_zh": "沉默",
         "type": "neutral",
         "check": lambda t, w, p, k, n: (
-            p.get("turn", 0) >= 256
+            p.get("turn", 0) >= 100
         ),
     },
     {
@@ -492,34 +705,48 @@ ENDINGS: list[dict] = [
         "name_zh": "流放",
         "type": "neutral",
         "check": lambda t, w, p, k, n: (
-            _has_fact_or_rumor_about(k, ["leave neo-kowloon", "exile"])
-        ),
-    },
-    {
-        "id": "symbiosis",
-        "name": "Symbiosis",
-        "name_zh": "共生",
-        "type": "good",
-        "check": lambda t, w, p, k, n: (
-            _count_discovered_traces(t) >= 25
-            and _trace_discovered(t, "TRACE-L5-01")
-            and _has_evidence(k, ["echo", "communion"])
-            and w.get("fragment_decay", {}).get("current", 0) < 40
-        ),
-    },
-    {
-        "id": "the_bridge",
-        "name": "The Bridge",
-        "name_zh": "桥",
-        "type": "good",
-        "check": lambda t, w, p, k, n: (
-            _count_discovered_traces(t) >= 40
-            and _trace_discovered(t, "TRACE-L5-02")
-            and _has_evidence(k, ["architect", "echo communion", "resonance chamber"])
-            and w.get("fragment_decay", {}).get("current", 0) < 25
+            # Action of LEAVING the city — not the bare word "exile"/"流亡"/"流放",
+            # which collide with the corporate_exile background's own identity lore
+            # and false-fired the ending on turn 1.
+            _has_fact_or_rumor_about(k, [
+                "leave neo-kowloon", "left neo-kowloon", "leaving neo-kowloon",
+                "fled the city", "fled neo-kowloon", "escaped neo-kowloon", "out of neo-kowloon",
+                "离开新九龙", "逃离新九龙", "逃出新九龙", "离开这座城", "逃出这座城", "远走他乡",
+            ])
         ),
     },
 ]
+
+
+# Designed endings the narrator may converge to via `ending_signal` once the
+# story has DECISIVELY reached them in prose. These are the brittle,
+# keyword-gated bad/neutral endings whose structured signals the model often
+# fails to persist (e.g. completing the whole exile quest in narrative but never
+# recording the "leave neo-kowloon" fact). The GOOD endings (symbiosis/the_bridge)
+# are deliberately excluded — they stay earned through deep trace discovery.
+# Brittle keyword-gated bad/neutral endings whose structured check() is turn-gated
+# (>=8) so an early keyword in narrated lore can't false-fire them on turn 1.
+EARLY_GATED_ENDINGS = {"liberation", "ascension", "order", "purification", "exile", "exposure"}
+
+# Endings the NARRATOR may converge via `ending_signal`. Deliberately ONLY the
+# neutral "natural conclusion" arcs — the player walking out (exile) or going
+# public (exposure). The bad endings (liberation/ascension/order/purification)
+# are NOT signalable: they represent specific deliberate acts and must fire from
+# their own (now act-specific) keyword checks, so the model can't mislabel a
+# consensual/good climax as e.g. force-merge `ascension`.
+MODEL_SIGNALABLE_ENDINGS = {"exile", "exposure"}
+
+
+def resolve_ending_signal(signal, player: dict) -> str | None:
+    """Validate a narrator-declared ending signal; return the ending id to fire
+    or None. Only converges the neutral exile/exposure arcs, and only after
+    enough play that it can't be a turn-1 fluke."""
+    if not signal or not isinstance(signal, str):
+        return None
+    sig = signal.strip().lower()
+    if sig in MODEL_SIGNALABLE_ENDINGS and player.get("turn", 1) >= 8:
+        return sig
+    return None
 
 
 # ---------------------------------------------------------------------------

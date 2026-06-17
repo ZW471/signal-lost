@@ -117,8 +117,8 @@ const LABELS = {
     label_difficulty: 'DIFFICULTY', label_language: 'LANGUAGE',
     placeholder_name: 'Enter name...', placeholder_alias: 'Enter alias...',
     bg_street_runner: 'Street Runner', bg_corporate_exile: 'Corporate Exile', bg_netrunner: 'Netrunner',
-    diff_paranoid: 'Easy', diff_cautious: 'Medium',
-    diff_standard: 'Hard', diff_reckless: 'Very Hard',
+    diff_paranoid: 'Easy', diff_cautious: 'Normal',
+    diff_standard: 'Standard', diff_reckless: 'Very Hard',
     diff_paranoid_desc: 'More forgiving, extra integrity',
     diff_cautious_desc: 'Balanced experience',
     diff_standard_desc: 'The intended challenge',
@@ -143,6 +143,7 @@ const LABELS = {
     settings_langsmith_title: '// LANGSMITH TRACING',
     label_langsmith_key: 'API KEY', label_langsmith_project: 'PROJECT NAME',
     settings_usage_title: '// USAGE TRACKING', label_show_tokens: 'Show token usage in conversation',
+    no_usage_data: 'No usage data yet',
     settings_audio_title: '// AUDIO', label_music_volume: 'MUSIC VOLUME',
     settings_gameplay_title: '// GAMEPLAY',
     label_suggested_actions: 'Suggest actions each turn',
@@ -248,8 +249,8 @@ const LABELS = {
     label_difficulty: '难度', label_language: '语言',
     placeholder_name: '输入姓名...', placeholder_alias: '输入化名...',
     bg_street_runner: '街头行者', bg_corporate_exile: '企业流亡者', bg_netrunner: '网行者',
-    diff_paranoid: '简单', diff_cautious: '中等',
-    diff_standard: '困难', diff_reckless: '极难',
+    diff_paranoid: '简单', diff_cautious: '普通',
+    diff_standard: '标准', diff_reckless: '极难',
     diff_paranoid_desc: '更宽容，额外完整性',
     diff_cautious_desc: '均衡体验',
     diff_standard_desc: '预期的挑战',
@@ -274,6 +275,7 @@ const LABELS = {
     settings_langsmith_title: '// LangSmith 记录',
     label_langsmith_key: 'API密钥', label_langsmith_project: '项目名称',
     settings_usage_title: '// 用量追踪', label_show_tokens: '在对话中显示令牌用量',
+    no_usage_data: '暂无用量数据',
     settings_audio_title: '// 音频', label_music_volume: '音乐音量',
     settings_gameplay_title: '// 玩法',
     label_suggested_actions: '每回合推荐行动',
@@ -469,21 +471,29 @@ function setLanguage(lang) {
   // Sync session language selector with UI language
   const selectLang = document.getElementById('selectLanguage');
   if (selectLang) selectLang.value = lang;
-  // Background select buttons
+  // Background select buttons. The subtitle must stay in the CURRENT language —
+  // it used to show the Chinese name even in EN mode (a visible i18n leak), so
+  // use a short same-language role tagline instead of the other-language name.
+  const bgNames = {
+    en: { street_runner: 'Street Runner', corporate_exile: 'Corporate Exile', netrunner: 'Netrunner' },
+    zh: { street_runner: '街头行者', corporate_exile: '企业流亡者', netrunner: '网行者' },
+  };
+  const bgTagline = {
+    en: { street_runner: 'Street ops · black markets · debts',
+          corporate_exile: 'Insider turned fugitive',
+          netrunner: 'Deep-dive hacker · signal-chaser' },
+    zh: { street_runner: '街头生存 · 黑市 · 债务',
+          corporate_exile: '叛逃的内部人',
+          netrunner: '深潜黑客 · 信号追猎者' },
+  };
   document.querySelectorAll('.cyber-select').forEach(btn => {
     const bg = btn.dataset.bg;
     const nameEl = btn.querySelector('.select-name');
     const descEl = btn.querySelector('.select-desc');
     if (bg && nameEl && descEl) {
-      if (lang === 'zh') {
-        nameEl.textContent = L('bg_' + bg);
-        descEl.textContent = '';
-      } else {
-        const bgNames = { street_runner: 'Street Runner', corporate_exile: 'Corporate Exile', netrunner: 'Netrunner' };
-        const bgZh = { street_runner: '街头行者', corporate_exile: '企业流亡者', netrunner: '网行者' };
-        nameEl.textContent = bgNames[bg] || bg;
-        descEl.textContent = bgZh[bg] || '';
-      }
+      const l = (lang === 'zh') ? 'zh' : 'en';
+      nameEl.textContent = (bgNames[l][bg]) || bg;
+      descEl.textContent = (bgTagline[l][bg]) || '';
     }
   });
   // Difficulty options
@@ -533,12 +543,18 @@ function setLanguage(lang) {
   if (subtitles[2]) subtitles[2].textContent = L('settings_usage_title');
   if (subtitles[3]) subtitles[3].textContent = L('settings_audio_title');
   if (subtitles[4]) subtitles[4].textContent = L('settings_gameplay_title');
-  // Localize checkbox label (preserve the <input> inside)
+  // Localize checkbox label (preserve the <input> inside). Only the text node
+  // AFTER the checkbox carries the label — setting EVERY text node (the loop used
+  // to) also filled the leading-whitespace node, rendering the label twice.
   const chkLabel = document.querySelector('#chkShowTokens');
   if (chkLabel && chkLabel.parentNode) {
     const lbl = chkLabel.parentNode;
-    // Keep checkbox, replace text
-    lbl.childNodes.forEach(n => { if (n.nodeType === 3) n.textContent = ' ' + L('label_show_tokens'); });
+    let labelNode = chkLabel.nextSibling;
+    while (labelNode && labelNode.nodeType !== 3) labelNode = labelNode.nextSibling;
+    if (labelNode) labelNode.textContent = ' ' + L('label_show_tokens');
+    lbl.childNodes.forEach(n => {
+      if (n.nodeType === 3 && n !== labelNode) n.textContent = '';
+    });
   }
   // Gameplay feature toggle labels (translated by id, not index)
   const lblSA = document.getElementById('lblSuggestedActions');
@@ -1467,7 +1483,7 @@ function _updateUsageStats() {
   const el = document.getElementById('usageStats');
   if (!el) return;
   if (!u || !u.total_calls) {
-    el.innerHTML = '<span class="dim" style="font-size:11px">No usage data yet</span>';
+    el.innerHTML = `<span class="dim" style="font-size:11px">${L('no_usage_data')}</span>`;
     return;
   }
   const costStr = typeof u.cost === 'number' ? ` &nbsp;|&nbsp; Cost: <span class="cyan">${_formatCost(u.cost)}</span>` : '';
@@ -1625,6 +1641,10 @@ function startNewGame() {
     difficulty: document.getElementById('selectDifficulty').value,
     language: document.getElementById('selectLanguage').value,
   };
+  // Make the whole UI follow the language you're PLAYING in — otherwise an
+  // English game shows Chinese chrome (and vice-versa) when the display default
+  // differs from the chosen game language.
+  if (config.language) setLanguage(config.language);
   clearChat(); isFirstInput = true; pendingTutorial = true; resumeMessageEl = null;
   _firstSceneArmed = true; _pendingFirstScene = null; // hold opening scene until tutorial ends
   sendWS({ action: 'new_game', config, provider: getProviderConfig() });
@@ -1698,6 +1718,10 @@ function showDiscoveryNotification(msg) {
 function showSystemNotice(text) {
   if (!text) return;
   const container = document.getElementById('chatMessages');
+  // Skip exact duplicates of the most recent system notice — the same meter
+  // change was sometimes emitted twice in a turn, stacking identical lines.
+  const last = container.querySelector('.chat-msg.system-notice:last-of-type .system-notice-text');
+  if (last && last.textContent === text) return;
   const el = document.createElement('div');
   el.className = 'chat-msg system-notice';
   el.innerHTML = `<div class="system-notice-text">${esc(text)}</div>`;
@@ -1765,6 +1789,20 @@ function addChatMessage(text, role = 'agent') {
   return msg;
 }
 
+/** Render a SAFE markdown subset (bold, italic, inline code, bullets, line
+ *  breaks). HTML is escaped first so narration can never inject markup. */
+function renderMarkdown(text) {
+  let h = String(text || '')
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  // bullet lines: "- foo" / "* foo" / "• foo" -> • foo
+  h = h.replace(/^[\t ]*[-*•]\s+(.*)$/gm, '<span class="md-li">• $1</span>');
+  h = h.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>');   // **bold**
+  h = h.replace(/`([^`\n]+)`/g, '<code>$1</code>');             // `code`
+  h = h.replace(/(^|[^*\w])\*([^*\n]+)\*(?=[^*\w]|$)/g, '$1<em>$2</em>'); // *italic*
+  h = h.replace(/\n/g, '<br>');
+  return h;
+}
+
 function addTypingMessage(text, role = 'agent', usage = null, elapsedSeconds = null, suggestedActions = null) {
   const container = document.getElementById('chatMessages');
   const msg = document.createElement('div');
@@ -1791,6 +1829,9 @@ function addTypingMessage(text, role = 'agent', usage = null, elapsedSeconds = n
       setTimeout(typeNext, interval);
     } else {
       contentEl.classList.remove('typing');
+      // Re-render the finished narration with a safe markdown subset so
+      // **bold**/lists/`code` don't show as literal asterisks.
+      contentEl.innerHTML = renderMarkdown(text);
       // Build info line: time always shown, tokens optional
       const infoParts = [];
       if (elapsedSeconds != null) {
@@ -2735,13 +2776,16 @@ function updateInventoryPanel(inventory) {
     </div>
     <div class="panel-section"><div class="panel-section-title">${L('items')}</div>`;
 
-  // Render all 6 slots
-  for (let s = 1; s <= maxSlots; s++) {
-    const item = items.find(i => i.slot === s);
+  // Render all slots. Items are stored without a stable `slot` field, so render
+  // them by position; an item's display name may be under `name` or `item`.
+  const slotCount = Math.max(maxSlots, items.length);
+  for (let s = 1; s <= slotCount; s++) {
+    const item = items.find(i => i.slot === s) || items[s - 1];
     if (item) {
+      const itemName = item.name || item.item || '?';
       const icon = ITEM_ICONS[(item.type || '').toLowerCase()] || '\u25A0';
       html += `<div class="inv-slot filled">
-        <div class="inv-slot-header">${icon} <span class="cyan">[${s}] ${esc(item.item)}</span></div>
+        <div class="inv-slot-header">${icon} <span class="cyan">[${s}] ${esc(itemName)}</span></div>
         <div class="inv-slot-type dim">${esc(item.type || '')}</div>
         <div class="inv-slot-desc">${esc(item.description || '')}</div>
       </div>`;
@@ -2843,9 +2887,32 @@ function npcAvatarImg(npc) {
        + `onerror="this.onerror=null;this.src='${fb}'">`;
 }
 
+// Collapse duplicate NPC entries (the engine occasionally promotes the same
+// person twice — e.g. once from a scene mention and once from update_npc — so the
+// tracker showed "Mira" twice with diverging trust/notes). Key by normalized name
+// and merge so the richest, non-empty fields win.
+function _dedupNpcList(list) {
+  const seen = new Map();
+  for (const npc of list) {
+    if (!npc || typeof npc !== 'object') continue;
+    const key = _avNorm(npc.name || npc.id).replace(/\s+/g, '');
+    if (!key) { continue; }
+    const prev = seen.get(key);
+    if (!prev) { seen.set(key, { ...npc }); continue; }
+    const merged = { ...prev };
+    for (const [k, v] of Object.entries(npc)) {
+      const empty = v == null || v === '' || v === 'none'
+        || (Array.isArray(v) && v.length === 0);
+      if (!empty) merged[k] = v;  // later/non-empty value wins
+    }
+    seen.set(key, merged);
+  }
+  return [...seen.values()];
+}
+
 function updateNetworkPanel(npcs) {
   const n = npcs || {};
-  const npcList = n.npcs || [];
+  const npcList = _dedupNpcList(n.npcs || []);
 
   let html = `<div class="panel-section"><div class="panel-section-title">${L('npc_tracker')} (${npcList.length})</div>`;
 
@@ -2912,10 +2979,10 @@ function updateWorldPanel(worldState) {
 
   let html = '';
 
-  // NEXUS Alert — only shown if > 0 (matches TUI)
-  const alertVal = alert.current || 0;
-  if (alertVal > 0) {
-    const alertPct = Math.min(alertVal, 10) * 10;
+  // NEXUS Alert — always shown (a primary fail meter; capture at 100). Runs 0-100.
+  const alertVal = Math.max(0, Math.min(100, alert.current || 0));
+  {
+    const alertPct = alertVal;
     const alertStatusDisplay = localizeAlertStatus(alert.status);
     html += `<div class="panel-section"><div class="panel-section-title">${L('nexus_alert')}</div>
       <div class="panel-row"><span class="panel-key">${L('status')}</span>

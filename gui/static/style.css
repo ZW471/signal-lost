@@ -1108,6 +1108,12 @@ html, body {
 }
 
 .send-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 40px;
+  box-sizing: border-box;
   background: var(--bg-input);
   border: 1px solid var(--cyan);
   color: var(--cyan);
@@ -1220,10 +1226,12 @@ html, body {
 
 .panel-tabs {
   display: flex;
+  /* Wrap instead of horizontal-scroll: a hidden-scrollbar single row clipped the
+     last tabs (LOG/CONV) at narrow widths with no affordance that they existed.
+     Wrapping keeps every tab visible — one row when it fits, multiple when not. */
+  flex-wrap: wrap;
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
-  overflow-x: auto;
-  scrollbar-width: none;
 }
 
 .panel-tabs::-webkit-scrollbar { display: none; }

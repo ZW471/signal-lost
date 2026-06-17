@@ -525,12 +525,19 @@ INVALID: <one-sentence reason explaining what was fabricated or why it's blocked
 
 
 def _build_validator_context(state: dict) -> str:
-    """Build a compact state summary for the input validator LLM."""
+    """Build a compact state summary for the input validator LLM.
+
+    ⚠️ SYNC: mirrors _build_validator_context in claude_code_engine.py — both must
+    expose the same KNOWN-to-player content (facts/rumors/theories/evidence/traces/
+    abilities) so the validator never rejects the game's own established narration.
+    """
     location = state.get("location", {})
     inventory = state.get("inventory", {})
     npcs = state.get("npcs", {})
     knowledge = state.get("knowledge", {})
     world_state = state.get("world_state", {})
+    player = state.get("player", {})
+    traces = state.get("traces", {})
 
     # Current location
     district = location.get("district", "Unknown")
@@ -553,12 +560,24 @@ def _build_validator_context(state: dict) -> str:
     # Accessible districts
     accessible = [e.get("name", "?") for e in world_state.get("district_access", [])]
 
-    # Knowledge counts
-    n_facts = len(knowledge.get("facts", []))
-    n_rumors = len(knowledge.get("rumors", []))
-    n_evidence = len(knowledge.get("evidence", []))
+    # Knowledge: actual content (not just counts) so the validator can recognize
+    # references to recorded facts/rumors/theories/traces as legitimate.
+    def _descs(entries, limit=80):
+        out = []
+        for e in entries or []:
+            d = e.get("description") or e.get("statement") or e.get("name") or ""
+            d = str(d).strip()
+            if d:
+                out.append(d[:limit])
+        return out
+
+    facts = _descs(knowledge.get("facts", []))
+    rumors = _descs(knowledge.get("rumors", []))
+    theories = _descs(knowledge.get("theories", []))
     evidence_names = [e.get("name", e.get("id", "?")) for e in knowledge.get("evidence", [])]
-    n_theories = len(knowledge.get("theories", []))
+    disc = traces.get("discovered", []) if isinstance(traces, dict) else []
+    disc_lines = [f"{d.get('id', '?')}: {str(d.get('description', ''))[:60]}" for d in disc]
+    status_effects = player.get("status_effects", []) or []
 
     lines = [
         f"Current location: {district} — {area}",
@@ -568,8 +587,17 @@ def _build_validator_context(state: dict) -> str:
         f"Encountered NPCs (all): {', '.join(enc_names) if enc_names else 'none yet'}",
         f"Inventory: {', '.join(item_names) if item_names else 'empty'} | Credits: {credits}",
         f"Accessible districts: {', '.join(accessible) if accessible else 'The Sprawl, Neon Row'}",
-        f"Knowledge: {n_facts} facts, {n_rumors} rumors, {n_evidence} evidence, {n_theories} theories",
+        f"Player abilities: neural implant ({player.get('neural_implant', 'active')}); "
+        f"background {player.get('background', '?')}"
+        + (f"; status: {', '.join(str(s) for s in status_effects)}" if status_effects else ""),
+        f"Known facts: {' | '.join(facts) if facts else 'none'}",
+        f"Known rumors: {' | '.join(rumors) if rumors else 'none'}",
+        f"Recorded theories: {' | '.join(theories) if theories else 'none'}",
         f"Evidence items: {', '.join(evidence_names) if evidence_names else 'none'}",
+        f"Discovered Traces of Truth: {' ; '.join(disc_lines) if disc_lines else 'none'}",
+        "NOTE: Everything above is ESTABLISHED and KNOWN to the player. Acting on or "
+        "referring to any of it (or to anything in the recent conversation history) is "
+        "VALID — never treat it as fabrication.",
     ]
     return "\n".join(lines)
 
@@ -1090,12 +1118,26 @@ def state_writer(state: GameState) -> dict:
         elif mutation_type == "update_inventory":
             action = result.get("action", "")
             if action == "add":
-                item = result.get("item", {})
+                item = result.get("item") or {}
+                if not isinstance(item, dict):
+                    item = {}
+                # ⚠️ SYNC: mirrored in claude_code_engine._apply_mutations — require
+                # a real name, dedupe by name, enforce the slot cap (no null/empty
+                # slots, no 7/6, no duplicates).
                 items = inventory.get("items", [])
-                items.append(item)
+                slots = inventory.get("slots", {}) or {}
+                max_slots = slots.get("max", 6)
+                new_name = str(item.get("name") or item.get("item") or "").strip().lower()
+                dup = any(
+                    str(i.get("name") or i.get("item") or "").strip().lower() == new_name
+                    for i in items
+                )
+                if new_name and not dup and len(items) < max_slots:
+                    items.append(item)
                 inventory["items"] = items
-                inventory["slots"] = inventory.get("slots", {})
-                inventory["slots"]["used"] = len(items)
+                slots["max"] = max_slots
+                slots["used"] = len(items)
+                inventory["slots"] = slots
             elif action == "remove":
                 item_spec = result.get("item", {})
                 items = inventory.get("items", [])
@@ -1897,8 +1939,14 @@ def trace_checker(state: GameState) -> dict:
 
     result = {"traces": traces, "discovery_notifications": []}
 
+    # ⚠️ SYNC: mirrored in claude_code_engine._run_trace_checker. Keep the display
+    # fields (counter, per-layer progress, per-trace status) synced with the
+    # authoritative `discovered` list every turn.
+    from engine.game_data import reconcile_trace_presentation
+    reconcile_trace_presentation(traces)
+    save_session_file(session_dir, "traces", traces)
+
     if new_discoveries:
-        save_session_file(session_dir, "traces", traces)
         # Build discovery notifications for GUI
         _LAYER_NAMES = {
             1: {"en": "The Surface", "zh": "表层"},
@@ -1958,8 +2006,15 @@ def consequence(state: GameState) -> dict:
         warning_text = "[TRAJECTORY WARNING: " + " | ".join(warnings) + "]"
         result["messages"] = [SM(content=warning_text)]
 
-    # Ending checks
+    # Ending checks. ⚠️ SYNC: mirrors claude_code_engine._run_consequence — gate
+    # the brittle keyword-gated bad/neutral endings to turn>=8 so an early keyword
+    # in narrated lore (e.g. corporate_exile's "exile" backstory) can't fire them
+    # on turn 1.
+    from engine.game_data import EARLY_GATED_ENDINGS
+    _turn = player.get("turn", 1)
     for ending in ENDINGS:
+        if ending["id"] in EARLY_GATED_ENDINGS and _turn < 8:
+            continue
         try:
             if ending["check"](traces, world_state, player, knowledge, npcs):
                 return {"game_over": True, "ending": ending["id"]}

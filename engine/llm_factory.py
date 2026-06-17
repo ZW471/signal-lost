@@ -122,6 +122,15 @@ ZERO_COST_PROVIDERS: set[str] = {"claude-code", "codex", "local", "lmstudio"}
 OAUTH_CLI_PROVIDERS: set[str] = {"claude-code", "codex"}
 
 
+# Providers that run on the single-call BYPASS engine (engine/claude_code_engine.py)
+# rather than the full LangGraph pipeline. The bypass holds all the gameplay
+# improvements (state_effects, record channel, ending_signal, scene-NPC promotion,
+# no hard validator gate); routing openrouter here gives it parity with the CLI
+# providers. The bypass uses llm._call_claude when present (CLI providers) and
+# falls back to llm.invoke(system,user) for API providers like openrouter.
+BYPASS_PROVIDERS: set[str] = OAUTH_CLI_PROVIDERS | {"openrouter"}
+
+
 # ---------------------------------------------------------------------------
 # LLM creation
 # ---------------------------------------------------------------------------
@@ -161,6 +170,10 @@ def create_llm(provider: str, model: str, **kwargs: Any):
             or os.environ.get("OPENROUTER_API_KEY") \
             or os.environ.get("OPENAI_API_KEY") \
             or "not-needed"
+        # Bound each call so a hung/stalled openrouter request can't wedge a turn
+        # for many minutes (observed ~28-min hangs on weak models with no timeout).
+        kwargs.setdefault("timeout", 300)
+        kwargs.setdefault("max_retries", 2)
         return ChatOpenAI(
             model=model,
             base_url=base_url,

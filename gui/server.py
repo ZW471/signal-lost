@@ -72,6 +72,7 @@ from engine.llm_factory import (
     SETTINGS_DIR,
     ZERO_COST_PROVIDERS,
     OAUTH_CLI_PROVIDERS,
+    BYPASS_PROVIDERS,
 )
 
 # ---------------------------------------------------------------------------
@@ -250,7 +251,7 @@ def _configure_llm(provider_cfg: dict, *, persist: bool = True):
     with _llm_lock:
         llm = create_llm(provider, model, **extra)
         set_llm(llm, zero_cost=provider in ZERO_COST_PROVIDERS)
-        _is_cli_bypass = provider in OAUTH_CLI_PROVIDERS
+        _is_cli_bypass = provider in BYPASS_PROVIDERS
         _setup_fast_llm(provider)
         _llm_configured = True
         _active_provider = (provider, model, extra.get("base_url"))
@@ -744,13 +745,44 @@ async def _handle_load_game(ws: WebSocket, sess: PlayerSession, msg: dict):
     await _run_turn(sess, ws, mode="resume")
 
 
+async def _try_autoresume(ws: WebSocket, sess: PlayerSession, msg: dict) -> bool:
+    """Rebind to the most-recently-played on-disk session after a reconnect.
+
+    A dropped WebSocket tears down the in-memory PlayerSession (its game_state),
+    but the on-disk session under session/<uid>/ is intact. Without this, the
+    player's next action on the reconnected socket hit a dead "No active game"
+    error even though their game was right there on disk. Returns True if a game
+    is now live and the caller may proceed with the turn.
+    """
+    sessions = _list_sessions(sess.session_root)
+    if not sessions:
+        return False
+    name = sessions[0]["name"]  # most-recently-played (list is mtime-sorted)
+    sess_path = os.path.join(sess.session_root, name)
+    if not os.path.isdir(sess_path):
+        return False
+    try:
+        _ensure_llm(msg.get("provider", load_provider_config()))
+    except Exception:
+        return False
+    sess.session_dir = sess_path
+    sess.graph = _get_graph()
+    sess.game_state = initial_state(sess.session_dir)
+    _start_world_sim_scheduler(sess)
+    await ws.send_json({"type": "game_started", "session": _get_session_data(sess)})
+    return True
+
+
 async def _handle_player_input(ws: WebSocket, sess: PlayerSession, msg: dict, loop):
     text = msg.get("text", "").strip()
     if not text:
         return
     if sess.graph is None or sess.game_state is None:
-        await ws.send_json({"type": "error", "message": "No active game. Start or resume first."})
-        return
+        # The socket reconnected and lost its in-memory game — transparently
+        # rebind to the on-disk session and continue instead of erroring out.
+        if not await _try_autoresume(ws, sess, msg):
+            await ws.send_json({"type": "error", "message": "No active game. Start or resume first."})
+            return
 
     # Fast path: serve a pre-computed suggested-action outcome. Run the
     # lock-guarded validate+promote off the event loop so a background
@@ -1210,11 +1242,11 @@ async def _run_turn(sess: PlayerSession, ws: WebSocket, player_input: str | None
                 _current_llm = _get_current_llm()
             except Exception:
                 _current_llm = None
-            _use_bypass = (
-                _is_cli_bypass
-                and sess.session_dir
-                and hasattr(_current_llm, '_call_claude')
-            )
+            # The bypass engine uses llm._call_claude when present (CLI providers)
+            # and falls back to llm.invoke(system, user) otherwise (e.g. openrouter),
+            # so it no longer requires _call_claude — only that this provider is
+            # routed to the bypass.
+            _use_bypass = bool(_is_cli_bypass and sess.session_dir and _current_llm)
             if _use_bypass:
                 return cc_run_turn(
                     session_dir=sess.session_dir,
@@ -1270,11 +1302,17 @@ async def _run_turn(sess: PlayerSession, ws: WebSocket, player_input: str | None
             return result
 
     try:
-        result = await loop.run_in_executor(None, _invoke)
+        # Hard backstop against a wedged turn: if the engine/CLI hangs past this
+        # deadline (well beyond a slow-but-normal ~10-min codex turn), abort so the
+        # except below surfaces an in-fiction error and the client re-enables input
+        # — instead of leaving the player stuck on a dead spinner forever.
+        result = await asyncio.wait_for(loop.run_in_executor(None, _invoke), timeout=960)
 
-        # The CLI-bypass engine emits suggested_actions inline (no extra call).
-        # The LangGraph path does not, so generate them here as a fallback.
-        if (not _is_cli_bypass and not result.get("suggested_actions")
+        # The CLI-bypass engine usually emits suggested_actions inline, but some
+        # models/turns omit them (or a parse-fallback zeroes them), leaving the
+        # quick-action buttons missing for the rest of the game. Generate a
+        # fallback whenever they're empty — for the bypass too, not just LangGraph.
+        if (not result.get("suggested_actions")
                 and not result.get("game_over") and not result.get("is_warning")):
             try:
                 feats = read_features(sess.session_dir)
@@ -1317,8 +1355,22 @@ async def _run_turn(sess: PlayerSession, ws: WebSocket, player_input: str | None
         raise
     except Exception as e:
         import traceback
+        import logging
         traceback.print_exc()
+        # Never leak raw engine/CLI internals (e.g. "codex CLI exited 1") into the
+        # player-facing UI. Show a recoverable, in-fiction message in the player's
+        # language and keep the input usable so they can retry the turn.
+        lang = _session_language(sess.session_dir) if sess and sess.session_dir else "en"
+        in_fiction = (
+            "信号一阵刺啦——干扰扭曲了连接。深吸一口气，再试一次。"
+            if lang == "zh" else
+            "The Signal stutters — interference scrambles the link for a moment. "
+            "Steady yourself and try that again."
+        )
+        logging.getLogger(__name__).warning("turn failed (shown in-fiction): %s", e)
         try:
-            await ws.send_json({"type": "error", "message": f"Engine error: {e}"})
+            await ws.send_json({
+                "type": "error", "message": in_fiction, "recoverable": True,
+            })
         except Exception:
             pass  # socket may already be gone

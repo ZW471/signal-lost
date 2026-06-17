@@ -161,6 +161,224 @@ def test_llm_factory_supports_claude_code():
         raise
 
 
+def test_no_signalable_ending_fires_early():
+    """Brittle keyword-gated bad/neutral endings must not false-fire early.
+
+    Regression: the `exile` ending matched the bare word "exile", which collides
+    with the corporate_exile background's identity lore, so a single early
+    knowledge entry fired the ending on turn 1. The structured check path must
+    gate MODEL_SIGNALABLE_ENDINGS to turn>=8, and `exile` must require an action
+    of leaving the city (not the noun).
+    """
+    from engine.state import create_new_session
+    from engine.claude_code_engine import _run_consequence
+
+    # 1. No ending fires on a fresh seed at turn 1, for every background.
+    for bg in ("netrunner", "street_runner", "corporate_exile"):
+        with tempfile.TemporaryDirectory() as d:
+            create_new_session(session_dir=d, name="T", alias="T",
+                               background=bg, difficulty="standard", language="en")
+            S = {k: json.load(open(os.path.join(d, f"{k}.json")))
+                 for k in ("player", "knowledge", "traces", "world_state", "npcs")}
+            S["player"]["turn"] = 1
+            go, end, _ = _run_consequence(S["player"], S["traces"], S["world_state"],
+                                          S["knowledge"], S["npcs"])
+            assert not go, f"{bg}: ending {end!r} false-fired at turn 1"
+
+    # 2. "exile" lore word never fires the exile ending (de-collided keyword).
+    W = {"nexus_alert": {"current": 0}}
+    T = {"discovered": []}
+    N = {"npcs": []}
+    k_lore = {"facts": [{"description": "You are a corporate exile from NEXUS"}]}
+    go, end, _ = _run_consequence({"turn": 20, "integrity": {"current": 3, "max": 3}},
+                                  T, W, k_lore, N)
+    assert not go, f"bare 'exile' lore wrongly fired ending {end!r}"
+
+    # 3. An actual leaving action fires exile, but only at/after the turn gate.
+    k_leave = {"facts": [{"description": "You finally leave Neo-Kowloon behind for good"}]}
+    go_early, _, _ = _run_consequence({"turn": 3, "integrity": {"current": 3, "max": 3}},
+                                      T, W, k_leave, N)
+    assert not go_early, "exile fired before the turn>=8 gate"
+    go_late, end_late, _ = _run_consequence({"turn": 10, "integrity": {"current": 3, "max": 3}},
+                                            T, W, k_leave, N)
+    assert go_late and end_late == "exile", f"exile did not fire on a real leave action: {end_late!r}"
+    print("  [PASS] Signalable endings gated; exile is action-based, not noun-based")
+
+
+def test_integrity_warning_gives_recovery_window():
+    """A standard-difficulty player must be warned BEFORE the lethal last hit.
+
+    Regression: every playtest that reached the climax died to the deep-resonance
+    integrity drain with only a vague one-turn "vision dimming" line at 1/3 and no
+    chance to rest. standard now warns at 2/3 (a real recovery window), and the
+    1/3 "one hit from death" moment escalates to the explicit, actionable warning
+    on every difficulty.
+    """
+    from engine.game_data import integrity_warning_text
+
+    # standard: warns a step earlier, at 2/3.
+    assert integrity_warning_text("standard", 2, 3, "en"), \
+        "standard gave no warning at 2/3 — no recovery window before lethal drain"
+    # 1/3 is the last-chance moment on every difficulty → explicit + actionable.
+    for diff in ("paranoid", "cautious", "standard", "reckless"):
+        w = integrity_warning_text(diff, 1, 3, "en")
+        assert w and ("kill" in w.lower() or "rest or heal" in w.lower()), \
+            f"{diff}: 1/3 warning was not explicit/actionable: {w!r}"
+    # No warning once dead (handled by the death path, not a warning).
+    assert integrity_warning_text("standard", 0, 3, "en") is None
+    print("  [PASS] Integrity warning gives a recovery window and an explicit last-hit alert")
+
+
+def test_cli_runner_kills_hung_process_tree():
+    """A hung CLI subprocess must not wedge a turn forever (BUG-003).
+
+    Regression: ``subprocess.run(timeout=...)`` only SIGKILLs the direct child on
+    timeout; a surviving grandchild that inherited the stdout pipe keeps it open,
+    so run()'s internal communicate() blocks indefinitely waiting for EOF — a real
+    52-minute engine hang was observed. ``_run_cli_pg`` runs the command in its own
+    process group and kills the whole tree, so it raises TimeoutExpired fast.
+    """
+    import subprocess
+    import time
+    from tests.scripts.claude_llm import _run_cli_pg
+
+    # Parent backgrounds a long sleep (the grandchild) that inherits stdout, then
+    # the parent itself sleeps. Classic pipe-EOF wedge for plain subprocess.run.
+    cmd = ["sh", "-c", "sleep 60 & sleep 60"]
+    t0 = time.time()
+    raised = False
+    try:
+        _run_cli_pg(cmd, "", timeout=1, env=os.environ.copy())
+    except subprocess.TimeoutExpired:
+        raised = True
+    elapsed = time.time() - t0
+    assert raised, "_run_cli_pg did not raise TimeoutExpired on a hung command"
+    assert elapsed < 15, f"_run_cli_pg took {elapsed:.1f}s — it wedged instead of killing the tree"
+    print(f"  [PASS] Hung CLI tree killed fast ({elapsed:.1f}s), no turn wedge")
+
+
+def test_trust_gate_reads_highest_of_duplicate_npcs():
+    """A duplicate placeholder NPC entry must not mask earned trust.
+
+    Regression: npcs.json can hold a stale `neutral` placeholder before the real
+    `trusted` entry for the same person; _npc_trust_at_least returned on the first
+    match, read the placeholder, and reported False — permanently blocking
+    trust-gated traces (TRACE-L4-02) even after the player earned full trust.
+    """
+    from engine.game_data import _npc_trust_at_least
+
+    npcs = {"npcs": [
+        {"name": "Patch", "trust_level": "neutral"},    # stale placeholder, first
+        {"name": "Patch", "trust_level": "trusted"},     # the real, earned entry
+    ]}
+    assert _npc_trust_at_least(npcs, "patch", "trusted"), \
+        "placeholder NPC entry masked earned trust (trust-gated trace would stay blocked)"
+    # Order independence: highest wins regardless of position.
+    npcs_rev = {"npcs": [
+        {"name": "Patch", "trust_level": "trusted"},
+        {"name": "Patch", "trust_level": "neutral"},
+    ]}
+    assert _npc_trust_at_least(npcs_rev, "patch", "trusted")
+    # A genuinely-low NPC still fails the gate.
+    assert not _npc_trust_at_least({"npcs": [{"name": "Patch", "trust_level": "neutral"}]},
+                                   "patch", "trusted")
+    print("  [PASS] Trust gate reads highest trust across duplicate NPC entries")
+
+
+def test_districts_unlock_on_trace_and_layer():
+    """A district's unlock_trace / unlock_layer gate must actually open it.
+
+    Regression: DISTRICTS declared unlock_trace=TRACE-L1-03 (Undercroft) and
+    unlock_layer gates, but nothing evaluated them — the trace fired and the
+    district stayed Locked forever, soft-locking the Mira→Patch→Undercroft route.
+    """
+    from engine.claude_code_engine import _unlock_districts_by_progress
+
+    ws = {
+        "district_access": [{"name": "The Sprawl", "name_zh": "蔓城", "status": "Open"}],
+        "_district_registry": {"undiscovered": [
+            {"name": "The Undercroft", "name_zh": "底渊", "status": "Locked"},
+            {"name": "The Resonance", "name_zh": "共鸣所", "status": "Hidden"},
+        ]},
+    }
+    # Only the L1 trace is discovered → Undercroft opens; layer-3 Resonance does not.
+    traces = {"discovered": [{"id": "TRACE-L1-03", "layer": 1}]}
+    newly = _unlock_districts_by_progress(ws, traces, "en")
+    assert "The Undercroft" in newly, "Undercroft did not unlock on TRACE-L1-03"
+    acc_names = [e["name"] for e in ws["district_access"]]
+    assert any("Undercroft" in n for n in acc_names), "Undercroft not promoted to district_access"
+    undisc = ws["_district_registry"]["undiscovered"]
+    assert not any("Undercroft" in e["name"] for e in undisc), "Undercroft still in undiscovered"
+    assert not any("Resonance" in n for n in acc_names), "layer-gated Resonance opened too early"
+
+    # Reaching Layer 3 then opens the Resonance.
+    traces2 = {"discovered": [{"id": "TRACE-L1-03", "layer": 1}, {"id": "TRACE-L3-01", "layer": 3}]}
+    _unlock_districts_by_progress(ws, traces2, "en")
+    assert any("Resonance" in e["name"] for e in ws["district_access"]), "Resonance did not open at Layer 3"
+    print("  [PASS] Districts open when their trace/layer unlock condition is met")
+
+
+def test_movement_gate_allows_inquiry():
+    """A question mentioning a locked district must not be hard-blocked as travel.
+
+    Regression: "how do I get into the Undercroft?" was rejected as a movement
+    attempt (turn-less, frustrating). Inquiries skip the gate; real travel to a
+    still-locked district is still blocked.
+    """
+    from engine.claude_code_engine import _check_movement
+
+    ws = {
+        "district_access": [],
+        "_district_registry": {"undiscovered": [
+            {"name": "The Undercroft", "name_zh": "底渊", "status": "Locked"},
+        ]},
+    }
+    state = {"location": {"district": "The Sprawl"}, "world_state": ws}
+    assert _check_movement("How do I get into the Undercroft?", state, "en") is None, \
+        "inquiry about a locked district was wrongly blocked as movement"
+    # An actual travel command to a still-locked district IS blocked.
+    blocked = _check_movement("Go into the Undercroft.", state, "en")
+    assert blocked, "real travel to a locked district should still be blocked"
+    print("  [PASS] Movement gate lets inquiries through but still blocks real travel")
+
+
+def test_good_endings_reachable_and_not_shadowed():
+    """A deep, good-aligned playthrough must resolve to a GOOD ending.
+
+    Regression #1 (ecc7ca0): evidence-gated deep traces (L3/L4/L5) once scanned
+    only the rarely-used "evidence" channel, so they never fired from recorded
+    FACTS — walling off the good endings and making every run end in death.
+
+    Regression #2 (ending order): even once the traces fired, first-match-wins
+    let the looser keyword-gated bad ending `ascension` (whose force-merge
+    keywords incidentally match the "ascension is a path" lore a deep player is
+    EXPECTED to learn) shadow the good endings. Good endings must be checked
+    first so a fully-earned bridge resolves to the_bridge, not a forced ascension.
+    """
+    from tests.scenarios.good_ending_reachability import (
+        build_state, run_trace_fixpoint,
+    )
+    from engine.game_data import (
+        ENDINGS, EARLY_GATED_ENDINGS, _count_discovered_traces, _trace_discovered,
+    )
+
+    knowledge, npcs, player, world_state = build_state()
+    traces = run_trace_fixpoint(knowledge, npcs, player, world_state)
+
+    assert _count_discovered_traces(traces) >= 18, (
+        f"deep traces did not fire from FACTS: only "
+        f"{_count_discovered_traces(traces)} discovered")
+    assert _trace_discovered(traces, "TRACE-L5-02"), "L5-02 (bridge gate) did not fire"
+
+    fired = [e["id"] for e in ENDINGS
+             if not (e["id"] in EARLY_GATED_ENDINGS and player.get("turn", 1) < 8)
+             and e["check"](traces, world_state, player, knowledge, npcs)]
+    assert fired, "no ending fired for a fully-earned deep good state"
+    assert fired[0] in {"the_bridge", "symbiosis"}, (
+        f"a bad ending shadowed the good one: first match was {fired[0]!r}")
+    print(f"  [PASS] Deep good run resolves to GOOD ending ({fired[0]}), not shadowed")
+
+
 def main():
     print("=" * 60)
     print("Signal Lost — Regression Tests")
@@ -174,6 +392,13 @@ def main():
         test_prompt_includes_economy_engagement,
         test_input_blocked_handler_gives_suggestions,
         test_llm_factory_supports_claude_code,
+        test_no_signalable_ending_fires_early,
+        test_integrity_warning_gives_recovery_window,
+        test_cli_runner_kills_hung_process_tree,
+        test_trust_gate_reads_highest_of_duplicate_npcs,
+        test_districts_unlock_on_trace_and_layer,
+        test_movement_gate_allows_inquiry,
+        test_good_endings_reachable_and_not_shadowed,
     ]
 
     passed = 0
