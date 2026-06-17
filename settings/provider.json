@@ -1,6 +1,5 @@
 {
-  "provider": "openrouter",
-  "model": "deepseek/deepseek-chat",
-  "temperature": 0.7,
-  "base_url": "https://openrouter.ai/api/v1"
+  "provider": "codex",
+  "model": "gpt-5.5",
+  "temperature": 0.7
 }

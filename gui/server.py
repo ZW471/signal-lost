@@ -66,6 +66,8 @@ from engine.llm_factory import (
     load_env,
     load_settings,
     load_provider_config,
+    save_user_provider,
+    save_user_custom,
     save_env_key,
     _read_json,
     GAME_ROOT,
@@ -218,12 +220,13 @@ def _env_var_for_provider(provider: str) -> str | None:
     }.get(provider)
 
 
-def _configure_llm(provider_cfg: dict, *, persist: bool = True):
+def _configure_llm(provider_cfg: dict, *, persist: bool = True, uid: str | None = None):
     """(Re)build the shared server LLM from a provider config.
 
     Sets the engine's global LLM + fast LLM and the server-wide bypass flag, and
-    (optionally) persists the choice to ``settings/provider.json``. This affects
-    every player — the provider is a shared server-wide setting.
+    (optionally) persists the choice to the *user's* per-user override (never the
+    committed template). The built LLM itself is shared server-wide; persistence is
+    per-user so a player's choice is remembered without touching the repo template.
 
     Returns (provider, model, temperature).
     """
@@ -261,9 +264,7 @@ def _configure_llm(provider_cfg: dict, *, persist: bool = True):
         if provider_cfg.get("base_url") and provider in ("local", "lmstudio", "openrouter"):
             cfg["base_url"] = provider_cfg["base_url"]
         try:
-            os.makedirs(SETTINGS_DIR, exist_ok=True)
-            with open(os.path.join(SETTINGS_DIR, "provider.json"), "w", encoding="utf-8") as f:
-                json.dump(cfg, f, indent=2)
+            save_user_provider(uid, cfg)
         except OSError:
             pass
 
@@ -283,7 +284,7 @@ def _provider_changed(provider_cfg: dict) -> bool:
     return bool(provider_cfg.get("api_key"))  # a newly-entered key must take effect
 
 
-def _ensure_llm(provider_cfg: dict | None = None):
+def _ensure_llm(provider_cfg: dict | None = None, uid: str | None = None):
     """Ensure the shared LLM is built and reflects the requested provider.
 
     Builds only when needed: on first use, or when *provider_cfg* actually selects
@@ -291,14 +292,15 @@ def _ensure_llm(provider_cfg: dict | None = None):
     common case (every player on the same configured provider) from rebuilding —
     so a second player's new game can't swap the LLM out from under a player who is
     mid-turn — while still letting a provider change in Settings take effect on the
-    next game start.
+    next game start. *uid* scopes both the fallback provider load and persistence
+    to the player's per-user override.
     """
     if provider_cfg is None:
         if not _llm_configured:
-            _configure_llm(load_provider_config(), persist=False)
+            _configure_llm(load_provider_config(uid=uid), persist=False, uid=uid)
         return
     if not _llm_configured or _provider_changed(provider_cfg):
-        _configure_llm(provider_cfg, persist=True)
+        _configure_llm(provider_cfg, persist=True, uid=uid)
 
 
 # ---------------------------------------------------------------------------
@@ -427,11 +429,15 @@ def _maybe_autosave(session_dir: str, saves_root: str) -> None:
 
 
 def _status_payload(sess: PlayerSession | None) -> dict:
-    """Build the 'status' message — scoped to *sess*'s user, or logged-out."""
+    """Build the 'status' message — scoped to *sess*'s user, or logged-out.
+
+    Settings/provider reflect the committed templates overlaid with this user's
+    own per-user overrides (or just the templates when logged out)."""
+    uid = sess.uid if sess is not None else None
     base = {
         "type": "status",
-        "settings": load_settings(),
-        "provider": load_provider_config(),
+        "settings": load_settings(uid=uid),
+        "provider": load_provider_config(uid=uid),
         "langsmith": _get_langsmith_status(),
     }
     if sess is None:
@@ -656,10 +662,10 @@ async def websocket_endpoint(ws: WebSocket):
 async def _handle_new_game(ws: WebSocket, sess: PlayerSession, msg: dict):
     _reset_prediction(sess)  # cancel/clear any prior game's predictions
     config = msg.get("config", {})
-    provider_cfg = msg.get("provider", {})
+    provider_cfg = msg.get("provider") or load_provider_config(uid=sess.uid)
 
     try:
-        _ensure_llm(provider_cfg)
+        _ensure_llm(provider_cfg, uid=sess.uid)
     except Exception as e:
         await ws.send_json({"type": "error", "message": f"Failed to create LLM: {e}"})
         return
@@ -700,9 +706,9 @@ async def _handle_resume(ws: WebSocket, sess: PlayerSession, msg: dict):
         await ws.send_json({"type": "error", "message": f"Session not found: {session_name}"})
         return
 
-    provider_cfg = msg.get("provider", load_provider_config())
+    provider_cfg = msg.get("provider") or load_provider_config(uid=sess.uid)
     try:
-        _ensure_llm(provider_cfg)
+        _ensure_llm(provider_cfg, uid=sess.uid)
     except Exception as e:
         await ws.send_json({"type": "error", "message": f"Failed to create LLM: {e}"})
         return
@@ -727,9 +733,9 @@ async def _handle_load_game(ws: WebSocket, sess: PlayerSession, msg: dict):
         await ws.send_json({"type": "error", "message": f"Save not found: {save_name}"})
         return
 
-    provider_cfg = msg.get("provider", load_provider_config())
+    provider_cfg = msg.get("provider") or load_provider_config(uid=sess.uid)
     try:
-        _ensure_llm(provider_cfg)
+        _ensure_llm(provider_cfg, uid=sess.uid)
     except Exception as e:
         await ws.send_json({"type": "error", "message": f"Failed to create LLM: {e}"})
         return
@@ -762,7 +768,7 @@ async def _try_autoresume(ws: WebSocket, sess: PlayerSession, msg: dict) -> bool
     if not os.path.isdir(sess_path):
         return False
     try:
-        _ensure_llm(msg.get("provider", load_provider_config()))
+        _ensure_llm(msg.get("provider") or load_provider_config(uid=sess.uid), uid=sess.uid)
     except Exception:
         return False
     sess.session_dir = sess_path
@@ -800,18 +806,20 @@ async def _handle_player_input(ws: WebSocket, sess: PlayerSession, msg: dict, lo
 
 
 async def _handle_save_provider(ws: WebSocket, sess: PlayerSession | None, msg: dict):
-    """Persist provider/langsmith/feature settings. Allowed while logged out
-    (global parts only); per-session parts apply when a game is active.
+    """Persist provider/langsmith/feature settings to the player's PER-USER
+    override (never the committed templates). Allowed while logged out (writes go
+    to the shared ``_local`` override). Per-game parts also apply to the active
+    session.
 
     Does NOT rebuild the shared LLM here — that would swap the provider out from
     under any player currently mid-turn, and could lock in a keyless build. The
     new provider takes effect on the next game start, where ``_ensure_llm`` sees
-    the change. The provider is a shared, server-wide setting."""
+    the change."""
+    uid = sess.uid if sess is not None else None
     provider_cfg = msg.get("provider", {})
-    os.makedirs(SETTINGS_DIR, exist_ok=True)
     prov = provider_cfg.get("provider", "openai")
 
-    # Persist the provider choice (no rebuild — see docstring).
+    # Persist the provider choice to the per-user override (no rebuild — see docstring).
     cfg_to_save = {
         "provider": prov,
         "model": provider_cfg.get("model", default_model_for(prov)),
@@ -819,8 +827,7 @@ async def _handle_save_provider(ws: WebSocket, sess: PlayerSession | None, msg: 
     }
     if provider_cfg.get("base_url") and prov in ("local", "lmstudio", "openrouter"):
         cfg_to_save["base_url"] = provider_cfg["base_url"]
-    with open(os.path.join(SETTINGS_DIR, "provider.json"), "w", encoding="utf-8") as f:
-        json.dump(cfg_to_save, f, indent=2)
+    save_user_provider(uid, cfg_to_save)
 
     lang = msg.get("language")
     if lang:
@@ -830,13 +837,7 @@ async def _handle_save_provider(ws: WebSocket, sess: PlayerSession | None, msg: 
             ss["language"] = lang
             with open(ss_path, "w", encoding="utf-8") as f:
                 json.dump(ss, f, ensure_ascii=False, indent=2)
-        custom_path = os.path.join(SETTINGS_DIR, "custom.json")
-        custom = _read_json(custom_path)
-        custom.setdefault("language", {})
-        custom["language"]["display"] = lang
-        custom["language"]["tui"] = lang
-        with open(custom_path, "w", encoding="utf-8") as f:
-            json.dump(custom, f, ensure_ascii=False, indent=2)
+        save_user_custom(uid, {"language": {"display": lang, "tui": lang}})
 
     api_key = provider_cfg.get("api_key")
     if api_key and prov not in OAUTH_CLI_PROVIDERS and prov not in ("local", "lmstudio"):
@@ -851,12 +852,7 @@ async def _handle_save_provider(ws: WebSocket, sess: PlayerSession | None, msg: 
 
     features = msg.get("features")
     if isinstance(features, dict):
-        custom_path = os.path.join(SETTINGS_DIR, "custom.json")
-        custom = _read_json(custom_path)
-        custom.setdefault("features", {})
-        custom["features"].update(features)
-        with open(custom_path, "w", encoding="utf-8") as f:
-            json.dump(custom, f, ensure_ascii=False, indent=2)
+        save_user_custom(uid, {"features": features})
         if sess and sess.session_dir:
             ss_path = os.path.join(sess.session_dir, "session_settings.json")
             ss = _read_json(ss_path)

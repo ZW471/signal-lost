@@ -18,6 +18,11 @@ from typing import Any
 
 GAME_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 SETTINGS_DIR = os.path.join(GAME_ROOT, "settings")
+# Per-user setting overrides live here (gitignored). The files under SETTINGS_DIR
+# itself (default.json / custom.json / provider.json) are read-only TEMPLATES that
+# ship with the repo; a player's own changes are written per-user under this dir so
+# they never modify the committed templates or show up as git changes.
+USER_SETTINGS_DIR = os.path.join(SETTINGS_DIR, "users")
 ENV_PATH = os.path.join(GAME_ROOT, ".env")
 
 
@@ -75,13 +80,10 @@ def _read_json(path: str) -> dict:
         return {}
 
 
-def load_settings(settings_dir: str | None = None) -> dict:
-    """Load merged settings (default + custom)."""
-    sd = settings_dir or SETTINGS_DIR
-    default = _read_json(os.path.join(sd, "default.json"))
-    custom = _read_json(os.path.join(sd, "custom.json"))
-    merged = {**default}
-    for k, v in custom.items():
+def _deep_merge(base: dict, override: dict) -> dict:
+    """Return base with override layered on top (one level deep on nested dicts)."""
+    merged = {**base}
+    for k, v in override.items():
         if isinstance(v, dict) and isinstance(merged.get(k), dict):
             merged[k] = {**merged[k], **v}
         else:
@@ -89,10 +91,66 @@ def load_settings(settings_dir: str | None = None) -> dict:
     return merged
 
 
-def load_provider_config(settings_dir: str | None = None) -> dict:
-    """Load provider configuration."""
+def _safe_uid(uid: str | None) -> str:
+    """A filesystem-safe per-user key (no path separators / traversal)."""
+    if uid and all(c.isalnum() or c in ("-", "_") for c in uid):
+        return uid
+    return "_local"
+
+
+def user_settings_dir(uid: str | None) -> str:
+    """Directory holding a single user's setting overrides (gitignored).
+
+    Logged-out / no-uid contexts share ``_local`` so the committed templates are
+    still never overwritten."""
+    return os.path.join(USER_SETTINGS_DIR, _safe_uid(uid))
+
+
+def save_user_provider(uid: str | None, cfg: dict) -> None:
+    """Persist a user's provider choice to their per-user override file."""
+    d = user_settings_dir(uid)
+    os.makedirs(d, exist_ok=True)
+    with open(os.path.join(d, "provider.json"), "w", encoding="utf-8") as f:
+        json.dump(cfg, f, indent=2)
+
+
+def save_user_custom(uid: str | None, updates: dict) -> dict:
+    """Deep-merge *updates* into a user's per-user custom-settings override and
+    persist it. Returns the merged per-user override."""
+    d = user_settings_dir(uid)
+    os.makedirs(d, exist_ok=True)
+    path = os.path.join(d, "custom.json")
+    merged = _deep_merge(_read_json(path), updates)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(merged, f, ensure_ascii=False, indent=2)
+    return merged
+
+
+def load_settings(settings_dir: str | None = None, uid: str | None = None) -> dict:
+    """Load merged settings: committed default + custom templates, then (when a
+    *uid* is given) that user's per-user override layered on top."""
     sd = settings_dir or SETTINGS_DIR
-    return _read_json(os.path.join(sd, "provider.json"))
+    merged = _deep_merge(
+        _read_json(os.path.join(sd, "default.json")),
+        _read_json(os.path.join(sd, "custom.json")),
+    )
+    if uid is not None:
+        merged = _deep_merge(
+            merged, _read_json(os.path.join(user_settings_dir(uid), "custom.json")),
+        )
+    return merged
+
+
+def load_provider_config(settings_dir: str | None = None, uid: str | None = None) -> dict:
+    """Load the provider config: committed template, then (when a *uid* is given)
+    that user's per-user provider override layered on top."""
+    sd = settings_dir or SETTINGS_DIR
+    cfg = _read_json(os.path.join(sd, "provider.json"))
+    if uid is not None:
+        override = _read_json(os.path.join(user_settings_dir(uid), "provider.json"))
+        if override:
+            cfg = {**cfg, **override}
+    return cfg
 
 
 # Default model per provider — used when provider.json omits "model".

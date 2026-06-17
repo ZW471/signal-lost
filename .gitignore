@@ -4,6 +4,8 @@
 /session
 /saves
 /auth
+# Per-user setting overrides (the committed settings/*.json are read-only templates)
+/settings/users
 __pycache__
 .claude
 /assets/music/*.mp3
