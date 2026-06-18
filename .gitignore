@@ -11,5 +11,7 @@ __pycache__
 /assets/music/*.mp3
 tests/reviews/*.json
 tests/reviews/*.md
+tests/reviews/**/*.json
+tests/reviews/**/*.md
 !tests/reviews/.gitkeep
 /logs
