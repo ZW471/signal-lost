@@ -45,6 +45,14 @@ ACTIONS = [
     "Head deeper into the district — follow any leads",
     "Talk to whoever seems most knowledgeable here",
     "Present what I've learned and ask for their theory",
+    "Search for evidence of the conspiracy",
+    "Try to access restricted areas",
+    "Analyze any signal artifacts I've found",
+    "Look for allies who share my goals",
+    "Plan my next move based on everything I know",
+    "Head toward the source of the Signal",
+    "Confront what I find",
+    "Make my final choice",
 ]
 
 
@@ -73,7 +81,10 @@ def eval_model(model_id: str, turns: int, call_timeout: int) -> dict:
         "location_changed": False,
         "made_progress": False,
         "empty_narratives": 0,
+        "mutation_turns": 0,          # turns that actually changed traces/knowledge
         "game_over": False,
+        "ending": None,
+        "integrity_final": None,
         "fatal": None,
     }
 
@@ -101,6 +112,7 @@ def eval_model(model_id: str, turns: int, call_timeout: int) -> dict:
 
     init_state = initial_state(session_dir)
     init_loc = (init_state.get("location", {}) or {}).get("area", "?")
+    prev_traces, prev_kn = 0, 0
 
     hard_errors = 0
     for i in range(min(turns, len(ACTIONS))):
@@ -132,8 +144,12 @@ def eval_model(model_id: str, turns: int, call_timeout: int) -> dict:
         kn = st.get("knowledge", {}) or {}
         kn_count = sum(len(v) for v in kn.values() if isinstance(v, (list, dict)))
         res["knowledge_trajectory"].append(kn_count)
-        res["traces_final"] = len(disc) if isinstance(disc, list) else 0
+        tr_count = len(disc) if isinstance(disc, list) else 0
+        res["traces_final"] = tr_count
         res["knowledge_final"] = kn_count
+        if tr_count > prev_traces or kn_count > prev_kn:
+            res["mutation_turns"] += 1
+        prev_traces, prev_kn = tr_count, kn_count
         try:
             res["layer_final"] = extract_deepest_layer(traces)
         except Exception:
@@ -141,11 +157,20 @@ def eval_model(model_id: str, turns: int, call_timeout: int) -> dict:
         loc = (st.get("location", {}) or {}).get("area", "?")
         if loc != init_loc:
             res["location_changed"] = True
+        player = st.get("player", {}) or {}
+        integ = player.get("integrity", {})
+        res["integrity_final"] = integ.get("current") if isinstance(integ, dict) else integ
         if (out or {}).get("game_over"):
+            res["game_over"] = True
+            res["ending"] = (out or {}).get("ending")
             break
 
     res["made_progress"] = bool(
         res["traces_final"] > 0 or res["knowledge_final"] > 0 or res["location_changed"]
+    )
+    res["mutation_rate"] = (
+        round(res["mutation_turns"] / res["completed_turns"], 2)
+        if res["completed_turns"] else 0.0
     )
     if res["turn_latencies"]:
         res["avg_latency"] = round(sum(res["turn_latencies"]) / len(res["turn_latencies"]), 1)
@@ -223,15 +248,18 @@ def write_report(results: list, turns: int, elapsed: float, out_dir: str, ts: st
             "model": r["model"], "tier": _tier(r), "turns": r.get("completed_turns", 0),
             "traces": r.get("traces_final", 0), "kn": r.get("knowledge_final", 0),
             "layer": r.get("layer_final", 0), "lat": r.get("avg_latency"),
+            "mut": r.get("mutation_rate", 0.0), "ending": r.get("ending"),
             "cpt": cpt, "score": _score(r),
         })
     rows.sort(key=lambda x: (_TIER_ORDER[x["tier"]], -x["score"]))
 
-    print(f"\n{'tier':11} {'model':42} {'T':>2} {'trc':>3} {'kn':>3} {'L':>2} {'lat':>5} {'c/turn':>7}")
-    print("-" * 86)
+    print(f"\n{'tier':11} {'model':42} {'T':>2} {'trc':>3} {'kn':>3} {'L':>2} "
+          f"{'mut':>4} {'lat':>5} {'c/turn':>7}")
+    print("-" * 96)
     for x in rows:
         print(f"{x['tier']:11} {x['model']:42} {x['turns']:>2} {x['traces']:>3} "
-              f"{x['kn']:>3} {x['layer']:>2} {str(x['lat']):>5} {str(x['cpt']):>7}", flush=True)
+              f"{x['kn']:>3} {x['layer']:>2} {str(x['mut']):>4} {str(x['lat']):>5} "
+              f"{str(x['cpt']):>7}", flush=True)
 
     md = [
         f"# Model Sweep Report — {time.strftime('%Y-%m-%d %H:%M')}",
@@ -243,12 +271,13 @@ def write_report(results: list, turns: int, elapsed: float, out_dir: str, ts: st
         "  UNAVAILABLE (404 — OpenRouter account data-policy, not a capability result).",
         "- `c/turn` = est. cents/turn at ~5k input + 1.2k output tokens.",
         "",
-        "| Tier | Model | Turns | Traces | Knowledge | Layer | Latency(s) | c/turn |",
-        "|------|-------|------:|------:|----------:|------:|-----------:|-------:|",
+        "| Tier | Model | Turns | Traces | Knowledge | Layer | MutRate | Ending | Latency(s) | c/turn |",
+        "|------|-------|------:|------:|----------:|------:|--------:|--------|-----------:|-------:|",
     ]
     for x in rows:
         md.append(f"| {x['tier']} | `{x['model']}` | {x['turns']} | {x['traces']} | "
-                  f"{x['kn']} | {x['layer']} | {x['lat']} | {x['cpt']} |")
+                  f"{x['kn']} | {x['layer']} | {x['mut']} | {x['ending'] or '—'} | "
+                  f"{x['lat']} | {x['cpt']} |")
     md += ["", "## Cheap-yet-powerful (STRONG/EXCELLENT, cheapest first)", "",
            "| # | Model | c/turn | Tier | Layer | Traces | Latency(s) |",
            "|--:|-------|-------:|------|------:|------:|-----------:|"]
@@ -295,8 +324,9 @@ def main() -> int:
                   f"traces={r.get('traces_final',0)} "
                   f"kn={r.get('knowledge_final',0)} "
                   f"L{r.get('layer_final',1)} "
+                  f"mut={r.get('mutation_rate',0)} "
                   f"err={len(r.get('errors',[]))} "
-                  f"prog={r.get('made_progress')} "
+                  f"end={r.get('ending')} "
                   f"lat={r.get('avg_latency')}s", flush=True)
 
     elapsed = round(time.time() - t_start, 1)
