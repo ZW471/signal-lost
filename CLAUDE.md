@@ -136,4 +136,4 @@ Conversation is logged to JSONL (`session/conversation.jsonl`). Each line must b
 
 ### OpenRouter
 
-`openrouter` is an OpenAI-API-compatible gateway. The factory points `langchain_openai.ChatOpenAI` at `https://openrouter.ai/api/v1` and reads `OPENROUTER_API_KEY` (or `OPENAI_API_KEY` as fallback) from the environment. Model names use the `vendor/model` format, e.g. `openai/gpt-5.4`, `anthropic/claude-sonnet-4`, `deepseek/deepseek-chat`.
+`openrouter` is an OpenAI-API-compatible gateway. The factory points `langchain_openai.ChatOpenAI` at `https://openrouter.ai/api/v1` and reads `OPENROUTER_API_KEY` (or `OPENAI_API_KEY` as fallback) from the environment. Model names use the `vendor/model` format, e.g. `openai/gpt-5.4`, `anthropic/claude-sonnet-4`, `deepseek/deepseek-chat`. Like every API provider, openrouter runs the **full 11-node LangGraph pipeline** (with tool-calling) — only the OAuth CLI backends use the single-call bypass, so an openrouter model must support function/tool calling to play.

@@ -9,9 +9,10 @@ LLM call via the same engine path the real game uses, commits state back, and
 prints a compact JSON summary. Each agent calls it once per turn.
 
 It exercises the SAME code paths real players use:
-  * providers in ``BYPASS_PROVIDERS`` (claude-code / codex / openrouter) → the
-    single-call bypass engine ``engine.claude_code_engine.run_turn``.
-  * other providers → the full LangGraph pipeline.
+  * providers in ``BYPASS_PROVIDERS`` (claude-code / codex) → the single-call
+    bypass engine ``engine.claude_code_engine.run_turn``.
+  * other providers (openrouter / openai / anthropic / local) → the full
+    LangGraph pipeline.
 
 All run parameters come from env vars so one shared script serves every agent
 (no per-session hand-copied driver):

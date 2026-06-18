@@ -60,17 +60,22 @@ def _sanitize(model_id: str) -> str:
     return model_id.replace("/", "__").replace(":", "_")
 
 
-def eval_model(model_id: str, turns: int, call_timeout: int) -> dict:
-    """Run a fixed multi-turn bypass playthrough for one model. Returns metrics."""
+def eval_model(model_id: str, turns: int, call_timeout: int, engine: str = "bypass") -> dict:
+    """Run a fixed multi-turn playthrough for one model. Returns metrics.
+
+    engine="bypass" → single-call ``cc_run_turn`` (CLI-style path).
+    engine="graph"  → full 11-node LangGraph pipeline with tool-calling (the path
+    every API provider, incl. openrouter, actually uses).
+    """
     from engine.graph import set_llm
     from engine.state import initial_state, create_new_session
     from engine.llm_factory import create_llm, load_env
-    from engine.claude_code_engine import run_turn as cc_run_turn
     from engine.prompts import extract_deepest_layer
 
     load_env()
     res: dict = {
         "model": model_id,
+        "engine": engine,
         "completed_turns": 0,
         "errors": [],
         "turn_latencies": [],
@@ -85,20 +90,21 @@ def eval_model(model_id: str, turns: int, call_timeout: int) -> dict:
         "game_over": False,
         "ending": None,
         "integrity_final": None,
+        "narratives": [],             # collected for the quality grader
         "fatal": None,
     }
 
     try:
         llm = create_llm(
             "openrouter", model_id, temperature=0.7,
-            timeout=call_timeout, max_retries=1,
+            timeout=call_timeout, max_retries=0 if engine == "graph" else 1,
         )
         set_llm(llm, zero_cost=False)
     except Exception as e:  # noqa: BLE001
         res["fatal"] = f"create_llm: {type(e).__name__}: {e}"
         return res
 
-    session_dir = os.path.join(_GAME_ROOT, "session", "sweep", _sanitize(model_id))
+    session_dir = os.path.join(_GAME_ROOT, "session", f"sweep_{engine}", _sanitize(model_id))
     if os.path.isdir(session_dir):
         shutil.rmtree(session_dir, ignore_errors=True)
     try:
@@ -110,6 +116,20 @@ def eval_model(model_id: str, turns: int, call_timeout: int) -> dict:
         res["fatal"] = f"create_session: {type(e).__name__}: {e}"
         return res
 
+    # Graph path keeps GameState in memory across turns (like full_playthrough).
+    graph = gstate = None
+    if engine == "graph":
+        from engine.graph import compile_graph
+        from langchain_core.messages import HumanMessage
+        try:
+            graph = compile_graph()
+            gstate = initial_state(session_dir)
+        except Exception as e:  # noqa: BLE001
+            res["fatal"] = f"compile_graph: {type(e).__name__}: {e}"
+            return res
+    else:
+        from engine.claude_code_engine import run_turn as cc_run_turn
+
     init_state = initial_state(session_dir)
     init_loc = (init_state.get("location", {}) or {}).get("area", "?")
     prev_traces, prev_kn = 0, 0
@@ -119,11 +139,18 @@ def eval_model(model_id: str, turns: int, call_timeout: int) -> dict:
         action = ACTIONS[i]
         t0 = time.time()
         try:
-            out = cc_run_turn(session_dir=session_dir, player_input=action, mode="play")
+            if engine == "graph":
+                gstate["messages"].append(HumanMessage(content=action))
+                # Cap the resolver↔tool loop so one turn can't balloon to minutes.
+                out = graph.invoke(gstate, config={"recursion_limit": 18})
+                gstate = out
+            else:
+                out = cc_run_turn(session_dir=session_dir, player_input=action, mode="play")
             dt = round(time.time() - t0, 1)
             res["turn_latencies"].append(dt)
             res["completed_turns"] += 1
             narrative = (out or {}).get("narrative", "") or ""
+            res["narratives"].append({"turn": i + 1, "action": action, "narrative": narrative[:1200]})
             if len(narrative.strip()) < 20:
                 res["empty_narratives"] += 1
             if (out or {}).get("game_over"):
@@ -180,9 +207,9 @@ def eval_model(model_id: str, turns: int, call_timeout: int) -> dict:
 
 
 def _worker(args):
-    model_id, turns, call_timeout = args
+    model_id, turns, call_timeout, engine = args
     try:
-        return eval_model(model_id, turns, call_timeout)
+        return eval_model(model_id, turns, call_timeout, engine)
     except Exception as e:  # noqa: BLE001
         return {
             "model": model_id, "fatal": f"{type(e).__name__}: {e}",
@@ -300,20 +327,34 @@ def main() -> int:
     ap.add_argument("--turns", type=int, default=8)
     ap.add_argument("--workers", type=int, default=5)
     ap.add_argument("--call-timeout", type=int, default=100)
+    ap.add_argument("--engine", choices=["bypass", "graph"], default="bypass",
+                    help="bypass = single-call; graph = full LangGraph + tools")
     args = ap.parse_args()
 
     with open(args.models) as f:
         models = json.load(f)
 
+    # The graph path (and full_playthrough) read display language / difficulty from
+    # settings/custom.json. Pin it to en/standard for the run, then restore.
+    custom_path = os.path.join(_GAME_ROOT, "settings", "custom.json")
+    saved_custom = None
+    if args.engine == "graph" and os.path.exists(custom_path):
+        with open(custom_path, encoding="utf-8") as f:
+            saved_custom = f.read()
+        with open(custom_path, "w", encoding="utf-8") as f:
+            json.dump({"language": {"display": "en", "tui": "en"},
+                       "difficulty": {"mode": "standard"}}, f, ensure_ascii=False, indent=2)
+
     print("=" * 64)
     print(f"Signal Lost — Model Sweep ({len(models)} models, {args.turns} turns, "
-          f"{args.workers} workers)")
+          f"{args.workers} workers, engine={args.engine})")
     print("=" * 64, flush=True)
 
     results = []
     t_start = time.time()
     with ProcessPoolExecutor(max_workers=args.workers) as ex:
-        futs = {ex.submit(_worker, (m, args.turns, args.call_timeout)): m for m in models}
+        futs = {ex.submit(_worker, (m, args.turns, args.call_timeout, args.engine)): m
+                for m in models}
         for fut in as_completed(futs):
             r = fut.result()
             results.append(r)
@@ -330,13 +371,17 @@ def main() -> int:
                   f"lat={r.get('avg_latency')}s", flush=True)
 
     elapsed = round(time.time() - t_start, 1)
+    if saved_custom is not None:
+        with open(custom_path, "w", encoding="utf-8") as f:
+            f.write(saved_custom)
+
     out_dir = os.path.join(_GAME_ROOT, "tests", "reviews", "sweep")
     os.makedirs(out_dir, exist_ok=True)
     ts = time.strftime("%Y%m%d_%H%M%S")
     raw_path = os.path.join(out_dir, f"sweep_{ts}.json")
     with open(raw_path, "w", encoding="utf-8") as f:
-        json.dump({"elapsed_s": elapsed, "turns": args.turns, "results": results},
-                  f, ensure_ascii=False, indent=2)
+        json.dump({"elapsed_s": elapsed, "turns": args.turns, "engine": args.engine,
+                   "results": results}, f, ensure_ascii=False, indent=2)
 
     md_path = write_report(results, args.turns, elapsed, out_dir, ts)
     print(f"\nAll models done in {elapsed}s.\n  Raw:    {raw_path}\n  Report: {md_path}", flush=True)

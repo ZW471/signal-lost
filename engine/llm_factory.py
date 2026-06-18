@@ -181,12 +181,11 @@ OAUTH_CLI_PROVIDERS: set[str] = {"claude-code", "codex"}
 
 
 # Providers that run on the single-call BYPASS engine (engine/claude_code_engine.py)
-# rather than the full LangGraph pipeline. The bypass holds all the gameplay
-# improvements (state_effects, record channel, ending_signal, scene-NPC promotion,
-# no hard validator gate); routing openrouter here gives it parity with the CLI
-# providers. The bypass uses llm._call_claude when present (CLI providers) and
-# falls back to llm.invoke(system,user) for API providers like openrouter.
-BYPASS_PROVIDERS: set[str] = OAUTH_CLI_PROVIDERS | {"openrouter"}
+# rather than the full LangGraph pipeline. Only the OAuth CLI backends bypass: they
+# expose `_call_claude` and a single CLI invocation per turn is the whole point of
+# using them. Every API provider (openrouter, openai, anthropic, local) runs the
+# full 11-node LangGraph pipeline with tool-calling.
+BYPASS_PROVIDERS: set[str] = set(OAUTH_CLI_PROVIDERS)
 
 
 # ---------------------------------------------------------------------------
