@@ -1,244 +1,263 @@
 # OpenRouter Model Sweep — Signal Lost
 
-Capability/cost sweep to find **cheap-yet-capable** OpenRouter models for running
-Signal Lost, and to pin down the **minimum model capability** the engine needs.
+Finds **cheap-yet-capable** OpenRouter models for Signal Lost and the **minimum capability**
+the engine needs. As of the routing change, every API provider (incl. openrouter) runs the
+**full 11-node LangGraph path with tool-calling** — only the OAuth CLI backends (codex/
+claude-code) use the single-call bypass. **So the full-graph results below are the ones that
+matter for real openrouter play;** the bypass results are kept as a secondary capability view.
 
 ## Runs
 
-| Run | Date | Models | Turns | Notes |
-|-----|------|-------:|------:|-------|
-| Quick | 2026-06-17 | 35 | 8 | initial bracket |
-| **Comprehensive** | 2026-06-18 | **117** | **16** | primary — this report; ~87 min wall, ~$2.84 spend |
-
-Comprehensive tier spread: **48 EXCELLENT · 34 STRONG · 3 OK · 10 WEAK · 21 UNAVAILABLE · 1 ERROR**.
+| Run | Date | Models | Turns | Path | Notes |
+|-----|------|-------:|------:|------|-------|
+| Bypass-quick | 2026-06-17 | 35 | 8 | single-call | initial bracket |
+| Bypass-full | 2026-06-18 | 117 | 16 | single-call | structured-output capability |
+| **Graph-full** | 2026-06-18 | **117** | **6** | **full LangGraph + tools** | **primary**; ~44 min, ~$4 |
+| Narrative grades | 2026-06-18 | 70 | — | codex judge | scores graph transcripts 1-10 |
 
 ## How to run it again
 
 ```bash
-# Comprehensive (117 models x 16 turns). Needs OPENROUTER_API_KEY in .env
-uv run tests/scripts/model_sweep.py \
-    --models tests/scripts/sweep_models_large.json \
-    --turns 16 --workers 8 --call-timeout 90
+# Full LangGraph path (real openrouter path) — needs OPENROUTER_API_KEY in .env
+uv run tests/scripts/model_sweep.py --models tests/scripts/sweep_models_large.json \
+    --turns 6 --workers 8 --engine graph --call-timeout 60
 
-# Smaller/faster bracket
-uv run tests/scripts/model_sweep.py --models tests/scripts/sweep_models.json --turns 8 --workers 6
+# Single-call bypass path (codex/claude-code style)
+uv run tests/scripts/model_sweep.py --models tests/scripts/sweep_models_large.json \
+    --turns 16 --workers 8 --engine bypass
+
+# Narrative-quality grades over a sweep's collected transcripts (codex judge, no API spend)
+uv run tests/scripts/grade_narratives.py --sweep tests/reviews/sweep/sweep_<ts>.json
 ```
-
-Each run prints a ranked table and writes `tests/reviews/sweep/sweep_<ts>.{json,md}`
-(gitignored, with live pricing). Candidate lists are plain OpenRouter slugs; edit them or
-regenerate from `https://openrouter.ai/api/v1/models`.
 
 ## What it measures
 
-OpenRouter runs on the **single-call bypass engine** (`engine.claude_code_engine.run_turn`),
-so the sweep drives that exact path. Every model plays an **identical fixed action script**.
-Each turn the model must follow a long, layer-gated system prompt **and emit a valid
-structured-JSON state mutation**. Signals captured:
+- **Graph path**: each turn the candidate model plays every LLM node (resolver+tools, input
+  validator, world sim, language check). It must **support tool/function-calling** and actually
+  **drive the state-recording tools**. Signals: Layer (L0-L5), Traces, MutRate (fraction of
+  turns that changed state), latency. Tiers: EXCELLENT (L4+,≥10 trc) · STRONG (L3+,≥6) ·
+  OK (L2+,≥3) · WEAK (narrates but barely mutates) · NO_TOOLS / DATA_POLICY (404 — unavailable).
+- **Narrative grade**: an anonymous transcript is scored 1-10 by a codex judge on atmosphere,
+  prose, coherence, responsiveness, show-don't-tell, and overall.
+- `c/turn` = est. cents/turn at ~5k in + 1.2k out tokens (one model call; the graph makes ~4-5).
 
-- **Layer (L0–L5)** — how deep the model drove the gated game state.
-- **Traces** — count of correctly-applied state mutations (discoveries).
-- **MutRate** — fraction of turns that actually changed state = **structured-output success rate**.
-- **Latency** — avg seconds/turn (one bypass call).
+## Minimum capability requirement (full path)
 
-Tiers: EXCELLENT (L4+, ≥10 traces) · STRONG (L3+, ≥6) · OK (L2+, ≥3) · WEAK (shallow) ·
-UNAVAILABLE (404 — account data-policy, *not* capability). `c/turn` = est. cents/turn at ~5k in + 1.2k out tokens.
+Two hard gates, both stricter than the bypass:
 
-## Minimum capability requirement
+1. **Tool-calling support.** 17 models returned *“no endpoints that support
+   tool use”* and 16 returned the data-policy 404 — together ~33 of 117 simply can't run the
+   full path on this account. Whole families are out (Gemma-3, Llama-3, Mistral-Nemo/Small-3.1).
+2. **Proactive tool use.** Of the models that *can* tool-call, ~50 land in WEAK: they narrate
+   fluently but **never call the recording tools** (knowledge stays flat, L0). This includes
+   strong general models — `openai/gpt-4o-mini`, `openai/gpt-4.1-nano`, `deepseek/deepseek-chat-v3-0324`,
+   `minimax/minimax-m2`. Great prose ≠ driving the game.
 
-**It's structured-output fidelity, not parameter count.** The cleanest single metric is **MutRate**:
+Only **5 EXCELLENT + 13 STRONG + 15 OK** of 117 actually drive state on the full path
+(vs 48 EXCELLENT on the bypass). The practical minimum: *a model that both supports tools and
+proactively records discoveries each turn* — empirically the ByteDance-Seed, Qwen3(-next/32b+),
+Nemotron, Gemma-4-MoE, GLM-4.6+, MiniMax-M3, and Kimi families.
 
-- **Capable models hold MutRate ≳ 0.6 and reach L3–L4+.** Several *tiny* models clear it —
-  `inclusionai/ling-2.6-flash` and `google/gemma-3-4b-it` hit L4.
-- **Format-fail floor:** a cluster sits at **MutRate ≈ 0.06, L0, 0 traces** — they narrate
-  fluent prose but never emit valid state JSON, so the game can't advance:
-  `google/gemini-2.5-flash`, `liquid/lfm-2-24b-a2b`, `rekaai/reka-edge`, `meta-llama/llama-3-8b-instruct`, `rekaai/reka-flash-3`, `meta-llama/llama-3-70b-instruct`, `google/gemma-2-27b-it`, `minimax/minimax-m1`, `deepseek/deepseek-r1-distill-llama-70b`.
-- Size doesn't save them: `meta-llama/llama-3-70b` and `deepseek-r1-distill-llama-70b` are in the floor;
-  4B–9B models with good JSON discipline are not.
+## Recommended for the full path (drives state **and** narrates ≥6/10), cheapest first
 
-So the **practical minimum** is *any model that reliably emits the engine's JSON schema while
-following multi-layer instructions* — empirically the Qwen 2.5/3, Gemma 3, gpt-oss, Mistral
-Small/Ministral, and most modern MoE families, down to ~3–4B in the strongest cases.
+| # | Model | c/turn | Tier | Layer | Traces | MutRate | Narr | Latency(s) |
+|--:|-------|-------:|------|------:|------:|--------:|----:|-----------:|
+| 1 | `qwen/qwen3-235b-a22b-2507` | 0.057 | STRONG | 3 | 10 | 0.67 | 6 | 27.8 |
+| 2 | `google/gemma-4-26b-a4b-it` | 0.0696 | STRONG | 3 | 14 | 0.67 | 7 | 43.5 |
+| 3 | `qwen/qwen3-32b` | 0.0736 | STRONG | 3 | 6 | 0.6 | 7 | 34.6 |
+| 4 | `nvidia/nemotron-3-super-120b-a12b` | 0.099 | STRONG | 3 | 14 | 0.67 | 7 | 38.5 |
+| 5 | `google/gemma-4-31b-it` | 0.102 | OK | 2 | 3 | 0.4 | 6 | 48.1 |
+| 6 | `inclusionai/ring-2.6-1t` | 0.1125 | STRONG | 4 | 9 | 0.5 | 6 | 26.7 |
+| 7 | `deepseek/deepseek-v3.1-terminus` | 0.249 | OK | 3 | 4 | 0.33 | 6 | 25.5 |
+| 8 | `bytedance-seed/seed-1.6` | 0.365 | STRONG | 3 | 11 | 0.83 | 6 | 97.4 |
+| 9 | `qwen/qwen3.5-122b-a10b` | 0.3796 | STRONG | 3 | 6 | 0.33 | 6 | 67.0 |
+| 10 | `qwen/qwen3.5-397b-a17b` | 0.4865 | EXCELLENT | 4 | 12 | 0.67 | 6 | 100.1 |
+| 11 | `qwen/qwen3.6-27b` | 0.5247 | OK | 2 | 4 | 0.5 | 6 | 78.6 |
 
-## Recommended — best value (cheapest EXCELLENT first)
+**Sweet-spot picks** (good at *both* state-driving and prose, and cheap):
+`google/gemma-4-26b-a4b-it` (0.07¢, STRONG, narr 7), `qwen/qwen3-32b` (0.07¢, STRONG, narr 7),
+and `nvidia/nemotron-3-super-120b-a12b` (0.10¢, STRONG, narr 7). Cheapest viable is
+`qwen/qwen3-235b-a22b-2507` (0.057¢). Deepest is `qwen/qwen3.5-397b-a17b` (EXCELLENT L4) but slow.
 
-| # | Model | c/turn | Layer | Traces | Knowledge | MutRate | Latency(s) |
-|--:|-------|-------:|------:|------:|----------:|--------:|-----------:|
-| 1 | `inclusionai/ling-2.6-flash` | 0.0086 | 4 | 14 | 23 | 0.67 | 5.7 |
-| 2 | `openai/gpt-oss-20b` | 0.0313 | 4 | 10 | 30 | 0.69 | 30.3 |
-| 3 | `google/gemma-3-4b-it` | 0.037 | 4 | 13 | 35 | 0.93 | 43.1 |
-| 4 | `arcee-ai/trinity-mini` | 0.0405 | 4 | 14 | 28 | 0.77 | 56.9 |
-| 5 | `openai/gpt-oss-120b` | 0.0411 | 4 | 14 | 52 | 1.0 | 23.2 |
-| 6 | `qwen/qwen3-30b-a3b-instruct-2507` | 0.0472 | 4 | 19 | 66 | 1.0 | 17.7 |
-| 7 | `qwen/qwen3-235b-a22b-2507` | 0.057 | 4 | 19 | 69 | 1.0 | 20.2 |
-| 8 | `google/gemma-3-27b-it` | 0.0592 | 4 | 10 | 38 | 1.0 | 16.3 |
-| 9 | `mistralai/ministral-3b-2512` | 0.062 | 4 | 15 | 31 | 0.5 | 7.4 |
-| 10 | `tencent/hy3-preview` | 0.0642 | 4 | 19 | 74 | 1.0 | 21.2 |
-| 11 | `qwen/qwen3.5-9b` | 0.068 | 4 | 19 | 73 | 1.0 | 31.7 |
-| 12 | `openai/gpt-5-nano` | 0.073 | 4 | 16 | 51 | 0.94 | 35.0 |
-| 13 | `qwen/qwen3-8b` | 0.073 | 4 | 11 | 18 | 1.0 | 23.3 |
-| 14 | `bytedance-seed/seed-1.6-flash` | 0.0735 | 4 | 18 | 69 | 1.0 | 12.0 |
-| 15 | `qwen/qwen3-32b` | 0.0736 | 4 | 13 | 45 | 1.0 | 24.0 |
-| 16 | `z-ai/glm-4.7-flash` | 0.078 | 4 | 15 | 19 | 1.0 | 30.9 |
-| 17 | `qwen/qwen3-14b` | 0.0788 | 4 | 19 | 41 | 1.0 | 29.5 |
-| 18 | `stepfun/step-3.5-flash` | 0.081 | 4 | 23 | 50 | 1.0 | 79.3 |
+> Tension worth noting: the **best narrators** (`deepseek/deepseek-v4-pro` 8, `nvidia/nemotron-3-ultra-550b` 8,
+> `mistralai/mistral-small-3.2-24b` 7, `tencent/hy3-preview` 7) are mostly **WEAK at driving state** —
+> beautiful prose, but they don't record discoveries, so the game stalls. Pick for both, not one.
 
-## Recommended — fastest capable (≤8s/turn, EXCELLENT/STRONG)
+## Narrative-quality leaderboard (top 18, codex judge)
 
-Latency matters because the bypass is one call per turn — good for interactive play.
+| Narr | Graph tier | c/turn | Model |
+|----:|-----------|-------:|-------|
+| 8 | WEAK | 0.3219 | `deepseek/deepseek-v4-pro` |
+| 8 | WEAK | 0.514 | `nvidia/nemotron-3-ultra-550b-a55b` |
+| 7 | WEAK | 0.0615 | `mistralai/mistral-small-3.2-24b-instruct` |
+| 7 | WEAK | 0.0642 | `tencent/hy3-preview` |
+| 7 | STRONG | 0.0696 | `google/gemma-4-26b-a4b-it` |
+| 7 | STRONG | 0.0736 | `qwen/qwen3-32b` |
+| 7 | STRONG | 0.099 | `nvidia/nemotron-3-super-120b-a12b` |
+| 7 | WEAK | 0.195 | `qwen/qwen3.6-35b-a3b` |
+| 7 | WEAK | 0.259 | `minimax/minimax-m2.1` |
+| 7 | WEAK | 0.464 | `minimax/minimax-m1` |
+| 6 | STRONG | 0.057 | `qwen/qwen3-235b-a22b-2507` |
+| 6 | OK | 0.102 | `google/gemma-4-31b-it` |
+| 6 | WEAK | 0.1125 | `inclusionai/ling-2.6-1t` |
+| 6 | STRONG | 0.1125 | `inclusionai/ring-2.6-1t` |
+| 6 | WEAK | 0.124 | `mistralai/ministral-14b-2512` |
+| 6 | OK | 0.249 | `deepseek/deepseek-v3.1-terminus` |
+| 6 | WEAK | 0.25 | `openai/gpt-5.4-nano` |
+| 6 | WEAK | 0.2847 | `qwen/qwen3.5-27b` |
 
-| Model | Latency(s) | Tier | c/turn | Layer | MutRate |
-|-------|-----------:|------|-------:|------:|--------:|
-| `openai/gpt-4.1-nano` | 3.0 | STRONG | 0.098 | 3 | 0.88 |
-| `amazon/nova-micro-v1` | 3.7 | STRONG | 0.0343 | 4 | 0.94 |
-| `google/gemini-3.1-flash-lite` | 4.1 | EXCELLENT | 0.305 | 4 | 1.0 |
-| `amazon/nova-2-lite-v1` | 4.2 | EXCELLENT | 0.45 | 4 | 0.81 |
-| `google/gemini-2.5-flash-lite-preview-09-2025` | 4.3 | STRONG | 0.098 | 3 | 1.0 |
-| `inclusionai/ling-2.6-flash` | 5.7 | EXCELLENT | 0.0086 | 4 | 0.67 |
-| `mistralai/mistral-small-2603` | 6.7 | STRONG | 0.147 | 3 | 0.5 |
-| `essentialai/rnj-1-instruct` | 6.9 | EXCELLENT | 0.093 | 4 | 0.62 |
-| `openai/gpt-5.4-nano` | 7.1 | EXCELLENT | 0.25 | 4 | 1.0 |
-| `meta-llama/llama-4-scout` | 7.1 | STRONG | 0.086 | 4 | 0.56 |
-| `mistralai/ministral-3b-2512` | 7.4 | EXCELLENT | 0.062 | 4 | 0.5 |
-| `anthropic/claude-3-haiku` | 7.4 | STRONG | 0.275 | 3 | 0.31 |
+## Full graph-path results (117 models)
 
-**Top picks**
-- **Best value overall:** `inclusionai/ling-2.6-flash` — L4 at ~$0.009/turn and 5.7s. (Lesser-known; if you want a name-brand pick, `openai/gpt-oss-20b`/`120b` or `qwen/qwen3-30b-a3b-instruct-2507`.)
-- **Best speed+depth:** `google/gemini-3.1-flash-lite` (4.1s, L4, MutRate 1.0) and `bytedance-seed/seed-1.6-flash` (12s, L4, 1.0).
-- **Fast cheap workhorses (STRONG):** `openai/gpt-4.1-nano` (3.0s), `amazon/nova-micro-v1` (3.7s), `google/gemini-2.5-flash-lite` (4.3s).
-- **Deepest/highest-detail runs:** `qwen/qwen3.5-122b-a10b` and `nvidia/llama-3.3-nemotron-super-49b-v1.5` reached **L5**; `moonshotai/kimi-k2.5` and `minimax/minimax-m3` recorded ~95 knowledge items (but are slower/pricier).
+| Tier | Model | Traces | Layer | MutRate | Narr | Latency(s) | c/turn |
+|------|-------|------:|------:|--------:|----:|-----------:|-------:|
+| EXCELLENT | `bytedance-seed/seed-2.0-mini` | 17 | 4 | 1.0 | 5 | 161.5 | 0.098 |
+| EXCELLENT | `moonshotai/kimi-k2.5` | 14 | 4 | 1.0 | 5 | 166.9 | 0.4305 |
+| EXCELLENT | `bytedance-seed/seed-2.0-lite` | 13 | 4 | 0.5 | — | 47.4 | 0.365 |
+| EXCELLENT | `qwen/qwen3.5-397b-a17b` | 12 | 4 | 0.67 | 6 | 100.1 | 0.4865 |
+| EXCELLENT | `qwen/qwen3-next-80b-a3b-instruct` | 11 | 4 | 1.0 | — | 12.2 | 0.177 |
+| STRONG | `google/gemma-4-26b-a4b-it` | 14 | 3 | 0.67 | 7 | 43.5 | 0.0696 |
+| STRONG | `nvidia/nemotron-3-super-120b-a12b` | 14 | 3 | 0.67 | 7 | 38.5 | 0.099 |
+| STRONG | `minimax/minimax-m3` | 13 | 3 | 0.83 | 4 | 138.3 | 0.294 |
+| STRONG | `inclusionai/ring-2.6-1t` | 9 | 4 | 0.5 | 6 | 26.7 | 0.1125 |
+| STRONG | `bytedance-seed/seed-1.6` | 11 | 3 | 0.83 | 6 | 97.4 | 0.365 |
+| STRONG | `minimax/minimax-m2.7` | 8 | 4 | 0.33 | 5 | 40.9 | 0.245 |
+| STRONG | `qwen/qwen3-235b-a22b-2507` | 10 | 3 | 0.67 | 6 | 27.8 | 0.057 |
+| STRONG | `z-ai/glm-5` | 10 | 3 | 0.67 | 5 | 99.9 | 0.5304 |
+| STRONG | `z-ai/glm-4.7` | 9 | 3 | 0.5 | 4 | 44.6 | 0.41 |
+| STRONG | `openai/gpt-5-mini` | 7 | 3 | 1.0 | — | 80.3 | 0.365 |
+| STRONG | `qwen/qwen3-32b` | 6 | 3 | 0.6 | 7 | 34.6 | 0.0736 |
+| STRONG | `stepfun/step-3.7-flash` | 6 | 3 | 1.0 | — | 110.4 | 0.238 |
+| STRONG | `qwen/qwen3.5-122b-a10b` | 6 | 3 | 0.33 | 6 | 67.0 | 0.3796 |
+| OK | `openai/gpt-oss-120b` | 4 | 4 | 0.5 | — | 43.6 | 0.0411 |
+| OK | `z-ai/glm-4.7-flash` | 3 | 4 | 0.33 | 4 | 26.4 | 0.078 |
+| OK | `deepseek/deepseek-v3.2` | 3 | 4 | 0.5 | 3 | 82.8 | 0.1556 |
+| OK | `deepseek/deepseek-v3.1-terminus` | 4 | 3 | 0.33 | 6 | 25.5 | 0.249 |
+| OK | `nvidia/llama-3.3-nemotron-super-49b-v1.5` | 3 | 3 | 0.5 | 5 | 54.6 | 0.248 |
+| OK | `deepseek/deepseek-v4-flash` | 5 | 2 | 0.33 | 5 | 28.3 | 0.0666 |
+| OK | `z-ai/glm-4.6` | 5 | 2 | 0.5 | 5 | 41.0 | 0.4238 |
+| OK | `google/gemini-2.5-flash` | 4 | 2 | 0.33 | 5 | 11.0 | 0.45 |
+| OK | `qwen/qwen3.6-27b` | 4 | 2 | 0.5 | 6 | 78.6 | 0.5247 |
+| OK | `amazon/nova-micro-v1` | 3 | 2 | 0.5 | 4 | 6.1 | 0.0343 |
+| OK | `qwen/qwen3-8b` | 3 | 2 | 0.5 | 4 | 44.6 | 0.073 |
+| OK | `meta-llama/llama-3.3-70b-instruct` | 3 | 2 | 0.5 | — | 19.7 | 0.0884 |
+| OK | `openai/gpt-5-nano` | 3 | 2 | 0.83 | 5 | 91.9 | 0.073 |
+| OK | `google/gemma-4-31b-it` | 3 | 2 | 0.4 | 6 | 48.1 | 0.102 |
+| OK | `qwen/qwen-2.5-72b-instruct` | 3 | 2 | 0.33 | 4 | 43.6 | 0.228 |
+| WEAK | `openai/gpt-oss-20b` | 2 | 2 | 0.83 | — | 25.0 | 0.0313 |
+| WEAK | `z-ai/glm-4.6v` | 2 | 2 | 0.33 | 5 | 32.6 | 0.258 |
+| WEAK | `qwen/qwen3-14b` | 1 | 1 | 1.0 | — | 40.1 | 0.0788 |
+| WEAK | `mistralai/mistral-small-24b-instruct-2501` | 0 | 0 | 1.0 | — | 1.5 | 0.0346 |
+| WEAK | `qwen/qwen-2.5-7b-instruct` | 0 | 0 | 1.0 | — | 4.5 | 0.032 |
+| WEAK | `inclusionai/ling-2.6-flash` | 0 | 0 | 0.17 | 5 | 4.7 | 0.0086 |
+| WEAK | `arcee-ai/trinity-mini` | 0 | 0 | 0.5 | — | 5.0 | 0.0405 |
+| WEAK | `google/gemma-3-12b-it` | 0 | 0 | 0.17 | 5 | 9.3 | 0.043 |
+| WEAK | `amazon/nova-lite-v1` | 0 | 0 | 0.17 | 3 | 9.7 | 0.0588 |
+| WEAK | `meta-llama/llama-3.1-8b-instruct` | 0 | 0 | 0.17 | 2 | 21.1 | 0.0136 |
+| WEAK | `qwen/qwen3-30b-a3b-instruct-2507` | 0 | 0 | 0.17 | 4 | 18.2 | 0.0472 |
+| WEAK | `rekaai/reka-edge` | 0 | 0 | 0.5 | — | 2.0 | 0.062 |
+| WEAK | `mistralai/mistral-small-3.2-24b-instruct` | 0 | 0 | 0.17 | 7 | 9.4 | 0.0615 |
+| WEAK | `mistralai/ministral-3b-2512` | 0 | 0 | 0.17 | 4 | 5.0 | 0.062 |
+| WEAK | `google/gemma-3-27b-it` | 0 | 0 | 0.2 | 4 | 18.3 | 0.0592 |
+| WEAK | `qwen/qwen3.5-9b` | 0 | 0 | 0.5 | — | 34.6 | 0.068 |
+| WEAK | `tencent/hy3-preview` | 0 | 0 | 0.17 | 7 | 41.7 | 0.0642 |
+| WEAK | `bytedance-seed/seed-1.6-flash` | 0 | 0 | 0.17 | 5 | 24.3 | 0.0735 |
+| WEAK | `nvidia/nemotron-3-nano-30b-a3b` | 0 | 0 | 0.17 | 3 | 75.2 | 0.049 |
+| WEAK | `meta-llama/llama-4-scout` | 0 | 0 | 0.17 | 5 | 3.4 | 0.086 |
+| WEAK | `essentialai/rnj-1-instruct` | 0 | 0 | 0.17 | 2 | 5.4 | 0.093 |
+| WEAK | `mistralai/ministral-8b-2512` | 0 | 0 | 0.17 | 5 | 8.6 | 0.093 |
+| WEAK | `google/gemini-2.5-flash-lite-preview-09-2025` | 0 | 0 | 0.17 | 4 | 6.1 | 0.098 |
+| WEAK | `openai/gpt-4.1-nano` | 0 | 0 | 0.17 | 4 | 2.6 | 0.098 |
+| WEAK | `inclusionai/ling-2.6-1t` | 0 | 0 | 0.17 | 6 | 6.2 | 0.1125 |
+| WEAK | `meta-llama/llama-4-maverick` | 0 | 0 | 0.17 | 4 | 5.2 | 0.147 |
+| WEAK | `mistralai/ministral-14b-2512` | 0 | 0 | 0.17 | 6 | 8.7 | 0.124 |
+| WEAK | `openai/gpt-4o-mini-2024-07-18` | 0 | 0 | 0.17 | 5 | 8.5 | 0.147 |
+| WEAK | `stepfun/step-3.5-flash` | 0 | 0 | 0.17 | 3 | 52.2 | 0.081 |
+| WEAK | `minimax/minimax-m2.5` | 0 | 0 | 0.17 | 4 | 19.6 | 0.183 |
+| WEAK | `z-ai/glm-4.5-air` | 0 | 0 | 0.17 | 5 | 34.4 | 0.167 |
+| WEAK | `deepseek/deepseek-chat-v3-0324` | 0 | 0 | 0.17 | 4 | 23.4 | 0.1924 |
+| WEAK | `prime-intellect/intellect-3` | 0 | 0 | 0.17 | 5 | 12.7 | 0.232 |
+| WEAK | `qwen/qwen3.5-35b-a3b` | 0 | 0 | 0.17 | 5 | 37.9 | 0.19 |
+| WEAK | `qwen/qwen3.6-35b-a3b` | 0 | 0 | 0.17 | 7 | 36.9 | 0.195 |
+| WEAK | `minimax/minimax-m2` | 0 | 0 | 0.17 | 4 | 29.7 | 0.2475 |
+| WEAK | `meta-llama/llama-3.1-70b-instruct` | 0 | 0 | 0.17 | 4 | 25.2 | 0.248 |
+| WEAK | `openai/gpt-5.4-nano` | 0 | 0 | 0.17 | 6 | 10.0 | 0.25 |
+| WEAK | `anthropic/claude-3-haiku` | 0 | 0 | 0.17 | 5 | 9.7 | 0.275 |
+| WEAK | `minimax/minimax-m2.1` | 0 | 0 | 0.17 | 7 | 20.3 | 0.259 |
+| WEAK | `google/gemini-3.1-flash-lite` | 0 | 0 | 0.17 | 6 | 8.7 | 0.305 |
+| WEAK | `openai/gpt-4.1-mini` | 0 | 0 | 0.17 | 6 | 6.2 | 0.392 |
+| WEAK | `deepseek/deepseek-v4-pro` | 0 | 0 | 0.17 | 8 | 58.2 | 0.3219 |
+| WEAK | `openai/gpt-3.5-turbo` | 0 | 0 | 0.17 | 4 | 4.5 | 0.43 |
+| WEAK | `qwen/qwen3.5-27b` | 0 | 0 | 0.17 | 6 | 80.7 | 0.2847 |
+| WEAK | `amazon/nova-2-lite-v1` | 0 | 0 | 0.17 | 4 | 6.6 | 0.45 |
+| WEAK | `minimax/minimax-m1` | 0 | 0 | 0.17 | 7 | 19.2 | 0.464 |
+| WEAK | `nvidia/nemotron-3-ultra-550b-a55b` | 0 | 0 | 0.17 | 8 | 11.2 | 0.514 |
+| WEAK | `z-ai/glm-4.5v` | 0 | 0 | 0.17 | 3 | 27.4 | 0.516 |
+| WEAK | `deepseek/deepseek-r1-0528` | 0 | 0 | 0.17 | 5 | 100.2 | 0.508 |
+| NO_TOOLS | `ibm-granite/granite-4.0-h-micro` | 0 | 1 | 0.0 | — | 3.2 | 0.0219 |
+| NO_TOOLS | `liquid/lfm-2-24b-a2b` | 0 | 1 | 0.0 | — | 4.0 | 0.0294 |
+| NO_TOOLS | `google/gemma-3-4b-it` | 0 | 1 | 0.0 | — | 0.8 | 0.037 |
+| NO_TOOLS | `meta-llama/llama-3.2-1b-instruct` | 0 | 1 | 0.0 | — | 0.3 | 0.0376 |
+| NO_TOOLS | `google/gemma-3n-e4b-it` | 0 | 1 | 0.0 | — | 2.4 | 0.0444 |
+| NO_TOOLS | `microsoft/phi-4` | 0 | 1 | 0.0 | — | 1.9 | 0.0493 |
+| NO_TOOLS | `meta-llama/llama-3.2-3b-instruct` | 0 | 1 | 0.0 | — | 0.4 | 0.0657 |
+| NO_TOOLS | `microsoft/phi-4-mini-instruct` | 0 | 1 | 0.0 | — | 0.3 | 0.082 |
+| NO_TOOLS | `rekaai/reka-flash-3` | 0 | 1 | 0.0 | — | 80.1 | 0.074 |
+| NO_TOOLS | `meta-llama/llama-3-8b-instruct` | 0 | 1 | 0.0 | — | 1.6 | 0.0868 |
+| NO_TOOLS | `tencent/hunyuan-a13b-instruct` | 0 | 1 | 0.0 | — | 1.6 | 0.1384 |
+| NO_TOOLS | `minimax/minimax-01` | 0 | 1 | 0.0 | — | 0.7 | 0.232 |
+| NO_TOOLS | `mistralai/mistral-small-3.1-24b-instruct` | 0 | 1 | 0.0 | — | 0.3 | 0.2421 |
+| NO_TOOLS | `meta-llama/llama-3-70b-instruct` | 0 | 1 | 0.0 | — | 1.1 | 0.3438 |
+| NO_TOOLS | `google/gemma-2-27b-it` | 0 | 1 | 0.0 | — | 1.4 | 0.403 |
+| NO_TOOLS | `deepseek/deepseek-r1-distill-llama-70b` | 0 | 1 | 0.0 | — | 4.8 | 0.496 |
+| NO_TOOLS | `aion-labs/aion-1.0-mini` | 0 | 1 | 0.0 | — | 0.3 | 0.518 |
+| DATA_POLICY | `mistralai/mistral-nemo` | 0 | 1 | 0.0 | — | 3.7 | 0.0136 |
+| DATA_POLICY | `ibm-granite/granite-4.1-8b` | 0 | 1 | 0.0 | — | 0.3 | 0.037 |
+| DATA_POLICY | `qwen/qwen3.5-flash-02-23` | 0 | 1 | 0.0 | — | 0.3 | 0.0637 |
+| DATA_POLICY | `allenai/olmo-3-32b-think` | 0 | 1 | 0.0 | — | 0.3 | 0.135 |
+| DATA_POLICY | `mistralai/mistral-small-2603` | 0 | 1 | 0.0 | — | 1.2 | 0.147 |
+| DATA_POLICY | `upstage/solar-pro-3` | 0 | 1 | 0.0 | — | 0.3 | 0.147 |
+| DATA_POLICY | `mistralai/mistral-saba` | 0 | 1 | 0.0 | — | 3.1 | 0.172 |
+| DATA_POLICY | `qwen/qwen-plus-2025-07-28` | 0 | 1 | 0.0 | — | 0.6 | 0.2236 |
+| DATA_POLICY | `qwen/qwen3.6-flash` | 0 | 1 | 0.0 | — | 0.4 | 0.2288 |
+| DATA_POLICY | `qwen/qwen3.7-plus` | 0 | 1 | 0.0 | — | 0.6 | 0.3136 |
+| DATA_POLICY | `qwen/qwen3.5-plus-02-15` | 0 | 1 | 0.0 | — | 0.4 | 0.3172 |
+| DATA_POLICY | `qwen/qwen3.5-plus-20260420` | 0 | 1 | 0.0 | — | 0.3 | 0.366 |
+| DATA_POLICY | `qwen/qwen3.6-plus` | 0 | 1 | 0.0 | — | 0.4 | 0.3965 |
+| DATA_POLICY | `mistralai/mistral-large-2512` | 0 | 1 | 0.0 | — | 0.6 | 0.43 |
+| DATA_POLICY | `mistralai/mistral-medium-3` | 0 | 1 | 0.0 | — | 1.3 | 0.44 |
+| DATA_POLICY | `mistralai/mistral-medium-3.1` | 0 | 1 | 0.0 | — | 0.3 | 0.44 |
+| ERROR | `arcee-ai/virtuoso-large` | 0 | 1 | 0.0 | — | 1.2 | 0.519 |
 
-## Full results (117 models)
+## Secondary: single-call bypass path (codex/claude-code style)
 
-| Tier | Model | Turns | Traces | Knowledge | Layer | MutRate | Latency(s) | c/turn |
-|------|-------|------:|------:|----------:|------:|--------:|-----------:|-------:|
-| EXCELLENT | `moonshotai/kimi-k2.5` | 16 | 21 | 95 | 4 | 1.0 | 104.2 | 0.4305 |
-| EXCELLENT | `minimax/minimax-m3` | 16 | 15 | 96 | 4 | 0.94 | 67.3 | 0.294 |
-| EXCELLENT | `tencent/hy3-preview` | 16 | 19 | 74 | 4 | 1.0 | 21.2 | 0.0642 |
-| EXCELLENT | `qwen/qwen3.5-9b` | 13 | 19 | 73 | 4 | 1.0 | 31.7 | 0.068 |
-| EXCELLENT | `qwen/qwen3.5-397b-a17b` | 16 | 19 | 73 | 4 | 0.94 | 23.9 | 0.4865 |
-| EXCELLENT | `minimax/minimax-m2.7` | 16 | 20 | 68 | 4 | 0.75 | 21.2 | 0.245 |
-| EXCELLENT | `qwen/qwen3.5-122b-a10b` | 16 | 19 | 61 | 5 | 0.94 | 20.1 | 0.3796 |
-| EXCELLENT | `qwen/qwen3-235b-a22b-2507` | 16 | 19 | 69 | 4 | 1.0 | 20.2 | 0.057 |
-| EXCELLENT | `deepseek/deepseek-v4-pro` | 16 | 19 | 68 | 4 | 1.0 | 56.6 | 0.3219 |
-| EXCELLENT | `qwen/qwen3-30b-a3b-instruct-2507` | 16 | 19 | 66 | 4 | 1.0 | 17.7 | 0.0472 |
-| EXCELLENT | `stepfun/step-3.5-flash` | 16 | 23 | 50 | 4 | 1.0 | 79.3 | 0.081 |
-| EXCELLENT | `bytedance-seed/seed-1.6-flash` | 16 | 18 | 69 | 4 | 1.0 | 12.0 | 0.0735 |
-| EXCELLENT | `deepseek/deepseek-r1-0528` | 13 | 23 | 46 | 4 | 1.0 | 66.4 | 0.508 |
-| EXCELLENT | `qwen/qwen3.5-27b` | 16 | 16 | 69 | 4 | 0.81 | 40.9 | 0.2847 |
-| EXCELLENT | `inclusionai/ring-2.6-1t` | 16 | 17 | 56 | 4 | 0.69 | 12.7 | 0.1125 |
-| EXCELLENT | `inclusionai/ling-2.6-1t` | 16 | 17 | 55 | 4 | 1.0 | 11.1 | 0.1125 |
-| EXCELLENT | `qwen/qwen3.6-35b-a3b` | 16 | 16 | 57 | 4 | 0.81 | 37.2 | 0.195 |
-| EXCELLENT | `nvidia/llama-3.3-nemotron-super-49b-v1.5` | 16 | 18 | 39 | 5 | 0.94 | 22.4 | 0.248 |
-| EXCELLENT | `nvidia/nemotron-3-ultra-550b-a55b` | 16 | 17 | 52 | 4 | 0.69 | 16.4 | 0.514 |
-| EXCELLENT | `qwen/qwen3-14b` | 13 | 19 | 41 | 4 | 1.0 | 29.5 | 0.0788 |
-| EXCELLENT | `openai/gpt-5-nano` | 16 | 16 | 51 | 4 | 0.94 | 35.0 | 0.073 |
-| EXCELLENT | `nvidia/nemotron-3-super-120b-a12b` | 16 | 18 | 43 | 4 | 1.0 | 87.0 | 0.099 |
-| EXCELLENT | `google/gemini-3.1-flash-lite` | 16 | 17 | 44 | 4 | 1.0 | 4.1 | 0.305 |
-| EXCELLENT | `openai/gpt-oss-120b` | 15 | 14 | 52 | 4 | 1.0 | 23.2 | 0.0411 |
-| EXCELLENT | `z-ai/glm-4.5-air` | 16 | 13 | 54 | 4 | 0.94 | 24.8 | 0.167 |
-| EXCELLENT | `z-ai/glm-4.6v` | 16 | 17 | 38 | 4 | 0.88 | 31.1 | 0.258 |
-| EXCELLENT | `qwen/qwen3.6-27b` | 16 | 14 | 46 | 4 | 0.88 | 62.0 | 0.5247 |
-| EXCELLENT | `minimax/minimax-m2.5` | 16 | 15 | 41 | 4 | 0.62 | 11.4 | 0.183 |
-| EXCELLENT | `meta-llama/llama-3.3-70b-instruct` | 16 | 15 | 40 | 4 | 1.0 | 26.4 | 0.0884 |
-| EXCELLENT | `openai/gpt-5-mini` | 16 | 11 | 55 | 4 | 0.81 | 31.8 | 0.365 |
-| EXCELLENT | `qwen/qwen3-32b` | 14 | 13 | 45 | 4 | 1.0 | 24.0 | 0.0736 |
-| EXCELLENT | `openai/gpt-4.1-mini` | 16 | 15 | 34 | 4 | 0.88 | 10.6 | 0.392 |
-| EXCELLENT | `mistralai/ministral-3b-2512` | 16 | 15 | 31 | 4 | 0.5 | 7.4 | 0.062 |
-| EXCELLENT | `openai/gpt-5.4-nano` | 13 | 11 | 47 | 4 | 1.0 | 7.1 | 0.25 |
-| EXCELLENT | `qwen/qwen3-next-80b-a3b-instruct` | 10 | 14 | 32 | 4 | 1.0 | 8.3 | 0.177 |
-| EXCELLENT | `google/gemma-3-4b-it` | 15 | 13 | 35 | 4 | 0.93 | 43.1 | 0.037 |
-| EXCELLENT | `arcee-ai/trinity-mini` | 13 | 14 | 28 | 4 | 0.77 | 56.9 | 0.0405 |
-| EXCELLENT | `google/gemma-4-31b-it` | 16 | 14 | 28 | 4 | 0.81 | 34.0 | 0.102 |
-| EXCELLENT | `amazon/nova-2-lite-v1` | 16 | 12 | 35 | 4 | 0.81 | 4.2 | 0.45 |
-| EXCELLENT | `inclusionai/ling-2.6-flash` | 15 | 14 | 23 | 4 | 0.67 | 5.7 | 0.0086 |
-| EXCELLENT | `z-ai/glm-4.7-flash` | 7 | 15 | 19 | 4 | 1.0 | 30.9 | 0.078 |
-| EXCELLENT | `google/gemma-3-27b-it` | 15 | 10 | 38 | 4 | 1.0 | 16.3 | 0.0592 |
-| EXCELLENT | `essentialai/rnj-1-instruct` | 16 | 14 | 19 | 4 | 0.62 | 6.9 | 0.093 |
-| EXCELLENT | `openai/gpt-oss-20b` | 16 | 10 | 30 | 4 | 0.69 | 30.3 | 0.0313 |
-| EXCELLENT | `z-ai/glm-4.5v` | 16 | 11 | 24 | 4 | 0.62 | 31.6 | 0.516 |
-| EXCELLENT | `qwen/qwen3-8b` | 6 | 11 | 18 | 4 | 1.0 | 23.3 | 0.073 |
-| EXCELLENT | `prime-intellect/intellect-3` | 16 | 10 | 21 | 4 | 0.38 | 11.8 | 0.232 |
-| EXCELLENT | `mistralai/ministral-8b-2512` | 16 | 12 | 11 | 4 | 0.38 | 14.4 | 0.093 |
-| STRONG | `qwen/qwen3.5-35b-a3b` | 16 | 17 | 61 | 3 | 0.81 | 16.9 | 0.19 |
-| STRONG | `z-ai/glm-4.7` | 16 | 15 | 65 | 3 | 1.0 | 62.0 | 0.41 |
-| STRONG | `minimax/minimax-m2` | 16 | 18 | 51 | 3 | 0.81 | 9.8 | 0.2475 |
-| STRONG | `minimax/minimax-m2.1` | 16 | 19 | 44 | 3 | 0.62 | 16.2 | 0.259 |
-| STRONG | `bytedance-seed/seed-1.6` | 16 | 16 | 56 | 3 | 1.0 | 39.8 | 0.365 |
-| STRONG | `bytedance-seed/seed-2.0-mini` | 16 | 15 | 59 | 3 | 0.94 | 34.7 | 0.098 |
-| STRONG | `google/gemini-2.5-flash-lite-preview-09-2025` | 16 | 18 | 46 | 3 | 1.0 | 4.3 | 0.098 |
-| STRONG | `deepseek/deepseek-v4-flash` | 16 | 16 | 48 | 3 | 0.81 | 18.1 | 0.0666 |
-| STRONG | `deepseek/deepseek-v3.1-terminus` | 16 | 16 | 48 | 3 | 1.0 | 17.4 | 0.249 |
-| STRONG | `bytedance-seed/seed-2.0-lite` | 16 | 16 | 44 | 3 | 0.75 | 27.4 | 0.365 |
-| STRONG | `z-ai/glm-4.6` | 16 | 15 | 43 | 3 | 0.88 | 37.5 | 0.4238 |
-| STRONG | `nvidia/nemotron-3-nano-30b-a3b` | 16 | 14 | 43 | 3 | 1.0 | 37.1 | 0.049 |
-| STRONG | `z-ai/glm-5` | 16 | 14 | 38 | 3 | 0.44 | 33.9 | 0.5304 |
-| STRONG | `deepseek/deepseek-chat-v3-0324` | 16 | 15 | 29 | 3 | 0.88 | 25.3 | 0.1924 |
-| STRONG | `deepseek/deepseek-v3.2` | 16 | 13 | 32 | 3 | 0.62 | 32.3 | 0.1556 |
-| STRONG | `mistralai/mistral-small-24b-instruct-2501` | 16 | 13 | 29 | 3 | 0.75 | 37.0 | 0.0346 |
-| STRONG | `google/gemma-4-26b-a4b-it` | 10 | 13 | 26 | 3 | 1.0 | 38.3 | 0.0696 |
-| STRONG | `mistralai/mistral-small-2603` | 16 | 13 | 24 | 3 | 0.5 | 6.7 | 0.147 |
-| STRONG | `qwen/qwen-2.5-72b-instruct` | 16 | 9 | 30 | 4 | 1.0 | 21.6 | 0.228 |
-| STRONG | `openai/gpt-4.1-nano` | 16 | 10 | 31 | 3 | 0.88 | 3.0 | 0.098 |
-| STRONG | `qwen/qwen-2.5-7b-instruct` | 16 | 8 | 24 | 4 | 0.81 | 15.3 | 0.032 |
-| STRONG | `mistralai/mistral-small-3.2-24b-instruct` | 16 | 8 | 34 | 3 | 1.0 | 20.7 | 0.0615 |
-| STRONG | `meta-llama/llama-4-scout` | 16 | 9 | 17 | 4 | 0.56 | 7.1 | 0.086 |
-| STRONG | `meta-llama/llama-3.1-70b-instruct` | 16 | 8 | 30 | 3 | 0.94 | 20.9 | 0.248 |
-| STRONG | `tencent/hunyuan-a13b-instruct` | 16 | 7 | 23 | 4 | 0.5 | 9.2 | 0.1384 |
-| STRONG | `google/gemma-3-12b-it` | 16 | 8 | 26 | 3 | 0.94 | 13.9 | 0.043 |
-| STRONG | `amazon/nova-micro-v1` | 16 | 6 | 21 | 4 | 0.94 | 3.7 | 0.0343 |
-| STRONG | `meta-llama/llama-4-maverick` | 16 | 7 | 26 | 3 | 0.81 | 23.6 | 0.147 |
-| STRONG | `openai/gpt-4o-mini-2024-07-18` | 16 | 6 | 17 | 4 | 0.62 | 8.2 | 0.147 |
-| STRONG | `mistralai/mistral-nemo` | 16 | 7 | 18 | 3 | 0.75 | 9.0 | 0.0136 |
-| STRONG | `mistralai/ministral-14b-2512` | 16 | 9 | 8 | 3 | 0.31 | 22.2 | 0.124 |
-| STRONG | `microsoft/phi-4` | 16 | 6 | 18 | 3 | 0.69 | 10.7 | 0.0493 |
-| STRONG | `anthropic/claude-3-haiku` | 16 | 7 | 9 | 3 | 0.31 | 7.4 | 0.275 |
-| STRONG | `meta-llama/llama-3.1-8b-instruct` | 16 | 7 | 8 | 3 | 0.25 | 15.9 | 0.0136 |
-| OK | `google/gemma-3n-e4b-it` | 15 | 5 | 50 | 3 | 0.6 | 12.7 | 0.0444 |
-| OK | `amazon/nova-lite-v1` | 16 | 5 | 18 | 2 | 0.94 | 13.9 | 0.0588 |
-| OK | `stepfun/step-3.7-flash` | 1 | 3 | 8 | 2 | 1.0 | 46.8 | 0.238 |
-| WEAK | `openai/gpt-3.5-turbo` | 16 | 2 | 6 | 2 | 0.25 | 2.6 | 0.43 |
-| WEAK | `google/gemini-2.5-flash` | 16 | 2 | 3 | 1 | 0.12 | 3.8 | 0.45 |
-| WEAK | `liquid/lfm-2-24b-a2b` | 16 | 0 | 2 | 0 | 0.06 | 2.1 | 0.0294 |
-| WEAK | `rekaai/reka-edge` | 16 | 0 | 2 | 0 | 0.06 | 3.5 | 0.062 |
-| WEAK | `meta-llama/llama-3-8b-instruct` | 16 | 0 | 2 | 0 | 0.06 | 4.1 | 0.0868 |
-| WEAK | `rekaai/reka-flash-3` | 15 | 0 | 2 | 0 | 0.07 | 132.1 | 0.074 |
-| WEAK | `meta-llama/llama-3-70b-instruct` | 16 | 0 | 2 | 0 | 0.06 | 18.0 | 0.3438 |
-| WEAK | `google/gemma-2-27b-it` | 16 | 0 | 2 | 0 | 0.06 | 5.1 | 0.403 |
-| WEAK | `minimax/minimax-m1` | 16 | 0 | 2 | 0 | 0.06 | 12.9 | 0.464 |
-| WEAK | `deepseek/deepseek-r1-distill-llama-70b` | 16 | 0 | 2 | 0 | 0.06 | 11.8 | 0.496 |
-| UNAVAILABLE | `ibm-granite/granite-4.0-h-micro` | 0 | 0 | 0 | 1 | 0.0 | 0.7 | 0.0219 |
-| UNAVAILABLE | `ibm-granite/granite-4.1-8b` | 0 | 0 | 0 | 1 | 0.0 | 0.8 | 0.037 |
-| UNAVAILABLE | `meta-llama/llama-3.2-1b-instruct` | 0 | 0 | 0 | 1 | 0.0 | 0.3 | 0.0376 |
-| UNAVAILABLE | `qwen/qwen3.5-flash-02-23` | 0 | 0 | 0 | 1 | 0.0 | 0.2 | 0.0637 |
-| UNAVAILABLE | `meta-llama/llama-3.2-3b-instruct` | 0 | 0 | 0 | 1 | 0.0 | 0.2 | 0.0657 |
-| UNAVAILABLE | `microsoft/phi-4-mini-instruct` | 0 | 0 | 0 | 1 | 0.0 | 0.2 | 0.082 |
-| UNAVAILABLE | `allenai/olmo-3-32b-think` | 0 | 0 | 0 | 1 | 0.0 | 0.2 | 0.135 |
-| UNAVAILABLE | `upstage/solar-pro-3` | 0 | 0 | 0 | 1 | 0.0 | 0.1 | 0.147 |
-| UNAVAILABLE | `mistralai/mistral-saba` | 0 | 0 | 0 | 1 | 0.0 | 0.2 | 0.172 |
-| UNAVAILABLE | `qwen/qwen-plus-2025-07-28` | 0 | 0 | 0 | 1 | 0.0 | 0.2 | 0.2236 |
-| UNAVAILABLE | `qwen/qwen3.6-flash` | 0 | 0 | 0 | 1 | 0.0 | 0.2 | 0.2288 |
-| UNAVAILABLE | `minimax/minimax-01` | 0 | 0 | 0 | 1 | 0.0 | 0.2 | 0.232 |
-| UNAVAILABLE | `mistralai/mistral-small-3.1-24b-instruct` | 0 | 0 | 0 | 1 | 0.0 | 0.1 | 0.2421 |
-| UNAVAILABLE | `qwen/qwen3.7-plus` | 0 | 0 | 0 | 1 | 0.0 | 0.2 | 0.3136 |
-| UNAVAILABLE | `qwen/qwen3.5-plus-02-15` | 0 | 0 | 0 | 1 | 0.0 | 0.1 | 0.3172 |
-| UNAVAILABLE | `qwen/qwen3.5-plus-20260420` | 0 | 0 | 0 | 1 | 0.0 | 0.2 | 0.366 |
-| UNAVAILABLE | `qwen/qwen3.6-plus` | 0 | 0 | 0 | 1 | 0.0 | 0.2 | 0.3965 |
-| UNAVAILABLE | `mistralai/mistral-large-2512` | 0 | 0 | 0 | 1 | 0.0 | 0.2 | 0.43 |
-| UNAVAILABLE | `mistralai/mistral-medium-3` | 0 | 0 | 0 | 1 | 0.0 | 0.4 | 0.44 |
-| UNAVAILABLE | `mistralai/mistral-medium-3.1` | 0 | 0 | 0 | 1 | 0.0 | 0.2 | 0.44 |
-| UNAVAILABLE | `aion-labs/aion-1.0-mini` | 0 | 0 | 0 | 1 | 0.0 | 1.1 | 0.518 |
-| ERROR | `arcee-ai/virtuoso-large` | 0 | 0 | 0 | 1 | 0.0 | 1.4 | 0.519 |
+The bypass forces structured-JSON mutations instead of tool-calls, so it's far more forgiving —
+**48 EXCELLENT / 34 STRONG / 10 WEAK / 21 UNAVAILABLE** of 117. Cheapest EXCELLENT on the bypass:
+
+| # | Model | c/turn | Layer | Traces |
+|--:|-------|-------:|------:|------:|
+| 1 | `inclusionai/ling-2.6-flash` | 0.0086 | 4 | 14 |
+| 2 | `openai/gpt-oss-20b` | 0.0313 | 4 | 10 |
+| 3 | `google/gemma-3-4b-it` | 0.037 | 4 | 13 |
+| 4 | `arcee-ai/trinity-mini` | 0.0405 | 4 | 14 |
+| 5 | `openai/gpt-oss-120b` | 0.0411 | 4 | 14 |
+| 6 | `qwen/qwen3-30b-a3b-instruct-2507` | 0.0472 | 4 | 19 |
+| 7 | `qwen/qwen3-235b-a22b-2507` | 0.057 | 4 | 19 |
+| 8 | `google/gemma-3-27b-it` | 0.0592 | 4 | 10 |
+| 9 | `mistralai/ministral-3b-2512` | 0.062 | 4 | 15 |
+| 10 | `tencent/hy3-preview` | 0.0642 | 4 | 19 |
+| 11 | `qwen/qwen3.5-9b` | 0.068 | 4 | 19 |
+| 12 | `qwen/qwen3-8b` | 0.073 | 4 | 11 |
+
+These matter only if you run codex/claude-code (which bypass), or as a structured-output
+capability reference. For real openrouter play, use the full-path table above.
 
 ## Caveats
 
-- **Single run = real variance.** Numbers are one 16-turn pass. Example: `google/gemini-2.5-flash`
-  landed WEAK here (L1, MutRate 0.12) but STRONG (L4) in the 8-turn run — a transient (truncation/
-  refusal/rate-limit). Re-run the top ~10 with multiple seeds before locking a default.
-- **No endings reached.** 16 turns drives to L4–L5 but not to a game ending, so the `Ending`
-  column is empty across the board — endings need a longer scripted climb.
-- **UNAVAILABLE ≠ incapable.** 21 models returned `404 — No endpoints matching your data policy`,
-  i.e. the OpenRouter **account privacy setting** (`openrouter.ai/settings/privacy`) blocks
-  log-required providers. Loosen it to test them (many cheap small models live there).
-- **Engine robustness:** several models triggered a non-fatal
-  `decrypt_cipher failed: 'str' object has no attribute 'get'` (string passed where a dict was
-  expected). Logged, game continues — worth hardening separately.
+- **6 turns is shallow** for the full path (it's ~4-5x slower than the bypass; one model hit a
+  663s opening turn). Traces/layer under-count what a longer game would reach — treat as relative.
+- **Narrator ≠ driver.** Capability tier and narrative grade are different axes; the report keeps
+  them separate on purpose. The judge penalized a common full-path flaw: leaking mechanics/status
+  text into the prose.
+- **Single run, real variance.** One pass per model; re-run top picks with seeds before locking a default.
+- **UNAVAILABLE = no tool-capable endpoint under your data policy** (`openrouter.ai/settings/privacy`),
+  not a capability verdict — though many UNAVAILABLE models genuinely lack tool support.
