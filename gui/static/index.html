@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, viewport-fit=cover">
   <title>SIGNAL LOST</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='4' fill='%230a0a0f'/><text x='16' y='22' text-anchor='middle' font-size='18' fill='%2300ff88'>S</text></svg>">
-  <link rel="stylesheet" href="/static/style.css?v=w1fix">
+  <link rel="stylesheet" href="/static/style.css?v=w2a">
   <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;400;500;600;700&family=Noto+Sans+SC:wght@300;400;500;700&display=swap" rel="stylesheet">
 </head>
 <body>
@@ -351,7 +351,7 @@
   <!-- ========== TUTORIAL OVERLAY ========== -->
   <div id="tutorialOverlay" style="display:none">
     <div class="tutorial-highlight" id="tutorialHighlight"></div>
-    <div class="tutorial-tooltip" id="tutorialTooltip">
+    <div class="tutorial-tooltip" id="tutorialTooltip" role="dialog" aria-modal="false" aria-labelledby="tutorialStepIndicator">
       <div class="tutorial-step-indicator" id="tutorialStepIndicator"></div>
       <div class="tutorial-text" id="tutorialText"></div>
       <div class="tutorial-buttons">
@@ -363,8 +363,8 @@
 
   <!-- ========== GAME OVER OVERLAY ========== -->
   <div id="gameOverOverlay" class="overlay" style="display:none">
-    <div class="game-over-container">
-      <h1 class="game-over-title glitch-text" data-text="SIGNAL LOST">SIGNAL LOST</h1>
+    <div class="game-over-container dialog" role="dialog" aria-modal="true" aria-labelledby="gameOverTitle">
+      <h1 class="game-over-title glitch-text" id="gameOverTitle" data-text="SIGNAL LOST">SIGNAL LOST</h1>
       <div class="game-over-ending" id="gameOverEnding"></div>
       <div class="game-over-narrative" id="gameOverNarrative"></div>
       <button class="cyber-btn accent" onclick="location.reload()">
@@ -376,10 +376,14 @@
 
   <!-- ========== CONFIRM MENU DIALOG ========== -->
   <div id="confirmMenuDialog" class="overlay" style="display:none">
-    <div class="save-dialog">
-      <h3 class="config-title" id="confirmMenuTitle">// RETURN TO MENU?</h3>
-      <p class="confirm-text" id="confirmMenuText">Any unsaved progress will be lost.</p>
-      <div class="form-actions">
+    <div class="save-dialog dialog" role="dialog" aria-modal="true" aria-labelledby="confirmMenuTitle">
+      <div class="dialog-header">
+        <h3 class="config-title" id="confirmMenuTitle">// RETURN TO MENU?</h3>
+      </div>
+      <div class="dialog-body">
+        <p class="confirm-text" id="confirmMenuText">Any unsaved progress will be lost.</p>
+      </div>
+      <div class="dialog-actions form-actions">
         <button class="cyber-btn accent" onclick="confirmReturnToMenu()">
           <span class="cyber-btn-text" id="confirmMenuYes">CONFIRM</span>
         </button>
@@ -392,13 +396,17 @@
 
   <!-- ========== SAVE DIALOG ========== -->
   <div id="saveDialog" class="overlay" style="display:none">
-    <div class="save-dialog">
-      <h3 class="config-title">// SAVE SESSION</h3>
-      <div class="form-group">
-        <label class="cyber-label">SAVE NAME</label>
-        <input type="text" class="cyber-input" id="saveName" placeholder="quicksave" value="quicksave">
+    <div class="save-dialog dialog" role="dialog" aria-modal="true" aria-labelledby="saveDialogTitle">
+      <div class="dialog-header">
+        <h3 class="config-title" id="saveDialogTitle">// SAVE SESSION</h3>
       </div>
-      <div class="form-actions">
+      <div class="dialog-body">
+        <div class="form-group">
+          <label class="cyber-label">SAVE NAME</label>
+          <input type="text" class="cyber-input" id="saveName" placeholder="quicksave" value="quicksave">
+        </div>
+      </div>
+      <div class="dialog-actions form-actions">
         <button class="cyber-btn accent" onclick="confirmSave()">
           <span class="cyber-btn-text">SAVE</span>
         </button>
@@ -411,8 +419,11 @@
 
   <!-- ========== SETTINGS OVERLAY ========== -->
   <div id="settingsOverlay" class="overlay" style="display:none">
-    <div class="settings-dialog">
-      <h3 class="config-title">// SETTINGS</h3>
+    <div class="settings-dialog dialog" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+      <div class="dialog-header">
+        <h3 class="config-title" id="settingsTitle">// SETTINGS</h3>
+      </div>
+      <div class="dialog-body">
       <div class="config-form">
         <h4 class="config-subtitle">// LLM PROVIDER</h4>
         <div class="form-row">
@@ -484,6 +495,9 @@
             <input type="checkbox" id="chkPredictOutcome" style="accent-color:var(--cyan)"> <span id="lblPredictOutcome">Pre-compute suggested actions (instant replies, extra LLM calls)</span>
           </label>
         </div>
+      </div>
+      </div>
+      <div class="dialog-actions">
         <div class="form-actions">
           <button class="cyber-btn accent" onclick="saveSettings()">
             <span class="cyber-btn-text">SAVE</span>
@@ -492,47 +506,55 @@
             <span class="cyber-btn-text">CLOSE</span>
           </button>
         </div>
+        <div class="settings-status" id="settingsStatus"></div>
       </div>
-      <div class="settings-status" id="settingsStatus"></div>
     </div>
   </div>
 
   <!-- ========== AUTH (REGISTER / SIGN IN) ========== -->
   <div id="authOverlay" class="overlay" style="display:none">
-    <div class="auth-dialog">
-      <h3 class="config-title" id="authTitle">// ACCESS TERMINAL</h3>
-      <div class="auth-tabs">
-        <button class="auth-tab active" id="authTabSignin" onclick="switchAuthTab('signin')">SIGN IN</button>
-        <button class="auth-tab" id="authTabRegister" onclick="switchAuthTab('register')">REGISTER</button>
+    <div class="auth-dialog dialog" role="dialog" aria-modal="true" aria-labelledby="authTitle">
+      <div class="dialog-header">
+        <h3 class="config-title" id="authTitle">// ACCESS TERMINAL</h3>
       </div>
-      <div class="config-form">
-        <div class="form-group">
-          <label class="cyber-label" id="authUserLabel">USERNAME</label>
-          <input type="text" class="cyber-input" id="authUsername" autocomplete="username" maxlength="32" placeholder="Enter a username" onkeydown="if(event.key==='Enter')submitAuth()">
+      <div class="dialog-body">
+        <div class="auth-tabs">
+          <button class="auth-tab active" id="authTabSignin" onclick="switchAuthTab('signin')">SIGN IN</button>
+          <button class="auth-tab" id="authTabRegister" onclick="switchAuthTab('register')">REGISTER</button>
         </div>
-        <div class="form-group">
-          <label class="cyber-label" id="authPassLabel">PASSWORD</label>
-          <input type="password" class="cyber-input" id="authPassword" autocomplete="current-password" placeholder="Enter a password" onkeydown="if(event.key==='Enter')submitAuth()">
+        <div class="config-form">
+          <div class="form-group">
+            <label class="cyber-label" id="authUserLabel">USERNAME</label>
+            <input type="text" class="cyber-input" id="authUsername" autocomplete="username" maxlength="32" placeholder="Enter a username" onkeydown="if(event.key==='Enter')submitAuth()">
+          </div>
+          <div class="form-group">
+            <label class="cyber-label" id="authPassLabel">PASSWORD</label>
+            <input type="password" class="cyber-input" id="authPassword" autocomplete="current-password" placeholder="Enter a password" onkeydown="if(event.key==='Enter')submitAuth()">
+          </div>
+          <div class="auth-error" id="authError"></div>
         </div>
-        <div class="auth-error" id="authError"></div>
-        <div class="form-actions">
-          <button class="cyber-btn accent" onclick="submitAuth()">
-            <span class="cyber-btn-text" id="authSubmitLabel">SIGN IN</span>
-          </button>
-          <button class="cyber-btn" onclick="closeAuth()">
-            <span class="cyber-btn-text" id="authCancelLabel">CANCEL</span>
-          </button>
-        </div>
+      </div>
+      <div class="dialog-actions form-actions">
+        <button class="cyber-btn accent" onclick="submitAuth()">
+          <span class="cyber-btn-text" id="authSubmitLabel">SIGN IN</span>
+        </button>
+        <button class="cyber-btn" onclick="closeAuth()">
+          <span class="cyber-btn-text" id="authCancelLabel">CANCEL</span>
+        </button>
       </div>
     </div>
   </div>
 
   <!-- ========== SESSION CONFLICT (double login) ========== -->
-  <div id="sessionConflictDialog" class="overlay" style="display:none">
-    <div class="save-dialog">
-      <h3 class="config-title" id="conflictTitle">// ACCOUNT ALREADY ACTIVE</h3>
-      <p class="confirm-text" id="conflictText">This account is already signed in on another session. Continue here and disconnect the other one?</p>
-      <div class="form-actions">
+  <div id="sessionConflictDialog" class="overlay overlay-top" style="display:none">
+    <div class="save-dialog dialog" role="dialog" aria-modal="true" aria-labelledby="conflictTitle">
+      <div class="dialog-header">
+        <h3 class="config-title" id="conflictTitle">// ACCOUNT ALREADY ACTIVE</h3>
+      </div>
+      <div class="dialog-body">
+        <p class="confirm-text" id="conflictText">This account is already signed in on another session. Continue here and disconnect the other one?</p>
+      </div>
+      <div class="dialog-actions form-actions">
         <button class="cyber-btn accent" onclick="confirmTakeover()">
           <span class="cyber-btn-text" id="conflictYes">CONTINUE HERE</span>
         </button>
@@ -544,11 +566,15 @@
   </div>
 
   <!-- ========== KICKED (signed out elsewhere) ========== -->
-  <div id="kickedOverlay" class="overlay" style="display:none">
-    <div class="save-dialog">
-      <h3 class="config-title" id="kickedTitle">// SESSION ENDED</h3>
-      <p class="confirm-text" id="kickedText">This account was opened in another session. You have been signed out here.</p>
-      <div class="form-actions">
+  <div id="kickedOverlay" class="overlay overlay-top" style="display:none">
+    <div class="save-dialog dialog" role="dialog" aria-modal="true" aria-labelledby="kickedTitle">
+      <div class="dialog-header">
+        <h3 class="config-title" id="kickedTitle">// SESSION ENDED</h3>
+      </div>
+      <div class="dialog-body">
+        <p class="confirm-text" id="kickedText">This account was opened in another session. You have been signed out here.</p>
+      </div>
+      <div class="dialog-actions form-actions">
         <button class="cyber-btn accent" onclick="location.reload()">
           <span class="cyber-btn-text" id="kickedReload">RECONNECT</span>
         </button>
@@ -559,7 +585,7 @@
   <!-- ========== NOTIFICATION ========== -->
   <div id="notification" class="notification"></div>
 
-  <script src="/static/music.js?v=w1fix"></script>
-  <script src="/static/app.js?v=w1fix"></script>
+  <script src="/static/music.js?v=w2a"></script>
+  <script src="/static/app.js?v=w2a"></script>
 </body>
 </html>

@@ -1063,13 +1063,11 @@ function openAuth(mode) {
   switchAuthTab(mode || 'signin');
   setAuthError('');
   document.getElementById('authPassword').value = '';
-  const ov = document.getElementById('authOverlay');
-  ov.style.display = 'flex';
-  setTimeout(() => { const u = document.getElementById('authUsername'); if (u) u.focus(); }, 60);
+  openDialog(document.getElementById('authOverlay'), { initialFocus: 'authUsername' });
   playBeep(700, 0.04);
 }
 function closeAuth() {
-  document.getElementById('authOverlay').style.display = 'none';
+  closeDialog(document.getElementById('authOverlay'));
   pendingIntent = null;
 }
 
@@ -1161,20 +1159,22 @@ function doLogout() {
 
 function showSessionConflict(username) {
   conflictUsername = username || null;
-  document.getElementById('authOverlay').style.display = 'none';
+  // The auth dialog (if open) is superseded by this interrupt.
+  const auth = document.getElementById('authOverlay');
+  if (auth.style.display !== 'none' && auth.style.display !== '') closeDialog(auth);
   document.getElementById('conflictTitle').textContent = L('conflict_title');
   document.getElementById('conflictText').textContent = L('conflict_text');
   document.getElementById('conflictYes').textContent = L('conflict_yes');
   document.getElementById('conflictNo').textContent = L('conflict_no');
-  document.getElementById('sessionConflictDialog').style.display = 'flex';
+  openDialog(document.getElementById('sessionConflictDialog'), { dismissible: false });
   playBeep(500, 0.05);
 }
 function confirmTakeover() {
-  document.getElementById('sessionConflictDialog').style.display = 'none';
+  closeDialog(document.getElementById('sessionConflictDialog'));
   sendInit(true); // force takeover → server kicks the older session
 }
 function closeConflict() {
-  document.getElementById('sessionConflictDialog').style.display = 'none';
+  closeDialog(document.getElementById('sessionConflictDialog'));
   conflictUsername = null;
   pendingIntent = null;  // abandon any deferred New Game / Load intent
 }
@@ -1186,11 +1186,13 @@ function showKicked() {
   document.getElementById('kickedTitle').textContent = L('kicked_title');
   document.getElementById('kickedText').textContent = L('kicked_text');
   document.getElementById('kickedReload').textContent = L('kicked_reload');
-  // Hide any other overlays so the kicked notice is unambiguous.
+  // Hide any other overlays so the kicked notice is unambiguous. Route through
+  // closeDialog so the dialog stack is unwound (falls back to a plain hide for
+  // any that were opened the legacy way).
   ['authOverlay', 'sessionConflictDialog', 'saveDialog', 'settingsOverlay'].forEach(id => {
-    const el = document.getElementById(id); if (el) el.style.display = 'none';
+    const el = document.getElementById(id); if (el) closeDialog(el);
   });
-  document.getElementById('kickedOverlay').style.display = 'flex';
+  openDialog(document.getElementById('kickedOverlay'), { dismissible: false });
 }
 
 // ================================================================
@@ -1562,7 +1564,7 @@ function _formatCost(cost) {
 let _settingsSnapshot = null; // snapshot before opening settings
 
 function openSettings() {
-  document.getElementById('settingsOverlay').style.display = 'flex';
+  openDialog(document.getElementById('settingsOverlay'), { onClose: _closeSettingsInternal });
   document.getElementById('settingsStatus').textContent = '';
   // Sync music volume slider
   const vol = MusicEngine.getVolume();
@@ -1598,7 +1600,13 @@ function openSettings() {
   playBeep(1000, 0.04);
 }
 
-function closeSettings() {
+// Public close (button / Esc): unwinds the dialog stack + restores focus,
+// which in turn calls _closeSettingsInternal to hide + revert form state.
+function closeSettings() { closeDialog(document.getElementById('settingsOverlay')); }
+
+// Actual hide + snapshot revert. Called by the dialog manager on close; also
+// safe to call directly (e.g. showKicked force-hide) since it's idempotent.
+function _closeSettingsInternal() {
   // Restore to pre-open state (cancel = discard all unsaved changes)
   if (_settingsSnapshot) {
     MusicEngine.setVolume(_settingsSnapshot.volume);
@@ -1640,7 +1648,7 @@ function saveSettings() {
   sendWS(payload);
   _settingsSnapshot = null;  // Mark as saved so close doesn't revert
   document.getElementById('settingsStatus').textContent = L('saving');
-  document.getElementById('settingsOverlay').style.display = 'none';
+  closeDialog(document.getElementById('settingsOverlay'));
 }
 
 let _cachedUsage = null;
@@ -1748,24 +1756,23 @@ function showMenu() {
 }
 
 function requestReturnToMenu() {
-  const d = document.getElementById('confirmMenuDialog');
   document.getElementById('confirmMenuTitle').textContent = L('confirm_menu_title');
   document.getElementById('confirmMenuText').textContent = L('confirm_menu_text');
   document.getElementById('confirmMenuYes').textContent = L('btn_confirm');
   document.getElementById('confirmMenuNo').textContent = L('btn_cancel');
-  d.style.display = 'flex';
+  openDialog(document.getElementById('confirmMenuDialog'));
   playBeep(600, 0.04);
 }
 
 function confirmReturnToMenu() {
-  document.getElementById('confirmMenuDialog').style.display = 'none';
+  closeDialog(document.getElementById('confirmMenuDialog'));
   switchScreen('menuScreen');
   // Refresh saves/sessions list from server
   sendWS({ action: 'init' });
 }
 
 function closeConfirmMenu() {
-  document.getElementById('confirmMenuDialog').style.display = 'none';
+  closeDialog(document.getElementById('confirmMenuDialog'));
 }
 function showNewGame() {
   if (!requireAuth('newgame')) return;
@@ -2398,9 +2405,15 @@ function _defaultSaveName() {
   const alias = (cachedSession?.player?.alias || cachedSession?.player?.name || 'Unknown');
   return `${mm}-${dd}-${yyyy} ${hh}:${mi} ${alias}`;
 }
-function saveGame() { const el = document.getElementById('saveName'); el.value = _defaultSaveName(); document.getElementById('saveDialog').style.display = 'flex'; el.focus(); el.select(); playBeep(1000, 0.04); }
+function saveGame() {
+  const el = document.getElementById('saveName');
+  el.value = _defaultSaveName();
+  openDialog(document.getElementById('saveDialog'), { initialFocus: 'saveName' });
+  requestAnimationFrame(() => { try { el.select(); } catch (_) {} });
+  playBeep(1000, 0.04);
+}
 function confirmSave() { sendWS({ action: 'save_game', save_name: document.getElementById('saveName').value.trim() || _defaultSaveName() }); }
-function closeSaveDialog() { document.getElementById('saveDialog').style.display = 'none'; }
+function closeSaveDialog() { closeDialog(document.getElementById('saveDialog')); }
 
 function showGameOver(ending, narrative, deathCause) {
   triggerGlitch(); triggerGlitch();
@@ -2423,7 +2436,7 @@ function showGameOver(ending, narrative, deathCause) {
       : '— You can RECONNECT from an autosave (every 5 turns) or a manual save.');
   }
   document.getElementById('gameOverNarrative').textContent = narr;
-  document.getElementById('gameOverOverlay').style.display = 'flex';
+  openDialog(document.getElementById('gameOverOverlay'), { dismissible: false });
   playBeep(200, 0.3, 0.05);
 }
 
@@ -2696,6 +2709,11 @@ function closeNavMenu() {
   }
 }
 
+function navMenuIsOpen() {
+  const menu = document.getElementById('navMenu');
+  return !!(menu && menu.classList.contains('open'));
+}
+
 function navMenuAction(which) {
   closeNavMenu();
   if (which === 'tutorial') startTutorial();
@@ -2704,12 +2722,12 @@ function navMenuAction(which) {
   else if (which === 'menu') showMenu();
 }
 
-// Dismiss the nav menu on outside click or Escape.
+// Dismiss the nav menu on outside click. (Escape is handled by the single
+// keydown router in the KEYBOARD SHORTCUTS section below.)
 document.addEventListener('click', (e) => {
   const wrap = document.querySelector('.nav-menu-wrap');
   if (wrap && !wrap.contains(e.target)) closeNavMenu();
 });
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeNavMenu(); });
 
 function updateAllPanels(session) {
   cachedSession = session;
@@ -3795,46 +3813,159 @@ function alertColor(status) {
 }
 
 // ================================================================
+// DIALOG MANAGER — shared open/close, focus trap, deterministic stack
+// ================================================================
+// One mechanism behind every modal overlay. Each entry is the .overlay
+// element plus whether Esc may dismiss it and how to close it. The
+// stack's LAST entry is the topmost dialog — Esc and the focus trap
+// only ever act on that one.
+const _dialogStack = [];
+
+const _FOCUSABLE_SEL = [
+  'a[href]', 'button:not([disabled])', 'input:not([disabled])',
+  'select:not([disabled])', 'textarea:not([disabled])',
+  '[tabindex]:not([tabindex="-1"])',
+].join(',');
+
+function _dialogFocusables(el) {
+  return Array.from(el.querySelectorAll(_FOCUSABLE_SEL))
+    .filter(n => n.offsetParent !== null || n === document.activeElement);
+}
+
+/**
+ * Open a modal overlay: reveal it, remember the invoker, move focus in,
+ * and register it as the topmost trap target.
+ *   opts.dismissible  — Esc / backdrop may close it (default true)
+ *   opts.onClose      — called by closeDialog() to hide it (defaults to
+ *                       toggling style.display); keeps per-dialog cleanup
+ *                       (e.g. settings snapshot restore) working.
+ *   opts.initialFocus — element (or id) to focus instead of the first focusable
+ *   opts.display      — display value used to reveal (default 'flex')
+ */
+function openDialog(el, opts) {
+  if (!el) return;
+  opts = opts || {};
+  // Already open? just re-focus.
+  if (_dialogStack.some(e => e.el === el)) return;
+  const invoker = document.activeElement;
+  el.style.display = opts.display || 'flex';
+  const entry = {
+    el,
+    dismissible: opts.dismissible !== false,
+    onClose: typeof opts.onClose === 'function' ? opts.onClose : null,
+    invoker: (invoker && invoker !== document.body) ? invoker : null,
+  };
+  _dialogStack.push(entry);
+  // Focus the requested target, else the first focusable in the card.
+  let target = opts.initialFocus;
+  if (typeof target === 'string') target = document.getElementById(target);
+  if (!target) {
+    const card = el.querySelector('.dialog') || el;
+    target = _dialogFocusables(card)[0] || card;
+  }
+  // Defer so display:flex has taken effect (offsetParent is live).
+  requestAnimationFrame(() => { try { target.focus(); } catch (_) {} });
+}
+
+/** Close a modal overlay: hide it, unwind the stack, restore focus. */
+function closeDialog(el) {
+  if (!el) return;
+  const idx = _dialogStack.findIndex(e => e.el === el);
+  if (idx === -1) {
+    // Not tracked (opened the legacy way) — just hide it.
+    el.style.display = 'none';
+    return;
+  }
+  const entry = _dialogStack.splice(idx, 1)[0];
+  if (entry.onClose) entry.onClose();
+  else el.style.display = 'none';
+  // Restore focus to whoever opened it, if still in the document.
+  const inv = entry.invoker;
+  if (inv && document.contains(inv)) {
+    requestAnimationFrame(() => { try { inv.focus(); } catch (_) {} });
+  }
+}
+
+/** The topmost open dialog entry, or null. */
+function _topDialog() {
+  return _dialogStack.length ? _dialogStack[_dialogStack.length - 1] : null;
+}
+
+/** Trap Tab / Shift+Tab within the topmost dialog card. */
+function _dialogTrapTab(e) {
+  const top = _topDialog();
+  if (!top) return;
+  const card = top.el.querySelector('.dialog') || top.el;
+  const items = _dialogFocusables(card);
+  if (items.length === 0) { e.preventDefault(); return; }
+  const first = items[0], last = items[items.length - 1];
+  const active = document.activeElement;
+  // If focus somehow escaped the dialog, pull it back in.
+  if (!card.contains(active)) {
+    e.preventDefault();
+    (e.shiftKey ? last : first).focus();
+    return;
+  }
+  if (e.shiftKey && active === first) { e.preventDefault(); last.focus(); }
+  else if (!e.shiftKey && active === last) { e.preventDefault(); first.focus(); }
+}
+
+// ================================================================
 // KEYBOARD SHORTCUTS
 // ================================================================
 
+// SINGLE keydown router. Order of authority (highest first):
+//   1. Tab / Shift+Tab while a modal dialog is open → focus trap
+//   2. Escape → close the topmost DISMISSIBLE dialog, else the nav menu,
+//      else the companion panel, else skip the in-flight typewriter
+//   3. any modal dialog open → swallow everything else (no game shortcuts)
+//   4. game shortcuts (only on the game screen): Space skip, 1-9 tabs,
+//      t focus chat, Ctrl/Cmd+S save
 document.addEventListener('keydown', (e) => {
-  if (document.getElementById('gameScreen').classList.contains('active')) {
-    // Check if any overlay dialog is open — only allow Escape when overlays are visible
-    const overlayOpen = ['settingsOverlay', 'confirmMenuDialog', 'saveDialog'].some(
-      id => { const el = document.getElementById(id); return el && el.style.display !== 'none' && el.style.display !== ''; }
-    );
-    if (e.key === 'Escape') {
-      if (companionOpen) { closeCompanion(); return; }
-      if (overlayOpen) { closeSaveDialog(); closeSettings(); closeConfirmMenu(); return; }
-      // Nothing to close — if narration is typing out, Esc skips it to the end.
-      if (_activeTyper) { _finalizeActiveTyper(); e.preventDefault(); return; }
-      closeSaveDialog(); closeSettings(); closeConfirmMenu(); return;
-    }
-    // Block all other keybindings when an overlay is open
-    if (overlayOpen) return;
+  const top = _topDialog();
 
-    // Don't let game shortcuts fire while typing in ANY field (chat, companion,
-    // or the panel search bars) — number keys must type, not switch tabs.
-    const active = document.activeElement;
-    const isInput = !!active && (
-      active.tagName === 'INPUT' ||
-      active.tagName === 'TEXTAREA' ||
-      active.isContentEditable
-    );
-    // Space skips the in-flight typewriter — but only when the player isn't
-    // focused in a text field (there Space must type a literal space).
-    if ((e.key === ' ' || e.code === 'Space') && _activeTyper && !isInput) {
-      _finalizeActiveTyper(); e.preventDefault(); return;
+  // (1) Focus trap — keep Tab cycling inside the topmost dialog card.
+  if (e.key === 'Tab' && top) { _dialogTrapTab(e); return; }
+
+  // (2) Escape router.
+  if (e.key === 'Escape') {
+    if (top) {
+      if (top.dismissible) closeDialog(top.el);
+      return; // a modal is up (dismissible or not) — Esc goes no further
     }
-    const num = parseInt(e.key);
-    if (num >= 1 && num <= 9 && !e.ctrlKey && !e.metaKey && !isInput) {
-      const tabs = document.querySelectorAll('.panel-tab');
-      if (tabs[num - 1]) { switchPanel(tabs[num - 1]); e.preventDefault(); }
-    }
-    if (e.key === 't' && !isInput) { document.getElementById('chatInput').focus(); e.preventDefault(); }
-    if (e.key === 's' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); saveGame(); }
+    if (navMenuIsOpen()) { closeNavMenu(); return; }
+    if (companionOpen) { closeCompanion(); return; }
+    // Nothing to close — if narration is typing out, Esc skips it to the end.
+    if (_activeTyper) { _finalizeActiveTyper(); e.preventDefault(); return; }
+    return;
   }
+
+  // (3) A modal dialog owns all other keys while it is open.
+  if (top) return;
+
+  // (4) Game shortcuts — only while actually playing.
+  if (!document.getElementById('gameScreen').classList.contains('active')) return;
+
+  // Don't let game shortcuts fire while typing in ANY field (chat, companion,
+  // or the panel search bars) — number keys must type, not switch tabs.
+  const active = document.activeElement;
+  const isInput = !!active && (
+    active.tagName === 'INPUT' ||
+    active.tagName === 'TEXTAREA' ||
+    active.isContentEditable
+  );
+  // Space skips the in-flight typewriter — but only when the player isn't
+  // focused in a text field (there Space must type a literal space).
+  if ((e.key === ' ' || e.code === 'Space') && _activeTyper && !isInput) {
+    _finalizeActiveTyper(); e.preventDefault(); return;
+  }
+  const num = parseInt(e.key);
+  if (num >= 1 && num <= 9 && !e.ctrlKey && !e.metaKey && !isInput) {
+    const tabs = document.querySelectorAll('.panel-tab');
+    if (tabs[num - 1]) { switchPanel(tabs[num - 1]); e.preventDefault(); }
+  }
+  if (e.key === 't' && !isInput) { document.getElementById('chatInput').focus(); e.preventDefault(); }
+  if (e.key === 's' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); saveGame(); }
 });
 
 // ================================================================
