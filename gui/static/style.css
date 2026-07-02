@@ -2120,60 +2120,235 @@ mark.search-hl {
    NOTIFICATIONS
    ================================================================ */
 
-.notification {
+/* ================================================================
+   UNIFIED TOAST STACK
+   One bottom-center flex column hosts every transient notification. Natural
+   flex stacking (gap between children) replaced the old hardcoded 40px offset
+   math, so wrapped 中文 toasts no longer overlap. The companion FAB keeps its
+   own bottom-right lane, so nothing fights for the corner anymore.
+   ================================================================ */
+.toast-stack {
   position: fixed;
-  bottom: 20px; right: 20px;
+  bottom: var(--sp-5);
+  left: 50%;
+  transform: translateX(-50%);
   z-index: var(--z-toast);
-  padding: 12px 20px;
+  display: flex;
+  flex-direction: column-reverse; /* newest toast nearest the bottom edge */
+  align-items: center;
+  gap: var(--sp-2);
+  width: max-content;
+  max-width: min(92vw, 460px);
+  pointer-events: none; /* the host is click-through; toasts re-enable it */
+}
+
+.toast {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: 10px 14px 10px 18px;
   background: var(--bg-panel);
   border: 1px solid var(--cyan);
   color: var(--cyan);
   font-family: var(--font-display);
   font-size: 12px;
-  letter-spacing: 2px;
-  transform: translateY(100px);
+  letter-spacing: 1.5px;
+  border-radius: var(--r-2);
+  box-shadow: 0 0 20px rgba(0, 255, 245, 0.2);
+  max-width: 100%;
+  /* enter/exit start state */
   opacity: 0;
-  transition: all 0.4s ease;
-  box-shadow: 0 0 20px rgba(0,255,245,0.2);
+  transform: translateY(14px) scale(0.98);
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+.toast.toast-in { opacity: 1; transform: translateY(0) scale(1); }
+.toast.toast-out { opacity: 0; transform: translateY(10px) scale(0.98); }
+
+.toast-body {
+  flex: 1 1 auto;
+  min-width: 0;
+  line-height: 1.4;
+  word-break: break-word;
 }
 
-.notification.show {
-  transform: translateY(0);
-  opacity: 1;
+.toast-dismiss {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  color: inherit;
+  opacity: 0.55;
+  font-size: 16px;
+  cursor: pointer;
+  border-radius: var(--r-1);
+  transition: opacity 0.15s ease;
 }
+.toast-dismiss:hover { opacity: 1; }
+.toast-dismiss:focus-visible { outline: none; box-shadow: var(--focus-ring); opacity: 1; }
 
-.notification.error {
+/* error variant — red accent */
+.toast-error {
   border-color: var(--red);
   color: var(--red);
-  box-shadow: 0 0 20px rgba(255,7,58,0.2);
+  box-shadow: 0 0 20px rgba(255, 7, 58, 0.2);
 }
 
-/* Knowledge toast — bottom-right, auto-fades */
-.knowledge-toast {
-  position: fixed;
-  bottom: 24px;
-  right: 24px;
-  z-index: calc(var(--z-toast) + 1);
-  padding: 10px 18px;
-  background: rgba(0, 255, 136, 0.12);
-  border: 1px solid rgba(0, 255, 136, 0.35);
+/* knowledge-added variant — quieter green accent, no ceremony */
+.toast-knowledge {
+  border-color: rgba(0, 255, 136, 0.4);
   color: var(--green-bright);
-  font-family: var(--font-display);
-  font-size: 12px;
+  background: rgba(0, 255, 136, 0.08);
+  box-shadow: var(--glow-green);
+}
+
+/* overflow chip — "+N more" when the visible cap is hit */
+.toast-overflow {
+  pointer-events: auto;
+  align-self: center;
+  padding: 3px 12px;
+  font-family: var(--font-mono);
+  font-size: 10px;
   letter-spacing: 1px;
+  color: var(--text-dim);
+  background: var(--bg-panel);
+  border: 1px solid var(--divider);
+  border-radius: 999px;
+}
+
+/* Below 700px the FAB + on-screen keyboard crowd the bottom edge, so the stack
+   flips to top-center (newest toast nearest the top). */
+@media (max-width: 700px) {
+  .toast-stack {
+    bottom: auto;
+    top: var(--sp-4);
+    flex-direction: column; /* newest nearest the top edge */
+  }
+}
+
+/* ================================================================
+   DISCOVERY CEREMONY
+   A centered banner announcing an uncovered TRACE. It holds, then flies toward
+   the TRACE tab. Intensity scales with layer depth (depth-1 clean cyan flash →
+   depth-4/5 heavier chromatic glitch). All motion gated by prefers-reduced-
+   motion below → simple fade.
+   ================================================================ */
+.discovery-ceremony {
+  position: fixed;
+  top: 34%;
+  left: 50%;
+  z-index: var(--z-overlay); /* above toasts + panels for the moment it holds */
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-3);
+  padding: var(--sp-4) var(--sp-6);
+  background: rgba(5, 8, 12, 0.88);
+  border: 1px solid var(--cyan);
   border-radius: var(--r-2);
-  opacity: 0;
-  transform: translateY(12px);
-  transition: opacity 0.3s ease, transform 0.3s ease;
+  font-family: var(--font-display);
+  letter-spacing: 3px;
+  white-space: nowrap;
+  box-shadow: var(--glow-cyan), inset 0 0 22px rgba(0, 255, 245, 0.12);
   pointer-events: none;
-}
-.knowledge-toast.visible {
-  opacity: 1;
-  transform: translateY(0);
-}
-.knowledge-toast.fading {
   opacity: 0;
-  transform: translateY(-8px);
+  transform: translate(-50%, -50%) scale(0.9);
+  transition: opacity 0.4s ease, transform 0.4s ease;
+}
+.discovery-ceremony.show {
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1);
+}
+.discovery-ceremony .ceremony-title {
+  color: var(--cyan);
+  font-weight: 700;
+  font-size: 16px;
+  position: relative;
+}
+.discovery-ceremony .ceremony-sep { color: var(--text-dim); }
+.discovery-ceremony .ceremony-layer {
+  color: var(--green-bright);
+  font-size: 15px;
+  text-shadow: var(--glow-green);
+}
+
+/* Flight toward the TRACE tab: shrink + drift by the JS-measured delta. */
+.discovery-ceremony.fly {
+  opacity: 0;
+  transform:
+    translate(-50%, -50%)
+    translate(var(--fly-x, 0), var(--fly-y, 0))
+    scale(0.15);
+  transition: opacity 0.6s ease-in, transform 0.6s cubic-bezier(0.5, 0, 0.7, 0.2);
+}
+
+/* Depth scaling — deeper layers glitch harder (reusing the chromatic offset
+   idiom from .logo-glitch: red/cyan text ghosts on ::before/::after). */
+.discovery-ceremony.depth-1 { border-color: var(--cyan); }
+.discovery-ceremony.depth-2 { border-color: var(--cyan); box-shadow: 0 0 22px rgba(0,255,245,0.5), inset 0 0 22px rgba(0,255,245,0.14); }
+.discovery-ceremony.depth-3 { border-color: var(--magenta); box-shadow: var(--glow-magenta), inset 0 0 24px rgba(255,0,255,0.14); }
+.discovery-ceremony.depth-4,
+.discovery-ceremony.depth-5 {
+  border-color: var(--magenta);
+  box-shadow: 0 0 30px rgba(255,0,255,0.55), inset 0 0 26px rgba(255,0,255,0.18);
+}
+.discovery-ceremony.depth-3 .ceremony-title,
+.discovery-ceremony.depth-4 .ceremony-title,
+.discovery-ceremony.depth-5 .ceremony-title {
+  animation: ceremony-glitch 0.5s steps(3) infinite;
+}
+.discovery-ceremony.depth-4 .ceremony-title::before,
+.discovery-ceremony.depth-5 .ceremony-title::before,
+.discovery-ceremony.depth-4 .ceremony-title::after,
+.discovery-ceremony.depth-5 .ceremony-title::after {
+  content: attr(data-text);
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%;
+  overflow: hidden;
+}
+.discovery-ceremony.depth-4 .ceremony-title::before,
+.discovery-ceremony.depth-5 .ceremony-title::before {
+  color: var(--red);
+  animation: glitch-1 1.6s infinite linear alternate-reverse;
+}
+.discovery-ceremony.depth-4 .ceremony-title::after,
+.discovery-ceremony.depth-5 .ceremony-title::after {
+  color: var(--cyan);
+  animation: glitch-2 2.1s infinite linear alternate-reverse;
+}
+@keyframes ceremony-glitch {
+  0%, 100% { transform: translate(0); }
+  33% { transform: translate(-1px, 1px); }
+  66% { transform: translate(1px, -1px); }
+}
+
+/* TRACE tab pulse — runs after the ceremony until the player opens the tab. */
+.panel-tab.trace-pulse {
+  animation: trace-tab-pulse 1.1s ease-in-out infinite;
+  color: var(--green-bright);
+}
+@keyframes trace-tab-pulse {
+  0%, 100% { box-shadow: inset 0 -2px 0 rgba(0, 255, 136, 0); text-shadow: none; }
+  50% { box-shadow: inset 0 -2px 0 rgba(0, 255, 136, 0.7); text-shadow: var(--glow-green); }
+}
+
+/* Reduced motion: no flight, no glitch, no pulse animation — just fades. */
+@media (prefers-reduced-motion: reduce) {
+  .toast { transition: opacity 0.2s ease; transform: none; }
+  .toast.toast-in { transform: none; }
+  .toast.toast-out { transform: none; }
+  .discovery-ceremony,
+  .discovery-ceremony.show { transition: opacity 0.3s ease; transform: translate(-50%, -50%); }
+  .discovery-ceremony.fly { transform: translate(-50%, -50%); }
+  .discovery-ceremony .ceremony-title { animation: none; }
+  .discovery-ceremony .ceremony-title::before,
+  .discovery-ceremony .ceremony-title::after { display: none; }
+  .panel-tab.trace-pulse { animation: none; color: var(--green-bright); }
 }
 
 /* ================================================================

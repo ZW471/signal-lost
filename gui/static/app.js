@@ -135,6 +135,13 @@ const LABELS = {
     trace_layer_1: 'The Surface', trace_layer_2: 'The Conspiracy',
     trace_layer_3: 'The Severance Truth', trace_layer_4: 'The Mirror',
     trace_layer_5: 'The Full Truth',
+    // Toasts + discovery ceremony
+    toast_dismiss: 'Dismiss',
+    toast_more: 'more',
+    trace_uncovered: 'TRACE UNCOVERED',
+    kn_fact: 'New fact discovered', kn_rumor: 'New rumor discovered',
+    kn_evidence: 'New evidence collected', kn_theory: 'New theory formed',
+    kn_connection: 'New connection found',
     // District
     current_location: 'CURRENT LOCATION', district: 'District', area: 'Area',
     signal_strength: 'Signal', danger_level: 'Danger', nexus_patrol: 'NEXUS Patrol',
@@ -288,6 +295,12 @@ const LABELS = {
     trace_layer_1: '表层', trace_layer_2: '阴谋',
     trace_layer_3: '断离真相', trace_layer_4: '镜像',
     trace_layer_5: '完整真相',
+    toast_dismiss: '关闭',
+    toast_more: '更多',
+    trace_uncovered: '痕迹揭示',
+    kn_fact: '新事实已记录', kn_rumor: '新传闻已记录',
+    kn_evidence: '新证据已收集', kn_theory: '新理论已形成',
+    kn_connection: '新关联已发现',
     current_location: '当前位置', district: '区域', area: '地点',
     signal_strength: '信号', danger_level: '危险', nexus_patrol: '连结巡逻',
     description: '描述', exits: '出口', poi: '兴趣点',
@@ -840,12 +853,99 @@ function playBeep(freq = 880, duration = 0.05, volume = 0.03) {
 // NOTIFICATION & SCREEN MANAGEMENT
 // ================================================================
 
+// ================================================================
+// UNIFIED TOAST STACK
+// One flex-column host (#toastStack) owns every transient notification:
+// system notices (notify), knowledge-added toasts, and future kinds. Natural
+// flex stacking — no hardcoded height math. The companion FAB keeps its own
+// bottom-right lane; the stack sits bottom-center (top-center on narrow
+// viewports, handled purely in CSS).
+// ================================================================
+const TOAST_MAX_VISIBLE = 4;   // cap simultaneous toasts; rest counted as overflow
+let _toastOverflow = 0;        // how many toasts were suppressed while at cap
+
+function _toastStack() { return document.getElementById('toastStack'); }
+
+/** Update / show / hide the "+N more" overflow chip at the top of the stack. */
+function _renderToastOverflow() {
+  const stack = _toastStack();
+  if (!stack) return;
+  let chip = stack.querySelector('.toast-overflow');
+  if (_toastOverflow > 0) {
+    if (!chip) {
+      chip = document.createElement('div');
+      chip.className = 'toast-overflow';
+      stack.insertBefore(chip, stack.firstChild);
+    }
+    chip.textContent = '+' + _toastOverflow + ' ' + L('toast_more');
+  } else if (chip) {
+    chip.remove();
+  }
+}
+
+/**
+ * Route a transient notification through the single stack.
+ *   kind : 'info' | 'error' | 'knowledge' (accent styling only)
+ *   html : pre-escaped HTML string for the body (callers MUST esc() interpolations)
+ *   opts : { duration=3000 }
+ */
+function addToast(kind, html, opts = {}) {
+  const stack = _toastStack();
+  if (!stack) return null;
+  const visible = stack.querySelectorAll('.toast').length;
+  if (visible >= TOAST_MAX_VISIBLE) {
+    // At cap — count this one as overflow rather than piling up off-screen.
+    _toastOverflow++;
+    _renderToastOverflow();
+    return null;
+  }
+
+  const duration = opts.duration != null ? opts.duration : 3000;
+  const el = document.createElement('div');
+  el.className = 'toast toast-' + (kind || 'info');
+  el.setAttribute('role', kind === 'error' ? 'alert' : 'status');
+  el.innerHTML =
+    `<span class="toast-body">${html}</span>` +
+    `<button class="toast-dismiss" aria-label="${esc(L('toast_dismiss'))}" ` +
+    `onclick="dismissToast(this.parentNode)">&times;</button>`;
+
+  stack.appendChild(el);
+  _renderToastOverflow();
+  requestAnimationFrame(() => el.classList.add('toast-in'));
+
+  // Auto-dismiss timer with pause-on-hover. We track remaining time so a hover
+  // mid-life doesn't reset the clock.
+  el._remaining = duration;
+  el._start = Date.now();
+  const arm = () => {
+    el._start = Date.now();
+    el._timer = setTimeout(() => dismissToast(el), el._remaining);
+  };
+  el.addEventListener('mouseenter', () => {
+    if (el._timer) { clearTimeout(el._timer); el._timer = null; el._remaining -= (Date.now() - el._start); }
+  });
+  el.addEventListener('mouseleave', () => { if (el._remaining > 0) arm(); });
+  arm();
+  return el;
+}
+
+/** Remove a toast with its exit animation, then drain one overflow slot. */
+function dismissToast(el) {
+  if (!el || el._dismissing) return;
+  el._dismissing = true;
+  if (el._timer) { clearTimeout(el._timer); el._timer = null; }
+  el.classList.remove('toast-in');
+  el.classList.add('toast-out');
+  const fin = () => {
+    if (el.parentNode) el.parentNode.removeChild(el);
+    if (_toastOverflow > 0) { _toastOverflow--; _renderToastOverflow(); }
+  };
+  if (prefersReducedMotion) { fin(); }
+  else { el.addEventListener('transitionend', fin, { once: true }); setTimeout(fin, 500); }
+}
+
 function notify(text, isError = false) {
-  const el = document.getElementById('notification');
-  el.textContent = text;
-  el.className = 'notification show' + (isError ? ' error' : '');
-  clearTimeout(el._timer);
-  el._timer = setTimeout(() => el.className = 'notification', 3000);
+  addToast(isError ? 'error' : 'info', esc(text));
 }
 
 function switchScreen(id) {
@@ -1877,16 +1977,91 @@ function showDiscoveryNotification(msg) {
   const container = document.getElementById('chatMessages');
   const el = document.createElement('div');
   el.className = 'chat-msg discovery-notification';
-  const label = currentLang === 'zh' ? '◈ 痕迹发现' : '◈ TRACE DISCOVERED';
+  const label = '◈ ' + L('trace_uncovered');
   el.innerHTML = `
     <div class="discovery-badge">
-      <span class="discovery-label">${label}</span>
+      <span class="discovery-label">${esc(label)}</span>
     </div>
     <div class="discovery-text">${esc(msg.description)}</div>
   `;
   container.appendChild(el);
   container.scrollTop = container.scrollHeight;
   discoveryEls.push(el);
+  // The persistent chat entry above is the log record; the ceremony below is
+  // the moment — a centered banner that lands, then flies to the TRACE tab.
+  playDiscoveryCeremony(msg);
+}
+
+/** Bilingual layer name for a discovery payload. Prefer the numeric layer (its
+ *  flavor name is bilingual in LABELS); fall back to the server's player-known
+ *  layer_name string. Both are already discovered → no spoiler risk. */
+function _discoveryLayerName(msg) {
+  const n = Number(msg && msg.layer);
+  if (n >= 1 && n <= 5) return L('trace_layer_' + n);
+  return (msg && msg.layer_name) ? String(msg.layer_name) : '';
+}
+
+/**
+ * DISCOVERY CEREMONY — the core loop is knowledge discovery, so it must LAND.
+ * A centered banner holds ~1.6s, then animates toward the TRACE tab, which
+ * pulses until the player opens it. Intensity scales with layer depth (L1 clean
+ * cyan flash → L4/L5 heavier glitch shimmer). All motion is gated behind
+ * prefersReducedMotion (→ simple fade). Two-tone unlock beep respects music mute.
+ */
+function playDiscoveryCeremony(msg) {
+  const layer = Math.min(5, Math.max(1, Number(msg && msg.layer) || 1));
+  const layerName = _discoveryLayerName(msg);
+
+  // Two-tone unlock cue (reuses playBeep; honours the music-mute flag like the
+  // decrypt lock-in does). Deeper layers ring a touch lower + longer.
+  if (!_musicMuted()) {
+    const base = 760 - (layer - 1) * 40;
+    playBeep(base, 0.07, 0.025);
+    setTimeout(() => { if (!_musicMuted()) playBeep(base + 320, 0.09, 0.03); }, 110);
+  }
+
+  const banner = document.createElement('div');
+  banner.className = 'discovery-ceremony depth-' + layer + (prefersReducedMotion ? ' reduced' : '');
+  const title = '◈ ' + L('trace_uncovered');
+  banner.innerHTML =
+    `<span class="ceremony-title" data-text="${esc(title)}">${esc(title)}</span>` +
+    `<span class="ceremony-sep">—</span>` +
+    `<span class="ceremony-layer">${esc(layerName)}</span>`;
+  document.body.appendChild(banner);
+
+  const tab = document.querySelector('.panel-tab[data-panel="traces"]');
+
+  // Reduced motion: quiet fade in/out, then pulse the tab. No flight.
+  if (prefersReducedMotion) {
+    requestAnimationFrame(() => banner.classList.add('show'));
+    setTimeout(() => {
+      banner.classList.remove('show');
+      setTimeout(() => banner.remove(), 400);
+      _pulseTraceTab();
+    }, 1600);
+    return;
+  }
+
+  requestAnimationFrame(() => banner.classList.add('show'));
+  // Hold, then fly toward the TRACE tab and hand off to the tab pulse.
+  setTimeout(() => {
+    if (tab) {
+      const from = banner.getBoundingClientRect();
+      const to = tab.getBoundingClientRect();
+      const dx = (to.left + to.width / 2) - (from.left + from.width / 2);
+      const dy = (to.top + to.height / 2) - (from.top + from.height / 2);
+      banner.style.setProperty('--fly-x', dx + 'px');
+      banner.style.setProperty('--fly-y', dy + 'px');
+    }
+    banner.classList.add('fly');
+    setTimeout(() => { banner.remove(); _pulseTraceTab(); }, 620);
+  }, 1600);
+}
+
+/** Make the TRACE tab pulse until the player opens it (cleared in switchPanel). */
+function _pulseTraceTab() {
+  const tab = document.querySelector('.panel-tab[data-panel="traces"]');
+  if (tab && !tab.classList.contains('active')) tab.classList.add('trace-pulse');
 }
 
 function showSystemNotice(text) {
@@ -1903,46 +2078,16 @@ function showSystemNotice(text) {
   container.scrollTop = container.scrollHeight;
 }
 
-// Track active knowledge toasts for vertical stacking
-let _activeToasts = [];
-
+// Knowledge-added: a quieter sibling of the discovery ceremony. No banner, no
+// flight — just a distinct-accent toast in the shared stack. Natural flex
+// stacking (no height math), so wrapped 中文 lines can no longer overlap.
+const _KN_LABEL_KEYS = {
+  fact: 'kn_fact', rumor: 'kn_rumor', evidence: 'kn_evidence',
+  theory: 'kn_theory', connection: 'kn_connection',
+};
 function showKnowledgeNotification(entryType) {
-  const labels = {
-    fact:       { en: 'New fact discovered',     zh: '新事实已记录' },
-    rumor:      { en: 'New rumor discovered',    zh: '新传闻已记录' },
-    evidence:   { en: 'New evidence collected',  zh: '新证据已收集' },
-    theory:     { en: 'New theory formed',       zh: '新理论已形成' },
-    connection: { en: 'New connection found',    zh: '新关联已发现' },
-  };
-  const lang = currentLang === 'zh' ? 'zh' : 'en';
-  const label = (labels[entryType] || labels.fact)[lang];
-
-  const el = document.createElement('div');
-  el.className = 'knowledge-toast';
-  el.textContent = label;
-
-  // Stack vertically above existing toasts
-  const baseBottom = 24;
-  const toastHeight = 40; // approximate height of each toast + gap
-  const offset = baseBottom + _activeToasts.length * toastHeight;
-  el.style.bottom = offset + 'px';
-
-  document.body.appendChild(el);
-  _activeToasts.push(el);
-
-  requestAnimationFrame(() => el.classList.add('visible'));
-
-  setTimeout(() => {
-    el.classList.add('fading');
-    setTimeout(() => {
-      el.remove();
-      _activeToasts = _activeToasts.filter(t => t !== el);
-      // Reposition remaining toasts
-      _activeToasts.forEach((t, i) => {
-        t.style.bottom = (baseBottom + i * toastHeight) + 'px';
-      });
-    }, 500);
-  }, 3000);
+  const key = _KN_LABEL_KEYS[entryType] || _KN_LABEL_KEYS.fact;
+  addToast('knowledge', esc(L(key)));
 }
 
 function _chatPrefixes() {
@@ -2656,6 +2801,8 @@ function switchPanel(btn) {
   document.querySelectorAll('.panel-tab').forEach(t => t.classList.remove('active'));
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
   btn.classList.add('active');
+  // Opening the TRACE tab acknowledges any pending discovery — stop its pulse.
+  if (btn.dataset.panel === 'traces') btn.classList.remove('trace-pulse');
   document.getElementById('panel-' + btn.dataset.panel).classList.add('active');
   playBeep(900, 0.02);
 }
