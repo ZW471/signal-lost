@@ -125,6 +125,41 @@ app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 if os.path.isdir(ASSETS_DIR):
     app.mount("/assets", StaticFiles(directory=ASSETS_DIR), name="assets")
 
+
+@app.on_event("shutdown")
+async def _shutdown_cleanup() -> None:
+    """Reap background work on graceful shutdown (Ctrl+C / SIGTERM / deploy).
+
+    Two leaks this closes:
+
+    - **World-sim schedulers**: stop every live PlayerSession's scheduler thread
+      so no background tick fires while uvicorn is tearing down.
+    - **Orphaned CLI children**: the claude/codex wrappers spawn ``claude -p`` /
+      ``codex exec`` in their OWN process group (``start_new_session=True``, so a
+      timeout can kill the whole tree) — which also means a dying server never
+      signals them. An in-flight CLI call at shutdown would be re-parented to
+      init/launchd and keep consuming CPU/tokens forever (observed live: two
+      orphaned ``codex exec`` PIDs after ``pkill run_gui.py``). Killing them
+      here also unblocks any executor thread parked in ``communicate()``, which
+      the interpreter would otherwise wait on before it can exit.
+    """
+    for sess in list(_sessions_by_user.values()):
+        try:
+            if sess.scheduler:
+                sess.scheduler.stop()
+        except Exception:
+            pass
+    try:
+        from tests.scripts import cli_process_registry
+        killed = cli_process_registry.kill_all()
+        if killed:
+            import logging
+            logging.getLogger(__name__).info(
+                "shutdown: killed %d in-flight CLI child process group(s)", killed)
+    except Exception:
+        # Cleanup must never turn a graceful shutdown into a crash.
+        pass
+
 # ---------------------------------------------------------------------------
 # Shared server state
 # ---------------------------------------------------------------------------
@@ -993,6 +1028,25 @@ def _on_disconnect(sess: PlayerSession | None, ws: WebSocket) -> None:
         sess.ws = None
 
 
+async def _report_ws_loop_error(ws: WebSocket, e: Exception) -> None:
+    """Handle an unexpected websocket-loop error: log the real error + traceback
+    server-side only (never leak raw exception text to the browser) and send the
+    client a generic bilingual error, tolerating a dead socket."""
+    import logging
+    import traceback
+    traceback.print_exc()
+    logging.getLogger(__name__).warning("websocket loop error: %s", e)
+    try:
+        await ws.send_json({
+            "type": "error",
+            "message": (
+                "Something went wrong on the server. / 服务器发生了错误。"
+            ),
+        })
+    except Exception:
+        pass
+
+
 # ---------------------------------------------------------------------------
 # WebSocket — main game communication
 # ---------------------------------------------------------------------------
@@ -1183,22 +1237,25 @@ async def websocket_endpoint(ws: WebSocket):
 
     except WebSocketDisconnect:
         _on_disconnect(sess, ws)
+    except RuntimeError as e:
+        # A client close racing a server send never surfaces here as
+        # WebSocketDisconnect: the failing send raises WebSocketDisconnect(1006)
+        # INSIDE _safe_send (which swallows it by design), starlette flips
+        # application_state to DISCONNECTED, and the endpoint's next
+        # receive_text() then raises a bare RuntimeError ("WebSocket is not
+        # connected..."). Routing that through the generic branch used to leak
+        # the whole session: PlayerSession stayed registered in
+        # _sessions_by_user (forcing session_conflict on reconnect) and its
+        # WorldSimScheduler thread kept firing world-sim ticks with no client.
+        # Treat any RuntimeError on a no-longer-connected socket as the
+        # disconnect it really is; only a RuntimeError on a live socket is a
+        # genuine server error.
+        if not _ws_connected(ws):
+            _on_disconnect(sess, ws)
+        else:
+            await _report_ws_loop_error(ws, e)
     except Exception as e:
-        # Log the real error + traceback server-side only; never leak raw
-        # exception text to the browser.
-        import logging
-        import traceback
-        traceback.print_exc()
-        logging.getLogger(__name__).warning("websocket loop error: %s", e)
-        try:
-            await ws.send_json({
-                "type": "error",
-                "message": (
-                    "Something went wrong on the server. / 服务器发生了错误。"
-                ),
-            })
-        except Exception:
-            pass
+        await _report_ws_loop_error(ws, e)
 
 
 # ---------------------------------------------------------------------------
