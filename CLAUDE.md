@@ -24,7 +24,7 @@ uv run tests/scripts/play_headless.py
 # trace/ending validation, factory, turn-flag reset)
 uv run tests/scenarios/smoke_test.py
 
-# Regression tests — no LLM required (17 tests incl. ending-correctness fixtures:
+# Regression tests — no LLM required (20 tests incl. ending-correctness fixtures:
 # consensual bridge → the_bridge, forced merge → ascension, conversational L3 reach)
 uv run tests/scenarios/regression.py
 
@@ -72,7 +72,7 @@ FastAPI + WebSocket backend driving a single-page frontend (`index.html` / `app.
 - `roll` — dice/roll beat surfaced as a chip
 - `phase` — per-turn heartbeat (validating → resolving → writing → world → checking); after ~10s of `resolving` the client reveals a CANCEL button
 - `turn_cancelled` — server acknowledges a cancel; client runs `endTurnUI()`
-- `save_deleted` — reserved for the parallel save-management track (NOT landed yet: the `delete_save` WS action is unimplemented server-side and the delete button ships **disabled** with a bilingual coming-soon tooltip)
+- `save_deleted` — server confirmation of a `delete_save` WS action (both LIVE since wave 7). `_handle_delete_save` in `gui/server.py` sanitizes the name, blocks path traversal, refuses the active session, `shutil.rmtree`s the save dir and replies with the refreshed saves list; each save card renders a live delete button that opens a bilingual confirm dialog (`confirmDeleteSave`/`doDeleteSave` in `app.js`)
 
 **Cancel-turn is a pre-commit abort.** `cancel_turn` flips `sess.cancel_requested`; the turn aborts at the next pre-commit seam, so a cancelled turn never half-writes session state (the rejected `HumanMessage` is also reverted so it can't leak into the next turn's LLM context). During a turn, `_run_turn` spawns a concurrent frame reader for exactly the executor-await window: `cancel_turn` fires immediately, other frames are requeued onto `sess.pending_frames` and replayed in order.
 
@@ -84,7 +84,7 @@ FastAPI + WebSocket backend driving a single-page frontend (`index.html` / `app.
 
 **Unified managers:** one toast stack (`#toastStack`, `dismissToast`), one dialog manager (`openDialog`/`closeDialog` with a deterministic z-index-ordered `_dialogStack`, focus trap, ARIA), and one SFX bus (`MusicEngine.sfx`, single mute state + persisted volume; `playBeep` is a category-tagged shim over it).
 
-**Cache-busting discipline:** every `gui/static/` asset URL in `index.html` carries a `?v=<tag>` query and all three (`style.css`, `music.js`, `app.js`) bump together on any frontend edit. Current tag: **`w6fix`**.
+**Cache-busting discipline:** every `gui/static/` asset URL in `index.html` carries a `?v=<tag>` query and all three (`style.css`, `music.js`, `app.js`) bump together on any frontend edit. Current tag: **`w7a`**.
 
 ### Directory Structure
 

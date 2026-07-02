@@ -611,11 +611,19 @@ def test_l3_07_requires_sector7_context():
     assert not check(K("Sector 7 is locked down tonight.",
                        "The market has a lower level below the steps."), t, n, p, w), \
         "TRACE-L3-07 fired from context and depth in SEPARATE entries"
+    assert not check(K("这栋居民楼有很多楼层，走廊很暗。"), t, n, p, w), \
+        "bare 楼层 without Sector-7/lab context fired TRACE-L3-07"
     # Positives: co-occurrence in one entry, EN and 中文.
     assert check(K("Sector 7 has multiple levels — the deeper labs are below."), t, n, p, w), \
         "genuine Sector-7 multi-level entry did not fire TRACE-L3-07"
     assert check(K("提取行动发生在第七区更深层的实验室。"), t, n, p, w), \
         "中文 第七区+深层实验室 entry did not fire TRACE-L3-07"
+    # Wave-7 bilingual parity: 楼层/层楼 are the natural 中文 renderings of
+    # "levels/storeys" and must count as depth terms in Sector-7 context.
+    assert check(K("第七区有更深的楼层，实验室在下面。"), t, n, p, w), \
+        "中文 第七区+楼层 entry did not fire TRACE-L3-07 (bilingual-parity gap)"
+    assert check(K("第七区的实验室分布在好几层楼。"), t, n, p, w), \
+        "中文 实验室+层楼 entry did not fire TRACE-L3-07 (bilingual-parity gap)"
     print("  [PASS] TRACE-L3-07 needs Sector-7/lab + depth in ONE entry (bare 'level' silent)")
 
 
@@ -675,7 +683,38 @@ def test_act_on_evidence_discovery_route():
         "source": "ledger decrypt", "turn": 5}])
     assert not checks["TRACE-L3-08"](k_off, t, n, p, w), \
         "an off-topic decrypt act fired TRACE-L3-08"
-    print("  [PASS] Act-on-evidence route fires L3-05/L3-08/L2-06; talk-only and off-topic acts stay silent")
+
+    # Wave-7 anchoring: an act paired with mundane human speech must NOT leak
+    # L3-08 ("spoke"/"speaking"/说话 need signal context in the same clause,
+    # and "spoke" must not match inside "outspoken"/"spoken")...
+    for desc in ("I analyzed the crowd; a vendor spoke to me about noodles.",
+                 "Probed the lock. An outspoken guard blocked the door.",
+                 "我分析了账本，他在说话时提到欠款。"):
+        k_mundane = dict(empty, facts=[{"description": desc, "turn": 6}])
+        assert not checks["TRACE-L3-08"](k_mundane, t, n, p, w), \
+            f"mundane speech during an act leaked TRACE-L3-08: {desc!r}"
+    # ...while speech tied to the signal/network in the same clause still fires,
+    # in both languages.
+    k_net_voice = dict(empty, facts=[{
+        "description": "分析信号碎片：寂静之前，网络里有一个声音在说话。",
+        "source": "信号扫描", "turn": 14}])
+    assert checks["TRACE-L3-08"](k_net_voice, t, n, p, w), \
+        "中文 signal-context voice from an analysis act did not fire TRACE-L3-08"
+
+    # Wave-7 anchoring for L2-06: ordinary radio/TV static after a decode act
+    # is scene dressing, not proof of scanner blind spots...
+    for desc in ("I analyzed the old recording — it was just static.",
+                 "Decoded the tape; nothing but static hiss."):
+        k_radio = dict(empty, facts=[{"description": desc, "turn": 7}])
+        assert not checks["TRACE-L2-06"](k_radio, t, n, p, w), \
+            f"mundane radio static after an act leaked TRACE-L2-06: {desc!r}"
+    # ...but a scan whose own reading comes back as static still fires.
+    k_scan_static = dict(empty, facts=[{
+        "description": "Scanned the alley; the reading came back as pure static.",
+        "turn": 8}])
+    assert checks["TRACE-L2-06"](k_scan_static, t, n, p, w), \
+        "scan-reading-as-static did not fire TRACE-L2-06 (act route)"
+    print("  [PASS] Act-on-evidence route fires L3-05/L3-08/L2-06; talk-only, off-topic and mundane speech/static stay silent")
 
 
 def test_ambient_causes_and_bilingual_scarcity_rule():

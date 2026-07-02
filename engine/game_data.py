@@ -176,7 +176,7 @@ _S7_CONTEXT_RE = re.compile(
     r"sector\s*-?\s*7|sector\s+seven|(?<![a-z])labs?(?![a-z])|laborator|七区|实验室")
 _S7_DEPTH_RE = re.compile(
     r"(?<![a-z])(?:level|deep|layer|storey|sub-?basement|underground)"
-    r"|多层|深层|层级|下层|地下|底层")
+    r"|多层|深层|层级|下层|地下|底层|楼层|层楼")
 
 
 def _sector7_depth_in_one_entry(knowledge: dict) -> bool:
@@ -220,6 +220,46 @@ def _acted_on_evidence(knowledge: dict, topic_keywords: list[str]) -> bool:
             if any(kw in text for kw in kws):
                 return True
     return False
+
+
+def _acted_on_evidence_re(knowledge: dict, topic_re: re.Pattern) -> bool:
+    """Regex-topic variant of _acted_on_evidence, for topics whose natural
+    keywords are common words ("spoke", "static") that need word-boundary
+    anchoring and/or same-clause context to avoid firing on scene dressing."""
+    for entry_type in _KNOWLEDGE_TYPES:
+        for entry in knowledge.get(entry_type, []):
+            text = _entry_text(entry)
+            src = str(entry.get("source") or "").lower()
+            if not any(m in text or m in src for m in _ACT_MARKERS):
+                continue
+            if topic_re.search(text):
+                return True
+    return False
+
+
+# Anchored topic patterns for the act routes (wave 7). The wave-6 lists used
+# bare substrings, so any analyze/scan entry that ALSO mentioned someone
+# speaking ("an outspoken guard", "他在说话") leaked TRACE-L3-08, and ordinary
+# radio/TV "static" after a decode act leaked TRACE-L2-06. Distinctive words
+# (voice/whisper/低语) stay standalone but boundary-anchored; ambiguous ones
+# (spoke/speaking/说话/声音/static) must share a clause (no ./;/!/? between)
+# with signal-or-scan context — mirroring the _S7_CONTEXT_RE approach.
+_L308_SPEECH_PART = (
+    r"(?:(?<![a-z])(?:spoke|spoken|speaks?|speaking)(?![a-z])|说话|话语|声音)")
+_L308_SIGNAL_PART = (
+    r"(?:(?<![a-z])(?:signal|fragment|entity|network|transmission|static)(?![a-z])"
+    r"|信号|碎片|实体|网络|传输)")
+_CLAUSE_GAP = r"[^.。;；!?！？\n]{0,60}"
+_L308_VOICE_RE = re.compile(
+    r"(?<![a-z])(?:voices?|whisper(?:s|ed|ing)?)(?![a-z])|低语"
+    + "|" + _L308_SIGNAL_PART + _CLAUSE_GAP + _L308_SPEECH_PART
+    + "|" + _L308_SPEECH_PART + _CLAUSE_GAP + _L308_SIGNAL_PART)
+_L206_SCAN_PART = (
+    r"(?:(?<![a-z])(?:scan(?:s|ned|ner|ning)?|sweep|sensor|reading|surveillance"
+    r"|tracker|drone)(?![a-z])|扫描|监控|读数|探测|追踪)")
+_L206_STATIC_RE = re.compile(
+    _L206_SCAN_PART + _CLAUSE_GAP + r"(?<![a-z])static(?![a-z])"
+    + r"|(?<![a-z])static(?![a-z])" + _CLAUSE_GAP + _L206_SCAN_PART)
 
 
 def _any_npc_trust_at_least(npcs: dict, min_level: str) -> bool:
@@ -403,11 +443,14 @@ TRACE_CONDITIONS: list[dict] = [
      "description": "NEXUS surveillance has blind spots — the Signal interferes with their scanners",
      "description_zh": "NEXUS的监控存在盲区——信号会干扰他们的扫描器",
      # Act route (wave 6, #3b): a scan act that itself comes back as static /
-     # dead zones demonstrates the interference first-hand.
+     # dead zones demonstrates the interference first-hand. "static" must share
+     # a clause with scan/surveillance context (wave 7) so plain radio static
+     # after a decode act doesn't count.
      "check": lambda k, t, n, p, w: (
          _has_fact_or_rumor_about(k, ["blind spot", "盲区", "interfere", "干扰", "scanner"])
-         or _acted_on_evidence(k, ["static", "dead zone", "jammed", "no coverage",
-                                   "死角", "静默区", "屏蔽"]))},
+         or _acted_on_evidence(k, ["dead zone", "jammed", "no coverage",
+                                   "死角", "静默区", "屏蔽"])
+         or _acted_on_evidence_re(k, _L206_STATIC_RE))},
     {"id": "TRACE-L2-07", "layer": 2,
      "description": "Multiple people have disappeared following the same pattern — all had old implants",
      "description_zh": "多人以相同模式失踪——他们都有旧植入体",
@@ -487,12 +530,14 @@ TRACE_CONDITIONS: list[dict] = [
      "description_zh": "网络中的实体在被切断前曾试图沟通",
      # Act route (wave 6, #3b): analyzing a Signal fragment that carries a
      # voice/whisper (the analyze_signal fragments literally read "...before the
-     # silence, there was a voice...") IS hearing the entity's attempt.
+     # silence, there was a voice...") IS hearing the entity's attempt. Voice
+     # words are boundary-anchored and spoke/speaking/说话/声音 need signal
+     # context in the same clause (wave 7) so "an outspoken guard" or a vendor
+     # who spoke during an unrelated scan can't leak Layer 3.
      "check": lambda k, t, n, p, w: (
          _has_evidence(k, ["communicate", "message", "entity", "before severance",
                            "沟通", "试图沟通", "信息", "实体", "断离前"])
-         or _acted_on_evidence(k, ["voice", "whisper", "speaking", "spoke",
-                                   "声音", "低语", "话语", "在说话"]))},
+         or _acted_on_evidence_re(k, _L308_VOICE_RE))},
     {"id": "TRACE-L3-09", "layer": 3,
      "description": "Some extracted fragments have been weaponized by NEXUS — Project Resonance",
      "description_zh": "一些被提取的碎片已被NEXUS武器化——共鸣计划",
