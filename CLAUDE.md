@@ -20,15 +20,22 @@ uv run tests/scripts/play_headless.py
 ## Running Tests
 
 ```bash
-# Smoke tests (no LLM required)
+# Smoke tests — no LLM required (7 tests: graph compiles, tool schemas, session I/O,
+# trace/ending validation, factory, turn-flag reset)
 uv run tests/scenarios/smoke_test.py
 
-# Regression tests (no LLM required)
+# Regression tests — no LLM required (17 tests incl. ending-correctness fixtures:
+# consensual bridge → the_bridge, forced merge → ascension, conversational L3 reach)
 uv run tests/scenarios/regression.py
+
+# Good-ending reachability (no LLM required): a deep run first-matches the_bridge
+uv run tests/scenarios/good_ending_reachability.py
 
 # Full playthrough test (requires configured LLM in settings/provider.json)
 uv run tests/scenarios/full_playthrough.py --turns 20
 ```
+
+After any change under `gui/static/`, syntax-check the frontend: `node --check gui/static/app.js`.
 
 ## Build & Dependencies
 
@@ -54,6 +61,30 @@ input_gate → input_validator → resolver (+ tool_executor loop) → output_la
 - **Pure Python nodes** (deterministic): `input_gate`, `input_blocked_handler`, `state_writer`, `world_ticker`, `trace_checker`, `consequence`
 - **LLM nodes**: `resolver` (narration + tool use), `input_validator` (cheat detection), `world_simulator` (NPC autonomy), `output_language_checker`
 - All LLM-calling nodes are **non-fatal** on failure — the game continues even if validation/simulation fails
+
+The `resolver` system prompt (`engine/prompts.py`) carries a few narrative-quality directives worth knowing about: an **anti-repetition** rule (rotate the sensory register each turn; use rain/neon/the implant's hum at most once every few turns), a **meter-causality** rule (whenever NEXUS alert / integrity / fragment decay moves, the narration must name the in-world cause and fill any tool `reason` field — never raw numbers), a one-verb-per-turn teaching-suggestion rule, and a **Director Notes** contract (bracketed/labelled staging notes — trajectory warnings, integrity primers — are never quoted; their intent is expressed only through the fiction).
+
+### Browser GUI (`gui/server.py`, `gui/static/`)
+
+FastAPI + WebSocket backend driving a single-page frontend (`index.html` / `app.js` / `style.css`). The `/ws` protocol is **additive and forward-compatible**: the client ignores unknown frame types, so the server can add frames without breaking older clients. Turn-progress and delta frames layer on top of the base narrative/discovery/state frames:
+
+- `state_delta` — incremental state patches (avoids resending full session snapshots)
+- `roll` — dice/roll beat surfaced as a chip
+- `phase` — per-turn heartbeat (validating → resolving → writing → world → checking); after ~10s of `resolving` the client reveals a CANCEL button
+- `turn_cancelled` — server acknowledges a cancel; client runs `endTurnUI()`
+- `save_deleted` — reserved for the parallel save-management track (NOT landed yet: the `delete_save` WS action is unimplemented server-side and the delete button ships **disabled** with a bilingual coming-soon tooltip)
+
+**Cancel-turn is a pre-commit abort.** `cancel_turn` flips `sess.cancel_requested`; the turn aborts at the next pre-commit seam, so a cancelled turn never half-writes session state (the rejected `HumanMessage` is also reverted so it can't leak into the next turn's LLM context). During a turn, `_run_turn` spawns a concurrent frame reader for exactly the executor-await window: `cancel_turn` fires immediately, other frames are requeued onto `sess.pending_frames` and replayed in order.
+
+**Turn locks are account-wide.** `_turn_lock_for(uid)` returns one shared lock per account, held across superseded and replacement sessions that point at the same on-disk session dir — this prevents two unsynchronized writers (e.g. a force-kick/reconnect binding a fresh session while the old turn thread is still writing `player.json`/`knowledge.json`). Resume/load/new-game acquire it with a bounded timeout (bilingual busy error on contention); the prediction fast-path degrades to a cache miss rather than block.
+
+**Panel IA: 7 grouped tabs** (`data-panel` in `index.html`): `knowledge`, `traces`, `network`, `world` (world-state + district sections), `character` (identity + inventory sections), `log`, `conversation`. Positional 1–7 shortcuts switch panels.
+
+**i18n (single source of truth):** `LABELS` (a bilingual EN/中文 dict in `app.js`) is the ONLY string table; `L(key)` reads it for the active language. Static chrome uses the `data-i18n` / `data-i18n-placeholder` / `data-i18n-aria` attributes, and `applyStaticI18n(root)` localizes every keyed element in one pass (textContent / placeholder / aria-label). Add new UI strings to `LABELS` and tag the element with `data-i18n=<key>` — never hardcode player-visible text.
+
+**Unified managers:** one toast stack (`#toastStack`, `dismissToast`), one dialog manager (`openDialog`/`closeDialog` with a deterministic z-index-ordered `_dialogStack`, focus trap, ARIA), and one SFX bus (`MusicEngine.sfx`, single mute state + persisted volume; `playBeep` is a category-tagged shim over it).
+
+**Cache-busting discipline:** every `gui/static/` asset URL in `index.html` carries a `?v=<tag>` query and all three (`style.css`, `music.js`, `app.js`) bump together on any frontend edit. Current tag: **`w6fix`**.
 
 ### Directory Structure
 
@@ -114,7 +145,11 @@ Signal Lost/
 
 ### Knowledge & Trace System
 
-16 traces across 5 layers. Each trace has a `check()` lambda in `game_data.py` that evaluates against current state. `trace_checker` runs every turn and never forgets discoveries. `deepest_layer` gates what content the LLM can narrate (via `prompts.py` BACKGROUND_LAYERS).
+47 traces across 5 layers (L1×8, L2×11, L3×11, L4×9, L5×8). Each trace has a `check()` lambda in `game_data.py` that evaluates against current state. `trace_checker` runs every turn and never forgets discoveries. `deepest_layer` gates what content the LLM can narrate (via `prompts.py` BACKGROUND_LAYERS).
+
+### Endings & Consent (`engine/game_data.py`)
+
+`ENDINGS` is a first-match-wins list. GOOD endings are checked **first** with the strictest, deepest gates so a well-earned run cannot fall through to a looser keyword-gated bad ending. The load-bearing case: a **consensual bridge** must converge to `the_bridge` (good), not the forced-merge `ascension` (bad). To hold that line, `ascension`'s force-merge keyword list deliberately **excludes** the bare lore words (`ascend`/`升华`/`飞升`) that a deep player is *expected* to learn, and only decisive **consensual-merge** climax phrases (with affirmative-consent phrases that veto a force reading in the same knowledge write) route to `the_bridge`. Regression + reachability suites pin this (see below).
 
 ### Conversation Logging
 
