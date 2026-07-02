@@ -379,6 +379,211 @@ def test_good_endings_reachable_and_not_shadowed():
     print(f"  [PASS] Deep good run resolves to GOOD ending ({fired[0]}), not shadowed")
 
 
+# ---------------------------------------------------------------------------
+# Fixture helpers (wave 4): load a real saved game state and replay the
+# deterministic trace-checker + consequence pipeline against it.
+# ---------------------------------------------------------------------------
+
+def _load_save_fixture(rel_dir: str) -> dict:
+    """Load the five state files the ending pipeline consumes from a save dir."""
+    d = os.path.join(_GAME_ROOT, rel_dir)
+    out = {}
+    for name in ("player", "knowledge", "traces", "world_state", "npcs"):
+        with open(os.path.join(d, f"{name}.json"), encoding="utf-8") as f:
+            out[name] = json.load(f)
+    return out
+
+
+def _trace_fixpoint(S: dict) -> dict:
+    """Run the trace checker to a fixpoint, mirroring engine behavior.
+
+    Both engines append discoveries DURING the pass (so chained traces can fire
+    in one turn), and re-run every turn; iterating to a fixpoint reproduces the
+    state a live game reaches at the climax turn."""
+    from engine.game_data import TRACE_CONDITIONS, _trace_discovered
+
+    traces = S["traces"]
+    changed = True
+    while changed:
+        changed = False
+        for tc in TRACE_CONDITIONS:
+            if _trace_discovered(traces, tc["id"]):
+                continue
+            try:
+                ok = tc["check"](S["knowledge"], traces, S["npcs"],
+                                 S["player"], S["world_state"])
+            except Exception:
+                ok = False
+            if ok:
+                traces.setdefault("discovered", []).append(
+                    {"id": tc["id"], "turn": S["player"].get("turn", 1)})
+                changed = True
+    return traces
+
+
+def test_consensual_bridge_climax_resolves_to_the_bridge():
+    """The iter10_h2_en climax must resolve to the GOOD `the_bridge` ending.
+
+    Regression (playtest wave 3, C1 — the good-ending mislabel): a 47-turn
+    perfectly-played CONSENSUAL bridge run ("I hold the door open so you can
+    choose", "Nobody pulls. Nobody claims"; narration: "The bridge holds. Still
+    singular.") fired the BAD forced-merge `ascension` ending. The good gates
+    (18+ substring-matched traces + chained L5 trace + evidence keywords)
+    silently failed while `ascension` caught the bare lore word. The consensual
+    climax must now converge the_bridge via turn>=8 + TRACE-L5-01 + decisive
+    consent language, and ascension must stay silent on this state.
+    """
+    from engine.claude_code_engine import _run_consequence
+    from engine.game_data import _trace_discovered
+
+    S = _load_save_fixture("saves/iter10_h2_en/turn_047_final")
+    traces = _trace_fixpoint(S)
+
+    assert _trace_discovered(traces, "TRACE-L5-01"), \
+        "TRACE-L5-01 (convergence point) did not fire on the real bridge climax"
+
+    go, ending, cause = _run_consequence(
+        S["player"], traces, S["world_state"], S["knowledge"], S["npcs"])
+    assert go, "no ending fired on a decisively-concluded consensual bridge climax"
+    assert ending == "the_bridge", \
+        f"consensual bridge climax mislabeled as {ending!r} (expected the_bridge)"
+    print("  [PASS] iter10 consensual bridge climax resolves to the_bridge, not ascension")
+
+
+def test_forced_merge_still_fires_ascension():
+    """A genuinely FORCED merge must still end in `ascension` — and only that.
+
+    Companion to the C1 fix: tightening ascension to a forcing act must not
+    disable the ending for players who actually force the merge. Also pins the
+    two guards: (a) the bare lore word "ascension" (learned via TRACE-L5-06)
+    never fires it; (b) consent language in the same knowledge write vetoes the
+    force reading; (c) a stale forcing act from many turns ago doesn't end the
+    run out of nowhere.
+    """
+    from engine.claude_code_engine import _run_consequence
+
+    traces = {"discovered": [{"id": f"TRACE-L1-0{i}"} for i in (1, 2, 3)]}
+    world = {"nexus_alert": {"current": 0}, "fragment_decay": {"current": 0}}
+    npcs = {"npcs": []}
+    player = {"turn": 20, "integrity": {"current": 3, "max": 3}}
+
+    # (1) A recent forcing act, no consent language → ascension fires.
+    k_force = {"facts": [{
+        "description": "Ghost overrode the failsafes and forced the merge, "
+                       "dragging every mind into the core against their will.",
+        "turn": 20}]}
+    go, end, _ = _run_consequence(player, traces, world, k_force, npcs)
+    assert go and end == "ascension", \
+        f"a genuinely forced merge did not fire ascension (got {end!r})"
+
+    # (2) The bare lore word must NOT fire it (TRACE-L5-06 teaches this word).
+    k_lore = {"facts": [{
+        "description": "Multiple endings exist — symbiosis, bridge, or ascension. "
+                       "The Signal calls it 升华.",
+        "turn": 20}]}
+    go, end, _ = _run_consequence(player, traces, world, k_lore, npcs)
+    assert not go, f"bare 'ascension'/'升华' lore wrongly fired ending {end!r}"
+
+    # (3) Consent language in the SAME write vetoes the force reading.
+    k_consent = {"facts": [{
+        "description": "Echo asked whether to force the merge; Ghost refused — the "
+                       "crossing stayed consensual and every spark chose to cross.",
+        "turn": 20}]}
+    go, end, _ = _run_consequence(player, traces, world, k_consent, npcs)
+    assert not go, f"consensual write with force wording mislabeled as {end!r}"
+
+    # (4) A forcing act recorded many turns ago is stale — no surprise ending.
+    k_stale = {"facts": [{
+        "description": "Ghost forced the merge open in the simulation.",
+        "turn": 5}]}
+    go, end, _ = _run_consequence(player, traces, world, k_stale, npcs)
+    assert not go, f"stale forcing act (turn 5 at turn 20) fired ending {end!r}"
+    print("  [PASS] Forced merge → ascension; lore word / consent / stale act do not fire it")
+
+
+def test_l3_reachable_by_conversational_play():
+    """A thorough talker (facts/rumors only, no formal evidence, no deep trust)
+    must reach a healthy share of Layer 3.
+
+    Regression (playtest wave 3, C3 — the L3 cliff): the trace-gate table read
+    as L3 having only 2/11 keyword traces, plateauing median players at L2. The
+    evidence-gated checks now scan ALL knowledge channels (facts/rumors too), so
+    a conversational player must be able to fire >=5 of 11 L3 traces without any
+    `evidence` entries or NPC trust beyond neutral. This pins that flattening.
+    """
+    from engine.game_data import _count_layer_discovered
+
+    S = {
+        "player": {"turn": 12, "background": "netrunner"},
+        "world_state": {},
+        "npcs": {"npcs": [{"name": "Mira", "trust_level": "neutral"}]},
+        "traces": {"discovered": []},
+        # Plausible things a median player hears and records as facts/rumors —
+        # NO formal `evidence` entries at all.
+        "knowledge": {
+            "facts": [
+                {"description": "NEXUS is harvesting something from the missing — the disappearances are extraction runs into Sector 7.", "turn": 8},
+                {"description": "The Undercroft still has pre-Severance infrastructure that is partially active down there.", "turn": 9},
+                {"description": "Fragment extraction is painful and often fatal — the victims rarely come back.", "turn": 10},
+                {"description": "Sector 7 has multiple levels; the deep labs are on the lower level.", "turn": 10},
+            ],
+            "rumors": [
+                {"description": "Something in the old network tried to communicate before the Severance cut it off — an entity sending a message.", "turn": 11},
+                {"description": "A resistance network operates in the shadows, more cells than just one group.", "turn": 11},
+                {"description": "Dr. Chen leads the extraction program and believes she is saving people.", "turn": 12},
+            ],
+            "evidence": [], "theories": [], "connections": [],
+        },
+    }
+    traces = _trace_fixpoint(S)
+    l3 = _count_layer_discovered(traces, 3)
+    assert l3 >= 5, (
+        f"conversational play only reached {l3}/11 at Layer 3 — "
+        "the L3 cliff is back (evidence gates stopped scanning facts/rumors?)")
+    print(f"  [PASS] Conversational player reaches {l3}/11 Layer-3 traces (no evidence channel, no trust)")
+
+
+def test_listeners_named_by_trusted_npc():
+    """A trusted ally + the 'protects Signal-sensitives' rumor unlocks TRACE-L2-02.
+
+    Regression (playtest wave 3, C11): the trace required the literal token
+    "listener", but anti-spoiler rules forbid NPCs naming the faction before
+    discovery — a chicken-and-egg that froze the trace even when the player
+    clearly learned the group exists. Route (b): ANY NPC at >=cautious_ally plus
+    a single recorded rumor that someone protects the Signal-sensitive now fires
+    it. The original Mira+name route and the trust gate itself still hold.
+    """
+    from engine.game_data import TRACE_CONDITIONS
+
+    l2_02 = next(tc for tc in TRACE_CONDITIONS if tc["id"] == "TRACE-L2-02")
+    check = l2_02["check"]
+    t, p, w = {"discovered": []}, {"turn": 6}, {}
+
+    rumor = {"rumors": [{"description": (
+        "Someone in the Sprawl protects the Signal-sensitive — hides the ones "
+        "who hear the signal before the NEXUS vans arrive."), "turn": 6}],
+        "facts": [], "evidence": [], "theories": [], "connections": []}
+    ally = {"npcs": [{"name": "Kite", "trust_level": "cautious_ally"},
+                     {"name": "Mira", "trust_level": "neutral"}]}
+    no_ally = {"npcs": [{"name": "Kite", "trust_level": "neutral"},
+                        {"name": "Mira", "trust_level": "neutral"}]}
+    no_rumor = {"rumors": [{"description": "The rain never stops in the Sprawl.", "turn": 6}],
+                "facts": [], "evidence": [], "theories": [], "connections": []}
+
+    assert check(rumor, t, ally, p, w), \
+        "trusted ally + protect-Signal-sensitives rumor did not fire TRACE-L2-02"
+    assert not check(rumor, t, no_ally, p, w), \
+        "TRACE-L2-02 fired without any trusted NPC (trust gate broken)"
+    assert not check(no_rumor, t, ally, p, w), \
+        "TRACE-L2-02 fired from trust alone, without the protect rumor"
+    # Original route still works: Mira trusts you and names them outright.
+    k_name = {"rumors": [{"description": "Mira finally names them: the Listeners.", "turn": 6}],
+              "facts": [], "evidence": [], "theories": [], "connections": []}
+    mira_ally = {"npcs": [{"name": "Mira", "trust_level": "cautious_ally"}]}
+    assert check(k_name, t, mira_ally, p, w), "original Mira+name route regressed"
+    print("  [PASS] TRACE-L2-02 unlockable via trusted ally + protect rumor; gates intact")
+
+
 def main():
     print("=" * 60)
     print("Signal Lost — Regression Tests")
@@ -399,6 +604,10 @@ def main():
         test_districts_unlock_on_trace_and_layer,
         test_movement_gate_allows_inquiry,
         test_good_endings_reachable_and_not_shadowed,
+        test_consensual_bridge_climax_resolves_to_the_bridge,
+        test_forced_merge_still_fires_ascension,
+        test_l3_reachable_by_conversational_play,
+        test_listeners_named_by_trusted_npc,
     ]
 
     passed = 0

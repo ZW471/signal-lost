@@ -111,6 +111,39 @@ def _has_evidence(knowledge: dict, keywords: list[str]) -> bool:
     return False
 
 
+def _has_entry_matching_all(knowledge: dict, keyword_groups: list[list[str]]) -> bool:
+    """True if a SINGLE knowledge entry matches at least one keyword from EVERY
+    group.
+
+    Unlike chaining ``_has_fact_or_rumor_about`` calls (which can combine
+    keywords from unrelated entries), this requires the co-occurrence inside one
+    recorded write — e.g. a rumor that someone "protects the Signal-sensitive"
+    must carry both the protecting and the Signal-sensitive halves itself."""
+    groups = [[kw.lower() for kw in g] for g in keyword_groups]
+    for entry_type in _KNOWLEDGE_TYPES:
+        for entry in knowledge.get(entry_type, []):
+            text = _entry_text(entry)
+            if all(any(kw in text for kw in g) for g in groups):
+                return True
+    return False
+
+
+def _any_npc_trust_at_least(npcs: dict, min_level: str) -> bool:
+    """True if ANY known NPC's trust is at or above the threshold (bilingual).
+
+    Used by gates that care about having earned a confidant at all, not about a
+    specific person (e.g. a trusted ally naming the Listeners, TRACE-L2-02)."""
+    levels = ["hostile", "suspicious", "neutral", "cautious_ally", "trusted", "devoted"]
+    min_idx = levels.index(min_level) if min_level in levels else 0
+    for npc in npcs.get("npcs", []):
+        trust = str(npc.get("trust_level", npc.get("trust", "neutral"))).lower()
+        trust = _TRUST_ALIASES.get(trust, trust)
+        trust_idx = levels.index(trust) if trust in levels else 2
+        if trust_idx >= min_idx:
+            return True
+    return False
+
+
 def _layer_of(trace_id: str) -> int | None:
     """Parse the layer number from a trace id like ``TRACE-L3-07`` -> 3.
 
@@ -241,8 +274,24 @@ TRACE_CONDITIONS: list[dict] = [
     {"id": "TRACE-L2-02", "layer": 2,
      "description": "The Listeners exist and protect Signal-sensitive people",
      "description_zh": "聆听者组织存在，并保护对信号敏感的人",
+     # Two earned routes (playtest wave 3, C11). The anti-spoiler rules forbid
+     # NPCs volunteering the faction NAME before discovery, so requiring the
+     # literal "listener" token was a chicken-and-egg that froze this trace even
+     # when the player clearly learned the group exists. Route (b): once ANY
+     # NPC trusts the player (>= cautious_ally) and a single recorded rumor/fact
+     # says someone protects the Signal-sensitive, the ally may name them — the
+     # trace fires and the reveal becomes narratable.
      "check": lambda k, t, n, p, w: (
-         _npc_trust_at_least(n, "mira", "cautious_ally") and _has_fact_or_rumor_about(k, ["listener", "聆听者"]))},
+         (_npc_trust_at_least(n, "mira", "cautious_ally")
+          and _has_fact_or_rumor_about(k, ["listener", "聆听者"]))
+         or (_any_npc_trust_at_least(n, "cautious_ally")
+             and _has_entry_matching_all(k, [
+                 ["protect", "shelter", "shield", "hide", "hiding", "hidden", "guard",
+                  "保护", "庇护", "藏匿", "掩护", "守护"],
+                 ["signal-sensitive", "signal sensitive", "sensitive to the signal",
+                  "hear the signal", "hears the signal", "who hear it", "hear the hum",
+                  "信号敏感", "对信号敏感", "能听到信号", "听得到信号", "听见信号"],
+             ])))},
     {"id": "TRACE-L2-03", "layer": 2,
      "description": "NEXUS has a secret facility in Sector 7 for 'special acquisitions'",
      "description_zh": "NEXUS在第七区设有秘密设施，用于'特殊征集'",
@@ -417,7 +466,18 @@ TRACE_CONDITIONS: list[dict] = [
          and (str(p.get("neural_implant", "")).lower() in ("resonating", "共鸣", "共鸣中", "共振")
               or _has_fact_or_rumor_about(k, [
                   "resonating", "resonance with the signal", "implant resonates",
+                  # Direct contact with the convergence itself. The decisive
+                  # climax runs record the ACT ("the convergence answered",
+                  # "holding the bridge open") rather than the implant's status
+                  # string, and this trace never fired on the best-played
+                  # consensual-bridge run (playtest wave 3, C1 / iter10_h2_en).
+                  "convergence answered", "convergence answers",
+                  "the resonance answers", "resonance is reachable",
+                  "holding the bridge", "holds the bridge", "the bridge holds",
+                  "first true bridge", "opened the threshold",
                   "共鸣", "共振", "信号共鸣", "植入体共鸣",
+                  "汇聚回应", "汇聚点回应", "维系桥梁", "桥梁维系",
+                  "真正的桥", "开启门槛", "门槛已开",
               ])))},
     {"id": "TRACE-L5-02", "layer": 5,
      "description": "The Severance didn't fully kill it — it became part of humanity",
@@ -485,6 +545,15 @@ del _tc, _lyr
 # NEXUS Alert rules
 # ---------------------------------------------------------------------------
 
+# ⚠ NOTE (playtest wave 3, C5a): ALERT_INCREASES is currently REFERENCE DATA —
+# no engine code imports or applies these values. NEXUS alert only moves when
+# the model volunteers a `nexus_alert_delta` (engine/tools.py update_world_state
+# on the graph path; the state_effects/update_world_state blocks in
+# engine/claude_code_engine.py on the bypass path), which is why investigation
+# runs sit at alert 0 for 20 turns. To make these causes live, the resolver
+# guidance/tool schema (engine/tools.py + the bypass engine's tool prompt) should
+# embed this cause→value table so the model applies canonical amounts, with
+# ALERT_CAUSE_LABELS below providing the player-facing "why" for meter notices.
 ALERT_INCREASES: dict[str, int] = {
     "failed_hack": 10,
     "caught_restricted": 15,
@@ -494,6 +563,37 @@ ALERT_INCREASES: dict[str, int] = {
     "npc_betrayal": 15,
     "entering_sector7_uncovered": 10,
     "attacking_nexus": 20,
+}
+
+# Player-facing, in-world reasons for each alert cause (EN + 中文). Additive:
+# for use by meter-change notices ("↑ NEXUS Alert — why") so the number always
+# comes with its cause. Phrased to reference only what the player just did —
+# never undiscovered content.
+ALERT_CAUSE_LABELS: dict[str, dict] = {
+    "failed_hack": {
+        "en": "a hack attempt failed and tripped an alarm",
+        "zh": "黑客入侵失败，触发了警报"},
+    "caught_restricted": {
+        "en": "you were caught in a restricted area",
+        "zh": "你在禁区被抓了个正着"},
+    "asking_about_nexus_publicly": {
+        "en": "asking about NEXUS in the open drew attention",
+        "zh": "公开打听NEXUS引来了注意"},
+    "stealing_nexus_data": {
+        "en": "stolen NEXUS data was flagged",
+        "zh": "窃取的NEXUS数据被标记了"},
+    "spotted_by_drone": {
+        "en": "a surveillance drone spotted you",
+        "zh": "监控无人机发现了你"},
+    "npc_betrayal": {
+        "en": "someone reported you",
+        "zh": "有人举报了你"},
+    "entering_sector7_uncovered": {
+        "en": "you entered Sector 7 without a cover",
+        "zh": "你未加掩护进入了第七区"},
+    "attacking_nexus": {
+        "en": "you attacked NEXUS assets",
+        "zh": "你袭击了NEXUS的目标"},
 }
 
 ALERT_THRESHOLDS: list[dict] = [
@@ -599,6 +699,84 @@ def integrity_warning_text(difficulty: str, current: int, maximum: int, language
 # Ending conditions
 # ---------------------------------------------------------------------------
 
+# Decisive consensual-merge climax language (playtest wave 3, C1). These phrases
+# only appear once the narration has ACTUALLY resolved a consensual bridge —
+# lore a player merely learns along the way ("ascension is one path",
+# "restoration requires consent") does not contain them. Drawn from the real
+# mislabeled run (logs/iter10_h2_en_playthrough.md, turns 43-47).
+CONSENSUAL_BRIDGE_KEYWORDS: list[str] = [
+    "consent both ways", "carry consent", "carries consent",
+    "consent flows both ways", "consent can move both ways", "consent moves both ways",
+    "heard without being used", "known without being consumed",
+    "hold the door open", "holds the door open", "held the door open",
+    "door only, never the destination", "nobody pulls", "no hand closing",
+    "chose to cross", "chooses to cross", "choose whether to cross",
+    "consensual merge", "consensual bridge", "mutual consent",
+    "the bridge holds", "holding the bridge", "remains singular",
+    "双向同意", "同意双向", "双向的同意", "同意在双向流动",
+    "被听见而不被利用", "被知晓而不被吞噬", "把门敞开", "敞开大门",
+    "无人强拉", "无人强迫", "自愿跨越", "自愿融合", "共识融合",
+    "桥仍维系", "桥梁维系", "维系着桥", "保持自我",
+]
+
+# FORCING-act language for the `ascension` bad ending. Deliberately excludes the
+# bare lore words "ascend"/"ascension"/"升华"/"飞升" — a deep player is EXPECTED
+# to learn those via TRACE-L5-06, and they mislabeled the best-played consensual
+# run as this forced-merge ending (playtest wave 3, C1). Only act-specific
+# force phrases qualify.
+_ASCENSION_FORCE_KEYWORDS: list[str] = [
+    "force-merge", "force merge", "forcibly merge", "forcibly merged", "forced merge",
+    "force the merge", "forced the merge", "forcing the merge",
+    "merge by force", "merged by force", "forced union", "force the union",
+    "forced ascension", "force ascension", "forcibly ascend",
+    "pulled them all in", "pull them all in", "dragged every mind",
+    "强行融合", "强制融合", "强行合并", "强制合并", "强行接入",
+    "强行升华", "强制升华", "强迫融合", "强行拉入", "强行吞并", "强行汇入",
+]
+
+# Affirmative-consent phrases that VETO a force reading when they appear in the
+# SAME knowledge write. Affirmative-only on purpose: negated forms ("without
+# consent", "took away their choice") describe a genuinely forced merge and must
+# NOT veto it, so bare "consent"/"choice" substrings are excluded.
+_ASCENSION_CONSENT_VETO: list[str] = [
+    "consented", "gave consent", "gives consent", "with consent",
+    "with their consent", "consensual", "chose to", "chooses to", "by choice",
+    "willingly", "voluntarily", "hold the door", "holds the door", "held the door",
+    "heard without being used", "consent both ways", "carry consent",
+    "同意了", "征得同意", "获得同意", "经过同意", "自愿", "出于选择",
+    "把门敞开", "敞开大门", "共识",
+]
+
+
+def _forced_merge_this_turn(knowledge: dict, player: dict, recency: int = 2) -> bool:
+    """True only when a FORCING act was recorded in a RECENT knowledge write that
+    itself carries no consent language (playtest wave 3, C1).
+
+    "Recent" = within `recency` turns of the current turn, using the ``turn``
+    stamp both engines put on knowledge entries (graph.py state_writer and the
+    bypass engine). Entries without a stamp can't be dated and are treated as
+    current so a real forcing act on an engine that forgot to stamp still ends
+    the run — the act-specific keywords keep the false-positive risk low.
+    """
+    turn = player.get("turn", 0)
+    force = [kw.lower() for kw in _ASCENSION_FORCE_KEYWORDS]
+    veto = [kw.lower() for kw in _ASCENSION_CONSENT_VETO]
+    for entry_type in _KNOWLEDGE_TYPES:
+        for entry in knowledge.get(entry_type, []):
+            text = _entry_text(entry)
+            if not any(kw in text for kw in force):
+                continue
+            if any(kw in text for kw in veto):
+                continue  # the same write records consent — not a forcing act
+            entry_turn = entry.get("turn")
+            try:
+                if entry_turn is None or int(entry_turn) >= int(turn) - recency:
+                    return True
+            except (TypeError, ValueError):
+                return True
+    return False
+
+
 ENDINGS: list[dict] = [
     {
         # GOOD endings are checked FIRST. They carry the strictest, deepest gates
@@ -615,13 +793,27 @@ ENDINGS: list[dict] = [
         "name_zh": "桥",
         "type": "good",
         "check": lambda t, w, p, k, n: (
-            _count_discovered_traces(t) >= 18
-            and _trace_discovered(t, "TRACE-L5-02")
-            and _has_evidence(k, [
-                "architect", "echo communion", "resonance chamber",
-                "建筑师", "设计者", "回声交融", "共鸣室", "共振室", "桥",
-            ])
-            and w.get("fragment_decay", {}).get("current", 0) < 25
+            (
+                _count_discovered_traces(t) >= 18
+                and _trace_discovered(t, "TRACE-L5-02")
+                and _has_evidence(k, [
+                    "architect", "echo communion", "resonance chamber",
+                    "建筑师", "设计者", "回声交融", "共鸣室", "共振室", "桥",
+                ])
+                and w.get("fragment_decay", {}).get("current", 0) < 25
+            )
+            # Consensual-climax convergence (playtest wave 3, C1): when the
+            # narration has DECISIVELY resolved a consensual bridge, the run must
+            # end here — not fall through to the forced-merge `ascension`. Gated
+            # to turn>=8 + the load-bearing convergence trace (TRACE-L5-01)
+            # instead of the brittle 18-trace/evidence wall the mislabeled
+            # iter10_h2_en run silently failed.
+            or (
+                p.get("turn", 1) >= 8
+                and _trace_discovered(t, "TRACE-L5-01")
+                and _has_fact_or_rumor_about(k, CONSENSUAL_BRIDGE_KEYWORDS)
+                and w.get("fragment_decay", {}).get("current", 0) < 25
+            )
         ),
     },
     {
@@ -676,16 +868,15 @@ ENDINGS: list[dict] = [
         "name": "Ascension",
         "name_zh": "升华",
         "type": "bad",
+        # FORCING-ACT specific (playtest wave 3, C1). The previous keyword gate
+        # still accepted the bare lore words "ascension"/"升华" that a deep player
+        # is EXPECTED to learn via TRACE-L5-06, mislabeling a perfectly-played
+        # consensual bridge as this forced-merge bad ending. Now requires a
+        # forcing act recorded THIS TURN (recent knowledge write) whose own text
+        # carries no consent language — see _forced_merge_this_turn.
         "check": lambda t, w, p, k, n: (
             _count_discovered_traces(t) >= 3
-            # FORCE-specific — bare "merge"/"融合"/"bridge" collide with the
-            # CONSENSUAL good bridge/symbiosis climax and mislabeled it as this bad
-            # forced-ascension ending. Require explicit force/ascend language.
-            and _has_fact_or_rumor_about(k, [
-                "force-merge", "force merge", "forcibly merge", "forced merge",
-                "force the merge", "ascend", "ascension",
-                "强行融合", "强制融合", "强行合并", "强制合并", "强行接入", "升华", "飞升",
-            ])
+            and _forced_merge_this_turn(k, p)
         ),
     },
     {
