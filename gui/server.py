@@ -182,6 +182,21 @@ class PlayerSession:
         # sections only — never held across disk/LLM work).
         self.cache_lock = threading.Lock()
 
+        # --- Per-session LLM/bypass snapshot ---
+        # (llm, is_cli_bypass) resolved atomically under _llm_lock at game start
+        # / provider change, so a concurrent reconfigure by another player can't
+        # leave this session's turn running the LLM with a mismatched bypass flag.
+        # The engine reads a process-global LLM (engine.graph._llm_instance), so
+        # this pair is re-snapshotted atomically at the head of each turn too.
+        self.is_cli_bypass: bool = False
+
+        # --- Reconnect resync (init) + state_delta bookkeeping ---
+        # Last narrative's suggested actions, stashed when sent so a reconnecting
+        # client can be re-fed them without waiting for the next input.
+        self.last_suggested_actions: list[dict] = []
+        # Last meter/trace/knowledge snapshot, for computing state_delta from→to.
+        self.meter_snapshot: dict | None = None
+
     @property
     def session_root(self) -> str:
         return os.path.join(SESSION_DIR, self.uid)
@@ -283,6 +298,25 @@ def _provider_changed(provider_cfg: dict) -> bool:
     return bool(provider_cfg.get("api_key"))  # a newly-entered key must take effect
 
 
+def _llm_snapshot() -> tuple:
+    """Atomically read (llm, is_cli_bypass) under ``_llm_lock``.
+
+    The engine reads a process-global LLM (``engine.graph._llm_instance``) and the
+    bypass decision hinges on the module-global ``_is_cli_bypass`` — both are set
+    together under ``_llm_lock`` in ``_configure_llm``. Reading them together under
+    the same lock guarantees a turn never sees the llm from one provider paired
+    with the bypass flag of another (which a concurrent reconfigure could produce).
+
+    Returns ``(llm_or_None, is_cli_bypass)``.
+    """
+    with _llm_lock:
+        try:
+            llm = get_llm()
+        except Exception:
+            llm = None
+        return llm, _is_cli_bypass
+
+
 def _ensure_llm(provider_cfg: dict | None = None, uid: str | None = None):
     """Ensure the shared LLM is built and reflects the requested provider.
 
@@ -300,6 +334,16 @@ def _ensure_llm(provider_cfg: dict | None = None, uid: str | None = None):
         return
     if not _llm_configured or _provider_changed(provider_cfg):
         _configure_llm(provider_cfg, persist=True, uid=uid)
+
+
+def _bind_session_llm(sess: PlayerSession) -> None:
+    """Resolve and store this session's (llm, is_cli_bypass) snapshot atomically.
+
+    Called right after ``_ensure_llm`` at game start / provider change so the
+    session's bypass flag matches the LLM it will run with. Re-snapshotted per
+    turn as well (belt-and-suspenders against a mid-turn reconfigure)."""
+    _, is_bypass = _llm_snapshot()
+    sess.is_cli_bypass = is_bypass
 
 
 # ---------------------------------------------------------------------------
@@ -345,6 +389,58 @@ def _get_session_data(sess: PlayerSession) -> dict:
         except (json.JSONDecodeError, OSError):
             pass
     return data
+
+
+async def _get_session_data_async(sess: PlayerSession) -> dict:
+    """Off-event-loop ``_get_session_data`` (reads + parses conversation.jsonl).
+
+    Per-session ordering: the only writers of a session's files are the turn's
+    ``_invoke`` (under ``sess.lock``) and the world-sim scheduler (also under
+    ``sess.lock``). Every call site here runs *after* the writing turn's
+    ``run_in_executor`` has already resolved (``_finish_turn`` / ``game_started``
+    are awaited only once the invoke future completes), so an executor read never
+    races a same-session write. Distinct sessions touch disjoint dirs."""
+    return await asyncio.to_thread(_get_session_data, sess)
+
+
+def _meter_snapshot_from_data(data: dict) -> dict:
+    """Extract the three end-gating meters + discovered-trace / knowledge sets from
+    a session-data blob (already spoiler-filtered by ``_get_session_data``).
+
+    Returns plain numbers + id/title sets so consecutive snapshots diff into a
+    ``state_delta``. Only *discovered* traces and *present* knowledge entries are
+    counted, so nothing undiscovered leaks."""
+    player = data.get("player") or {}
+    world = data.get("world_state") or {}
+    ig = player.get("integrity") or {}
+    integ = ig.get("current") if isinstance(ig, dict) else ig
+    alert = world.get("nexus_alert") or {}
+    decay = world.get("fragment_decay") or {}
+
+    trace_ids: set = set()
+    layers = ((data.get("traces") or {}).get("layers") or {})
+    if isinstance(layers, dict):
+        for layer in layers.values():
+            for tid, tr in ((layer or {}).get("traces") or {}).items():
+                if isinstance(tr, dict) and tr.get("status") and tr["status"] != "undiscovered":
+                    trace_ids.add(tid)
+
+    know_titles: set = set()
+    knowledge = data.get("knowledge") or {}
+    for bucket in ("facts", "rumors", "secrets", "entities"):
+        for entry in (knowledge.get(bucket) or []):
+            if isinstance(entry, dict):
+                title = entry.get("description") or entry.get("title") or entry.get("name")
+                if title:
+                    know_titles.add(str(title))
+
+    return {
+        "integrity": integ if isinstance(integ, (int, float)) else None,
+        "nexus_alert": alert.get("current") if isinstance(alert, dict) else None,
+        "fragment_decay": decay.get("current") if isinstance(decay, dict) else None,
+        "trace_ids": trace_ids,
+        "know_titles": know_titles,
+    }
 
 
 def _list_saves(saves_root: str) -> list[dict]:
@@ -679,7 +775,26 @@ async def websocket_endpoint(ws: WebSocket):
                     sess = PlayerSession(username, uid)
                 sess.ws = ws
                 _sessions_by_user[username] = sess
-                await ws.send_json(_status_payload(sess))
+                # Off-thread: _status_payload lists this user's sessions + saves
+                # from disk (dir scans + player.json reads). Distinct users touch
+                # disjoint namespaces, so no cross-session read/write race.
+                await ws.send_json(await asyncio.to_thread(_status_payload, sess))
+
+                # Reconnect resync: if this bound session already holds a live game
+                # (same-socket re-init, or a force-kick handover), push a fresh
+                # session_update + re-emit the last narrative's suggested actions so
+                # the reconnecting client repaints immediately without waiting for the
+                # next input. Additive — a client that ignores these loses nothing.
+                if sess.game_state is not None and sess.session_dir:
+                    await _safe_send(ws, {
+                        "type": "session_update",
+                        "session": await _get_session_data_async(sess),
+                    })
+                    if sess.last_suggested_actions:
+                        await _safe_send(ws, {
+                            "type": "suggested_actions",
+                            "suggested_actions": sess.last_suggested_actions,
+                        })
                 continue
 
             # -------------------- Logout --------------------
@@ -731,7 +846,7 @@ async def websocket_endpoint(ws: WebSocket):
                 if sess.session_dir:
                     await ws.send_json({
                         "type": "session_update",
-                        "session": _get_session_data(sess),
+                        "session": await _get_session_data_async(sess),
                     })
 
     except WebSocketDisconnect:
@@ -765,6 +880,7 @@ async def _handle_new_game(ws: WebSocket, sess: PlayerSession, msg: dict):
 
     try:
         _ensure_llm(provider_cfg, uid=sess.uid)
+        _bind_session_llm(sess)
     except Exception as e:
         await ws.send_json({"type": "error", "message": f"Failed to create LLM: {e}"})
         return
@@ -786,7 +902,8 @@ async def _handle_new_game(ws: WebSocket, sess: PlayerSession, msg: dict):
         return
     sess.session_dir = session_dir
 
-    create_new_session(
+    await asyncio.to_thread(
+        create_new_session,
         session_dir=sess.session_dir,
         name=config.get("name", "Unknown"),
         alias=config.get("alias", "Unknown"),
@@ -802,7 +919,7 @@ async def _handle_new_game(ws: WebSocket, sess: PlayerSession, msg: dict):
     sess.game_state = initial_state(sess.session_dir)
     _start_world_sim_scheduler(sess)
 
-    await ws.send_json({"type": "game_started", "session": _get_session_data(sess)})
+    await _send_game_started(sess, ws)
     await _run_opening(sess, ws, lang, config.get("background", "street_runner"))
 
 
@@ -820,6 +937,7 @@ async def _handle_resume(ws: WebSocket, sess: PlayerSession, msg: dict):
     provider_cfg = msg.get("provider") or load_provider_config(uid=sess.uid)
     try:
         _ensure_llm(provider_cfg, uid=sess.uid)
+        _bind_session_llm(sess)
     except Exception as e:
         await ws.send_json({"type": "error", "message": f"Failed to create LLM: {e}"})
         return
@@ -829,7 +947,7 @@ async def _handle_resume(ws: WebSocket, sess: PlayerSession, msg: dict):
     sess.game_state = initial_state(sess.session_dir)
     _start_world_sim_scheduler(sess)
 
-    await ws.send_json({"type": "game_started", "session": _get_session_data(sess)})
+    await _send_game_started(sess, ws)
     await _run_turn(sess, ws, mode="resume")
 
 
@@ -847,18 +965,19 @@ async def _handle_load_game(ws: WebSocket, sess: PlayerSession, msg: dict):
     provider_cfg = msg.get("provider") or load_provider_config(uid=sess.uid)
     try:
         _ensure_llm(provider_cfg, uid=sess.uid)
+        _bind_session_llm(sess)
     except Exception as e:
         await ws.send_json({"type": "error", "message": f"Failed to create LLM: {e}"})
         return
 
     os.makedirs(sess.session_root, exist_ok=True)
     sess.session_dir = os.path.join(sess.session_root, save_name)
-    copy_save_to_session(save_path, sess.session_dir)
+    await asyncio.to_thread(copy_save_to_session, save_path, sess.session_dir)
     sess.graph = _get_graph()
     sess.game_state = initial_state(sess.session_dir)
     _start_world_sim_scheduler(sess)
 
-    await ws.send_json({"type": "game_started", "session": _get_session_data(sess)})
+    await _send_game_started(sess, ws)
     await _run_turn(sess, ws, mode="resume")
 
 
@@ -871,7 +990,7 @@ async def _try_autoresume(ws: WebSocket, sess: PlayerSession, msg: dict) -> bool
     error even though their game was right there on disk. Returns True if a game
     is now live and the caller may proceed with the turn.
     """
-    sessions = _list_sessions(sess.session_root)
+    sessions = await asyncio.to_thread(_list_sessions, sess.session_root)
     if not sessions:
         return False
     name = sessions[0]["name"]  # most-recently-played (list is mtime-sorted)
@@ -880,13 +999,14 @@ async def _try_autoresume(ws: WebSocket, sess: PlayerSession, msg: dict) -> bool
         return False
     try:
         _ensure_llm(msg.get("provider") or load_provider_config(uid=sess.uid), uid=sess.uid)
+        _bind_session_llm(sess)
     except Exception:
         return False
     sess.session_dir = sess_path
     sess.graph = _get_graph()
     sess.game_state = initial_state(sess.session_dir)
     _start_world_sim_scheduler(sess)
-    await ws.send_json({"type": "game_started", "session": _get_session_data(sess)})
+    await _send_game_started(sess, ws)
     return True
 
 
@@ -938,46 +1058,62 @@ async def _handle_save_provider(ws: WebSocket, sess: PlayerSession | None, msg: 
     }
     if provider_cfg.get("base_url") and prov in ("local", "lmstudio", "openrouter"):
         cfg_to_save["base_url"] = provider_cfg["base_url"]
-    save_user_provider(uid, cfg_to_save)
 
+    # Snapshot the session dir once so a concurrent new_game reassignment can't
+    # split these writes across two dirs.
+    session_dir = sess.session_dir if sess else None
     lang = msg.get("language")
-    if lang:
-        if sess and sess.session_dir:
-            ss_path = os.path.join(sess.session_dir, "session_settings.json")
-            ss = _read_json(ss_path)
-            ss["language"] = lang
-            with open(ss_path, "w", encoding="utf-8") as f:
-                json.dump(ss, f, ensure_ascii=False, indent=2)
-        save_user_custom(uid, {"language": {"display": lang, "tui": lang}})
-
     api_key = provider_cfg.get("api_key")
-    if api_key and prov not in OAUTH_CLI_PROVIDERS and prov not in ("local", "lmstudio"):
-        env_var = _env_var_for_provider(prov)
-        if env_var:
-            os.environ[env_var] = api_key
-            save_env_key(env_var, api_key)
-
     langsmith_cfg = msg.get("langsmith")
-    if langsmith_cfg:
-        _apply_langsmith(langsmith_cfg)
-
     features = msg.get("features")
+
+    def _persist() -> None:
+        # All blocking disk writes for this settings save, off the event loop. Only
+        # touches per-user override files + this session's session_settings.json —
+        # never the turn loop's player/knowledge/etc files — so no same-session
+        # read/write race with an in-flight turn.
+        save_user_provider(uid, cfg_to_save)
+
+        if lang:
+            if session_dir:
+                ss_path = os.path.join(session_dir, "session_settings.json")
+                ss = _read_json(ss_path)
+                ss["language"] = lang
+                with open(ss_path, "w", encoding="utf-8") as f:
+                    json.dump(ss, f, ensure_ascii=False, indent=2)
+            save_user_custom(uid, {"language": {"display": lang, "tui": lang}})
+
+        if api_key and prov not in OAUTH_CLI_PROVIDERS and prov not in ("local", "lmstudio"):
+            env_var = _env_var_for_provider(prov)
+            if env_var:
+                os.environ[env_var] = api_key
+                save_env_key(env_var, api_key)
+
+        if langsmith_cfg:
+            _apply_langsmith(langsmith_cfg)
+
+        if isinstance(features, dict):
+            save_user_custom(uid, {"features": features})
+            if session_dir:
+                ss_path = os.path.join(session_dir, "session_settings.json")
+                ss = _read_json(ss_path)
+                ss.setdefault("features", {})
+                ss["features"].update(features)
+                with open(ss_path, "w", encoding="utf-8") as f:
+                    json.dump(ss, f, ensure_ascii=False, indent=2)
+
+    await asyncio.to_thread(_persist)
+
+    # _reset_prediction cancels an asyncio task, so it must run on the event loop
+    # (not inside the executor thread) once the feature writes have landed.
     if isinstance(features, dict):
-        save_user_custom(uid, {"features": features})
-        if sess and sess.session_dir:
-            ss_path = os.path.join(sess.session_dir, "session_settings.json")
-            ss = _read_json(ss_path)
-            ss.setdefault("features", {})
-            ss["features"].update(features)
-            with open(ss_path, "w", encoding="utf-8") as f:
-                json.dump(ss, f, ensure_ascii=False, indent=2)
         _reset_prediction(sess)
 
     await ws.send_json({
         "type": "provider_saved",
         "provider": cfg_to_save,
         "langsmith": _get_langsmith_status(),
-        "features": read_features(sess.session_dir if sess else None),
+        "features": await asyncio.to_thread(read_features, session_dir),
     })
 
 
@@ -1014,6 +1150,10 @@ async def companion_endpoint(ws: WebSocket):
             token = msg.get("token")
             info = auth.resolve_token(token) if token else None
             sess = _sessions_by_user.get(info["username"]) if info else None
+            # Snapshot the session dir ONCE per request into a local. A concurrent
+            # new_game on the /ws socket can rmtree+reassign sess.session_dir mid-
+            # request; capturing it here (and passing the local, never sess.*, into
+            # the executor lambda below) pins this reply to one consistent path.
             session_dir = sess.session_dir if sess else None
             if not session_dir:
                 await ws.send_json({"type": "companion_reply", "error": True, "code": "no_session"})
@@ -1098,7 +1238,7 @@ def _session_language(session_dir: str | None) -> str:
 def _maybe_schedule_prediction(sess: PlayerSession, result: dict, ws: WebSocket | None = None) -> None:
     """If predict_outcome is on, speculatively pre-compute each suggested action."""
     session_dir = sess.session_dir
-    if not (_is_cli_bypass and session_dir) or result.get("game_over"):
+    if not (sess.is_cli_bypass and session_dir) or result.get("game_over"):
         return
     actions = [a.get("text", "") for a in (result.get("suggested_actions") or []) if a.get("text")]
     if not actions or not read_features(session_dir)["predict_outcome"]:
@@ -1187,7 +1327,7 @@ def _try_serve_cached(sess: PlayerSession, text: str) -> dict | None:
     promotes that snapshot to be the live session.
     """
     session_dir = sess.session_dir
-    if not (_is_cli_bypass and session_dir):
+    if not (sess.is_cli_bypass and session_dir):
         return None
     if not read_features(session_dir)["predict_outcome"]:
         return None
@@ -1239,6 +1379,37 @@ async def _safe_send(ws: WebSocket, payload: dict) -> bool:
         return False
 
 
+async def _send_game_started(sess: PlayerSession, ws: WebSocket) -> None:
+    """Send the ``game_started`` blob (session data read off-thread) and seed the
+    meter snapshot so the first turn's ``state_delta`` diffs from a real baseline."""
+    data = await _get_session_data_async(sess)
+    sess.meter_snapshot = _meter_snapshot_from_data(data)
+    await ws.send_json({"type": "game_started", "session": data})
+
+
+def _build_state_delta(prev: dict | None, cur: dict) -> dict | None:
+    """Repackage the meter/trace/knowledge diff between two snapshots as numbers.
+
+    Additive companion to ``session_update``; old clients ignore the ``state_delta``
+    type. Returns None when there is no prior snapshot to diff against."""
+    if prev is None:
+        return None
+
+    def _pair(key):
+        return {"from": prev.get(key), "to": cur.get(key)}
+
+    traces_added = sorted((cur.get("trace_ids") or set()) - (prev.get("trace_ids") or set()))
+    knowledge_added = sorted((cur.get("know_titles") or set()) - (prev.get("know_titles") or set()))
+    return {
+        "type": "state_delta",
+        "integrity": _pair("integrity"),
+        "nexus_alert": _pair("nexus_alert"),
+        "fragment_decay": _pair("fragment_decay"),
+        "traces_added": traces_added,
+        "knowledge_added": knowledge_added,
+    }
+
+
 async def _finish_turn(sess: PlayerSession, ws: WebSocket, result: dict, mode: str,
                        turn_start: float) -> None:
     """Send a completed turn's result to the client and schedule follow-ups."""
@@ -1270,6 +1441,11 @@ async def _finish_turn(sess: PlayerSession, ws: WebSocket, result: dict, mode: s
     if elapsed is None:
         elapsed = round(_time.time() - turn_start, 1)
 
+    # Stash the actions actually shown so a reconnecting client (init resync) can
+    # repaint the quick-action buttons without waiting for the next input.
+    shown_actions = [] if game_over else (result.get("suggested_actions") or [])
+    sess.last_suggested_actions = shown_actions
+
     if not await _safe_send(ws, {
         "type": "narrative",
         "text": narrative,
@@ -1277,7 +1453,7 @@ async def _finish_turn(sess: PlayerSession, ws: WebSocket, result: dict, mode: s
         "ending": ending,
         "role": msg_role,
         "elapsed_seconds": elapsed,
-        "suggested_actions": [] if game_over else (result.get("suggested_actions") or []),
+        "suggested_actions": shown_actions,
         "usage": {
             "input": turn_usage.get("input_tokens", 0),
             "output": turn_usage.get("output_tokens", 0),
@@ -1309,10 +1485,21 @@ async def _finish_turn(sess: PlayerSession, ws: WebSocket, result: dict, mode: s
         if note:
             await _safe_send(ws, {"type": "system_notice", "text": note})
 
+    session_data = await _get_session_data_async(sess)
     await _safe_send(ws, {
         "type": "session_update",
-        "session": _get_session_data(sess),
+        "session": session_data,
     })
+
+    # state_delta: repackage the meter/trace/knowledge move as numbers, alongside
+    # session_update. Additive — old clients ignore the type. The snapshot always
+    # advances (even when the delta is suppressed) so the next turn diffs cleanly.
+    cur_snapshot = _meter_snapshot_from_data(session_data)
+    if mode != "resume":
+        delta = _build_state_delta(sess.meter_snapshot, cur_snapshot)
+        if delta is not None:
+            await _safe_send(ws, delta)
+    sess.meter_snapshot = cur_snapshot
 
     # Auto-save on normal play turns (every N turns; pruned to a cap), per user.
     if mode == "play" and not game_over and not result.get("is_warning") and sess.session_dir:
@@ -1377,17 +1564,17 @@ async def _run_turn(sess: PlayerSession, ws: WebSocket, player_input: str | None
     def _invoke():
         with sess.lock:
             # --- CLI-bypass: single LLM call, pure Python post-processing ---
-            # Re-check from the live LLM instance to avoid a stale flag.
-            from engine.graph import get_llm as _get_current_llm
-            try:
-                _current_llm = _get_current_llm()
-            except Exception:
-                _current_llm = None
+            # Snapshot (llm, is_cli_bypass) atomically so a concurrent provider
+            # reconfigure by another player can't pair this turn's LLM with a
+            # mismatched bypass flag. Refresh the session's flag from the same
+            # atomic read (the engine reads a process-global LLM).
+            _current_llm, _bypass = _llm_snapshot()
+            sess.is_cli_bypass = _bypass
             # The bypass engine uses llm._call_claude when present (CLI providers)
             # and falls back to llm.invoke(system, user) otherwise (e.g. openrouter),
             # so it no longer requires _call_claude — only that this provider is
             # routed to the bypass.
-            _use_bypass = bool(_is_cli_bypass and sess.session_dir and _current_llm)
+            _use_bypass = bool(_bypass and sess.session_dir and _current_llm)
             if _use_bypass:
                 return cc_run_turn(
                     session_dir=sess.session_dir,
