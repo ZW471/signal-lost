@@ -3630,6 +3630,24 @@ html[lang="zh"] .status-value.truncate { max-width: 280px; }
 html[lang="zh"] .account-label { max-width: 240px; }
 
 /* ================================================================
+   STATE-DELTA METER FLASH (wave 3)
+   A brief neon pulse on a HUD meter when a state_delta reports its value
+   moved. session_update repaints the panels but can't tell the player WHICH
+   meter changed; this highlight does. JS only adds .meter-flash when
+   prefersReducedMotion is false, and the reduced-motion block below also
+   neutralizes the animation, so it never fires for reduce-motion users.
+   ================================================================ */
+@keyframes meter-flash-pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(0, 255, 245, 0); }
+  25%  { box-shadow: 0 0 10px 2px var(--cyan); }
+  100% { box-shadow: 0 0 0 0 rgba(0, 255, 245, 0); }
+}
+.meter-flash {
+  animation: meter-flash-pulse 0.9s ease-out 1;
+  border-radius: var(--r-2);
+}
+
+/* ================================================================
    REDUCED MOTION
    Honor the OS/browser "reduce motion" preference: kill the ambient
    infinite animations and the decorative CRT flicker layers. Default

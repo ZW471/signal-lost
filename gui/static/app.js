@@ -316,8 +316,6 @@ const LABELS = {
     verb_look: 'look', verb_go: 'go', verb_talk: 'talk', verb_examine: 'examine',
     verb_use: 'use', verb_verify: 'verify', verb_hack: 'hack', verb_hide: 'hide',
     shortcuts_title: '// SHORTCUTS',
-    shortcut_actions: 'Trigger suggested action',
-    shortcut_traces: 'Open TRACE panel',
     shortcut_panels: 'Switch info panel',
     shortcut_focus_input: 'Focus command input',
     shortcut_save: 'Save game',
@@ -512,8 +510,6 @@ const LABELS = {
     verb_look: '查看', verb_go: '前往', verb_talk: '交谈', verb_examine: '检查',
     verb_use: '使用', verb_verify: '核实', verb_hack: '入侵', verb_hide: '躲藏',
     shortcuts_title: '// 快捷键',
-    shortcut_actions: '触发推荐行动',
-    shortcut_traces: '打开痕迹面板',
     shortcut_panels: '切换信息面板',
     shortcut_focus_input: '聚焦指令输入框',
     shortcut_save: '保存游戏',
@@ -1771,7 +1767,10 @@ function handleServerMessage(msg) {
     case 'game_started':
       switchScreen('gameScreen');
       MusicEngine.preloadAll();
-      resetCompanion();  // fresh session → wipe any prior aside transcript
+      // Only a NEW game wipes the session-scoped aside. Resume / load / autoresume
+      // (mode==='resume') keep the just-restored transcript so reloading the page
+      // and then resuming the SAME session doesn't erase the side-channel.
+      if (msg.mode !== 'resume') resetCompanion();
       if (msg.session) updateAllPanels(msg.session);
       if (pendingTutorial) { pendingTutorial = false; setTimeout(startTutorial, 600); }
       break;
@@ -1810,6 +1809,20 @@ function handleServerMessage(msg) {
 
     case 'session_update':
       if (msg.session) updateAllPanels(msg.session);
+      break;
+
+    case 'suggested_actions':
+      // Reconnect resync: the server re-emits the last narrative's suggested
+      // actions as a standalone frame so the chips repaint immediately without
+      // waiting for the next full turn. Additive to the narrative render path.
+      renderSuggestedActions(msg.suggested_actions || []);
+      break;
+
+    case 'state_delta':
+      // Additive to session_update (which already repaints the panels): a
+      // state_delta reports WHICH end-gating meters moved this turn, so we
+      // pulse just those HUD gauges. Gated behind prefersReducedMotion.
+      flashChangedMeters(msg);
       break;
 
     case 'prediction_ready':
@@ -2573,6 +2586,30 @@ function addTypingMessage(text, role = 'agent', usage = null, elapsedSeconds = n
 // renderSuggestedActions then prunes the set to just the incoming action texts,
 // dropping any stale ready-flags from a prior turn while keeping fresh ones.
 let _readyPredictions = new Set();
+
+/** Pulse the HUD gauges whose value moved this turn, per a state_delta frame.
+ *  session_update already repainted the numbers; this only draws the eye to
+ *  WHICH end-gating meter changed. No-op under prefersReducedMotion. */
+function flashChangedMeters(delta) {
+  if (prefersReducedMotion || !delta) return;
+  const map = [
+    ['integrity', 'statIntegrityPips'],
+    ['nexus_alert', 'statNexusGauge'],
+    ['fragment_decay', 'statDecayGauge'],
+  ];
+  for (const [key, id] of map) {
+    const pair = delta[key];
+    if (!pair || pair.from === pair.to) continue;
+    const el = document.getElementById(id);
+    if (!el) continue;
+    // Restart the animation cleanly if it's already mid-pulse.
+    el.classList.remove('meter-flash');
+    void el.offsetWidth;                       // force reflow → replay
+    el.classList.add('meter-flash');
+    el.addEventListener('animationend', () => el.classList.remove('meter-flash'),
+      { once: true });
+  }
+}
 
 /** Tear down the on-screen chips but KEEP any prediction_ready arrivals, so a
  *  prediction that landed during the clear→render gap still lights its chip. */
@@ -4694,7 +4731,7 @@ function _topDialog() {
 // bindings that already exist — it introduces none.
 // ================================================================
 const _SHORTCUT_ROWS = [
-  { keys: ['1', '–', '9'], label: 'shortcut_actions' },
+  { keys: ['1', '–', '9'], label: 'shortcut_panels' },
   { keys: ['t'], label: 'shortcut_focus_input' },
   { keys: ['↑', '↓'], label: 'shortcut_history' },
   { keys: ['Tab'], label: 'shortcut_complete' },

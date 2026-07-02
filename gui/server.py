@@ -427,7 +427,7 @@ def _meter_snapshot_from_data(data: dict) -> dict:
 
     know_titles: set = set()
     knowledge = data.get("knowledge") or {}
-    for bucket in ("facts", "rumors", "secrets", "entities"):
+    for bucket in ("facts", "rumors", "evidence", "theories", "connections"):
         for entry in (knowledge.get(bucket) or []):
             if isinstance(entry, dict):
                 title = entry.get("description") or entry.get("title") or entry.get("name")
@@ -947,7 +947,7 @@ async def _handle_resume(ws: WebSocket, sess: PlayerSession, msg: dict):
     sess.game_state = initial_state(sess.session_dir)
     _start_world_sim_scheduler(sess)
 
-    await _send_game_started(sess, ws)
+    await _send_game_started(sess, ws, mode="resume")
     await _run_turn(sess, ws, mode="resume")
 
 
@@ -977,7 +977,7 @@ async def _handle_load_game(ws: WebSocket, sess: PlayerSession, msg: dict):
     sess.game_state = initial_state(sess.session_dir)
     _start_world_sim_scheduler(sess)
 
-    await _send_game_started(sess, ws)
+    await _send_game_started(sess, ws, mode="resume")
     await _run_turn(sess, ws, mode="resume")
 
 
@@ -1006,7 +1006,7 @@ async def _try_autoresume(ws: WebSocket, sess: PlayerSession, msg: dict) -> bool
     sess.graph = _get_graph()
     sess.game_state = initial_state(sess.session_dir)
     _start_world_sim_scheduler(sess)
-    await _send_game_started(sess, ws)
+    await _send_game_started(sess, ws, mode="resume")
     return True
 
 
@@ -1379,12 +1379,17 @@ async def _safe_send(ws: WebSocket, payload: dict) -> bool:
         return False
 
 
-async def _send_game_started(sess: PlayerSession, ws: WebSocket) -> None:
+async def _send_game_started(sess: PlayerSession, ws: WebSocket, mode: str = "new") -> None:
     """Send the ``game_started`` blob (session data read off-thread) and seed the
-    meter snapshot so the first turn's ``state_delta`` diffs from a real baseline."""
+    meter snapshot so the first turn's ``state_delta`` diffs from a real baseline.
+
+    ``mode`` is ``"new"`` for a fresh game and ``"resume"`` for resume / load /
+    autoresume. The client uses it to decide whether to wipe the session-scoped
+    companion transcript (only on ``"new"``); resuming the SAME session must keep
+    the just-restored aside. Additive — old clients ignore the extra field."""
     data = await _get_session_data_async(sess)
     sess.meter_snapshot = _meter_snapshot_from_data(data)
-    await ws.send_json({"type": "game_started", "session": data})
+    await ws.send_json({"type": "game_started", "session": data, "mode": mode})
 
 
 def _build_state_delta(prev: dict | None, cur: dict) -> dict | None:
