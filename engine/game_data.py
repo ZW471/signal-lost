@@ -111,20 +111,58 @@ def _has_evidence(knowledge: dict, keywords: list[str]) -> bool:
     return False
 
 
-def _has_entry_matching_all(knowledge: dict, keyword_groups: list[list[str]]) -> bool:
-    """True if a SINGLE knowledge entry matches at least one keyword from EVERY
-    group.
+# TRACE-L2-02 route (b): who-protects-whom matching (wave 4 review). The old
+# bag-of-words co-occurrence ("hide"/"hidden"/"guard" anywhere + a Signal-
+# sensitive phrase anywhere) fired on ordinary self-hiding notes and even on
+# NEXUS-threat descriptions ("NEXUS vans hunt the ones who hear the hum;
+# nowhere left to hide"), leaking the anti-spoiler-gated faction. The verbs are
+# now strong agentive protect-verbs only, and the verb must GOVERN the
+# Signal-sensitive phrase (appear shortly before it in the same entry).
+_PROTECT_VERBS: list[str] = [
+    "protect", "shelter", "shield", "harbor", "harbour",
+    "保护", "庇护", "守护", "收留",
+]
+_SIGNAL_SENSITIVE_PHRASES: list[str] = [
+    "signal-sensitive", "signal sensitive", "sensitive to the signal",
+    "hear the signal", "hears the signal", "who hear it", "hear the hum",
+    "信号敏感", "对信号敏感", "能听到信号", "听得到信号", "听见信号",
+]
 
-    Unlike chaining ``_has_fact_or_rumor_about`` calls (which can combine
-    keywords from unrelated entries), this requires the co-occurrence inside one
-    recorded write — e.g. a rumor that someone "protects the Signal-sensitive"
-    must carry both the protecting and the Signal-sensitive halves itself."""
-    groups = [[kw.lower() for kw in g] for g in keyword_groups]
+
+def _protects_signal_sensitives(knowledge: dict) -> bool:
+    """True when a SINGLE knowledge entry records a third party protecting the
+    Signal-sensitive — i.e. a protect-verb that grammatically governs the
+    Signal-sensitive phrase (verb first, phrase within a short window after it).
+
+    Two subject exclusions keep the common inversions from firing the trace:
+    the player protecting THEMSELVES ("protect myself because I hear the
+    signal") and NEXUS as the protector ("NEXUS protects its facility from
+    those who hear it")."""
     for entry_type in _KNOWLEDGE_TYPES:
         for entry in knowledge.get(entry_type, []):
             text = _entry_text(entry)
-            if all(any(kw in text for kw in g) for g in groups):
-                return True
+            for verb in _PROTECT_VERBS:
+                start = 0
+                while True:
+                    i = text.find(verb, start)
+                    if i < 0:
+                        break
+                    start = i + 1
+                    # NEXUS-as-protector inversion — not the faction reveal.
+                    if text[max(0, i - 12):i].rstrip().endswith("nexus"):
+                        continue
+                    # Self-protection ("protect myself / 保护自己") — the object
+                    # right after the verb is the player, not the sensitives.
+                    head = text[i + len(verb): i + len(verb) + 12]
+                    if any(obj in " " + head for obj in
+                           (" myself", " me ", " me,", " me.", " me;", "自己", "我")):
+                        continue
+                    # The protect verb must govern the phrase: within ~80 chars
+                    # AFTER the verb, same entry.
+                    window = text[i: i + len(verb) + 80]
+                    if any(ph in window for ph in
+                           (p.lower() for p in _SIGNAL_SENSITIVE_PHRASES)):
+                        return True
     return False
 
 
@@ -280,18 +318,14 @@ TRACE_CONDITIONS: list[dict] = [
      # when the player clearly learned the group exists. Route (b): once ANY
      # NPC trusts the player (>= cautious_ally) and a single recorded rumor/fact
      # says someone protects the Signal-sensitive, the ally may name them — the
-     # trace fires and the reveal becomes narratable.
+     # trace fires and the reveal becomes narratable. The protect-verb must
+     # GOVERN the Signal-sensitive phrase (wave 4 review): loose bag-of-words
+     # co-occurrence fired on self-hiding notes and NEXUS-threat descriptions.
      "check": lambda k, t, n, p, w: (
          (_npc_trust_at_least(n, "mira", "cautious_ally")
           and _has_fact_or_rumor_about(k, ["listener", "聆听者"]))
          or (_any_npc_trust_at_least(n, "cautious_ally")
-             and _has_entry_matching_all(k, [
-                 ["protect", "shelter", "shield", "hide", "hiding", "hidden", "guard",
-                  "保护", "庇护", "藏匿", "掩护", "守护"],
-                 ["signal-sensitive", "signal sensitive", "sensitive to the signal",
-                  "hear the signal", "hears the signal", "who hear it", "hear the hum",
-                  "信号敏感", "对信号敏感", "能听到信号", "听得到信号", "听见信号"],
-             ])))},
+             and _protects_signal_sensitives(k)))},
     {"id": "TRACE-L2-03", "layer": 2,
      "description": "NEXUS has a secret facility in Sector 7 for 'special acquisitions'",
      "description_zh": "NEXUS在第七区设有秘密设施，用于'特殊征集'",
@@ -735,17 +769,73 @@ _ASCENSION_FORCE_KEYWORDS: list[str] = [
 ]
 
 # Affirmative-consent phrases that VETO a force reading when they appear in the
-# SAME knowledge write. Affirmative-only on purpose: negated forms ("without
-# consent", "took away their choice") describe a genuinely forced merge and must
-# NOT veto it, so bare "consent"/"choice" substrings are excluded.
+# SAME knowledge write. Two rules keep contrastive/negated consent in a
+# genuinely FORCED climax from suppressing the ending (wave 4 review):
+#   1. Every phrase attaches consent to the merge/crossing act itself. Broad
+#      standalone words ("willingly", "voluntarily", "consensual", "by choice",
+#      "chose to") are excluded — they collided with contrastive uses like
+#      "the core, which had willingly waited, was pulled apart" or
+#      "rejected the consensual path and forced the merge".
+#   2. A phrase preceded by a nearby negation/rejection marker does not veto
+#      (see _affirmative_consent_recorded / _CONSENT_NEGATION_MARKERS).
 _ASCENSION_CONSENT_VETO: list[str] = [
-    "consented", "gave consent", "gives consent", "with consent",
-    "with their consent", "consensual", "chose to", "chooses to", "by choice",
-    "willingly", "voluntarily", "hold the door", "holds the door", "held the door",
-    "heard without being used", "consent both ways", "carry consent",
-    "同意了", "征得同意", "获得同意", "经过同意", "自愿", "出于选择",
-    "把门敞开", "敞开大门", "共识",
+    # Decisive consensual-climax phrases — unambiguous on their own.
+    "consensual merge", "consensual bridge", "consensual union", "consensual crossing",
+    "stayed consensual", "remained consensual", "mutual consent",
+    "consent both ways", "carry consent", "carries consent",
+    "hold the door", "holds the door", "held the door",
+    "heard without being used",
+    # Consent grammatically attached to the merge / crossing / joining act.
+    "consented to the merge", "consents to the merge", "consented to merge",
+    "consented to cross", "gave consent to the merge",
+    "merge with consent", "merged with consent", "merge with their consent",
+    "willingly merged", "merged willingly", "willingly crossed", "crossed willingly",
+    "willingly joined", "joined willingly",
+    "voluntarily merged", "merged voluntarily", "voluntarily crossed", "crossed voluntarily",
+    "chose to merge", "chooses to merge", "chose the merge",
+    "chose to cross", "chooses to cross", "chose to join", "chooses to join",
+    "merged by choice", "crossed by choice",
+    "同意融合", "同意合并", "同意跨越", "征得同意", "获得同意", "经过同意",
+    "自愿融合", "自愿合并", "自愿跨越", "自愿汇入", "选择融合", "选择跨越",
+    "共识融合", "把门敞开", "敞开大门",
 ]
+
+# Negation/rejection markers that, appearing just BEFORE a consent phrase,
+# flip it to a forced-merge description ("never consented to the merge",
+# "refused... no spark chose to cross", "未征得同意"). Checked over a short
+# lookbehind window so consent affirmed elsewhere in the write still vetoes.
+_CONSENT_NEGATION_MARKERS: list[str] = [
+    "never", "not ", "n't", "without", "refus", "reject", "spurn", "denie", "deny",
+    "no one", "nobody", "no mind", "no spark", "instead of", "rather than",
+    "could have", "would have",
+    "拒绝", "未征得", "未经", "未获", "并未", "并非", "而非", "没有", "没能",
+    "从未", "无人", "不曾", "不再", "放弃", "本可以", "本能够",
+]
+
+# Single-character Chinese negators — only meaningful when directly adjacent to
+# the consent phrase ("未征得同意", "没同意"). Checked over a much shorter
+# window than the markers above so an incidental "未来"/"不久" earlier in the
+# sentence can't flip an affirmed consent phrase.
+_CONSENT_NEGATION_NEAR: list[str] = ["未", "没", "不", "无", "别", "拒"]
+
+
+def _affirmative_consent_recorded(text: str) -> bool:
+    """True when *text* (lowercased) records AFFIRMATIVE consent attached to the
+    merge — i.e. a consent-veto phrase not negated/rejected right before it."""
+    markers = [m.lower() for m in _CONSENT_NEGATION_MARKERS]
+    for phrase in (kw.lower() for kw in _ASCENSION_CONSENT_VETO):
+        start = 0
+        while True:
+            i = text.find(phrase, start)
+            if i < 0:
+                break
+            start = i + 1
+            lookbehind = text[max(0, i - 28):i]
+            near = text[max(0, i - 4):i]
+            if (not any(m in lookbehind for m in markers)
+                    and not any(m in near for m in _CONSENT_NEGATION_NEAR)):
+                return True
+    return False
 
 
 def _forced_merge_this_turn(knowledge: dict, player: dict, recency: int = 2) -> bool:
@@ -760,14 +850,13 @@ def _forced_merge_this_turn(knowledge: dict, player: dict, recency: int = 2) -> 
     """
     turn = player.get("turn", 0)
     force = [kw.lower() for kw in _ASCENSION_FORCE_KEYWORDS]
-    veto = [kw.lower() for kw in _ASCENSION_CONSENT_VETO]
     for entry_type in _KNOWLEDGE_TYPES:
         for entry in knowledge.get(entry_type, []):
             text = _entry_text(entry)
             if not any(kw in text for kw in force):
                 continue
-            if any(kw in text for kw in veto):
-                continue  # the same write records consent — not a forcing act
+            if _affirmative_consent_recorded(text):
+                continue  # the same write records AFFIRMED consent — not a forcing act
             entry_turn = entry.get("turn")
             try:
                 if entry_turn is None or int(entry_turn) >= int(turn) - recency:

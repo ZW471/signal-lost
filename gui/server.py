@@ -1290,7 +1290,14 @@ async def _predict_outcomes(sess: PlayerSession, action_texts: list[str], gen: i
                 return None
             work_dir = action_cache.prepare_action_dir(session_dir, base, text)
             res = cc_run_turn(session_dir=work_dir, player_input=text, mode="play")
-            return work_dir, res
+            # Capture the speculative turn's roll beats + meter reasons NOW: they
+            # were buffered under work_dir, which _finish_turn never drains (it
+            # drains the LIVE session dir). Stashing them in the cache entry both
+            # surfaces them when the prediction is served (_try_serve_cached
+            # requeues them onto the live dir) and stops the module-level buffers
+            # leaking work_dir keys for predictions that are never clicked.
+            from engine.tools import drain_rolls, drain_reasons
+            return work_dir, res, drain_rolls(work_dir), drain_reasons(work_dir)
 
         async def _one(text):
             try:
@@ -1300,12 +1307,13 @@ async def _predict_outcomes(sess: PlayerSession, action_texts: list[str], gen: i
                 logging.getLogger(__name__).warning("prediction failed for %r: %s", text, e)
                 return
             if outcome and gen == sess.predict_generation:
-                work_dir, res = outcome
+                work_dir, res, rolls, reasons = outcome
                 stored = False
                 with sess.cache_lock:
                     if gen == sess.predict_generation:
                         sess.action_cache[action_cache.hash_action(text)] = {
                             "text": text, "state_dir": work_dir, "result": res, "ready": True,
+                            "rolls": rolls, "reasons": reasons,
                         }
                         stored = True
                 if stored and ws is not None:
@@ -1344,6 +1352,13 @@ def _try_serve_cached(sess: PlayerSession, text: str) -> dict | None:
         action_cache.promote(session_dir, entry["state_dir"])
     with sess.cache_lock:
         sess.predict_generation += 1
+    # The speculative turn's roll beats + meter reasons were drained from the
+    # work dir at speculate time (see _spec). Requeue them onto the LIVE session
+    # dir so _finish_turn's normal drain surfaces them — otherwise the wave-4
+    # roll chip and meter-why silently no-op on every prediction hit.
+    from engine.tools import requeue_rolls, requeue_reasons
+    requeue_rolls(session_dir, entry.get("rolls"))
+    requeue_reasons(session_dir, entry.get("reasons"))
     return entry["result"]
 
 
@@ -1576,10 +1591,17 @@ async def _finish_turn(sess: PlayerSession, ws: WebSocket, result: dict, mode: s
 
 # Substrings that mark a transient CLI/network stream drop worth retrying (as
 # opposed to a content/auth/logic error, which won't get better on a retry).
+# CONNECTION-phase errors only: the bare "timeout"/"timed out" markers are
+# deliberately absent (wave 4 review) — they matched subprocess.TimeoutExpired
+# from a CLI turn that already burned its full multi-minute budget (plus the
+# wrapper's own internal retries), so the server re-ran it up to 3x for a
+# worst case of ~45 minutes of dead spinner on a merely slow/hung model.
+# "read timed out" stays: it is a socket read dropping mid-stream, not a
+# completed wait.
 _TRANSIENT_CLI_MARKERS = (
     "tls handshake eof", "handshake eof", "connection reset", "connection refused",
     "connection aborted", "connection closed", "broken pipe", "reconnecting",
-    "timed out", "timeout", "temporarily unavailable", "eof occurred",
+    "temporarily unavailable", "eof occurred",
     "stream closed", "stream disconnected", "network is unreachable",
     "read timed out", "remote end closed",
 )
@@ -1699,7 +1721,8 @@ async def _run_turn(sess: PlayerSession, ws: WebSocket, player_input: str | None
         # except below surfaces an in-fiction error and the client re-enables input
         # — instead of leaving the player stuck on a dead spinner forever.
         #
-        # Transient CLI stream drops (tls handshake eof, connection reset, timeout)
+        # Transient CLI stream drops (tls handshake eof, connection reset — NOT a
+        # completed multi-minute model timeout, see _TRANSIENT_CLI_MARKERS)
         # shouldn't nuke a turn on the first flake. Retry the invoke up to 3 attempts
         # with a short backoff — but ONLY on the CLI-bypass path, where cc_run_turn
         # reads state from disk and is safe to re-run. The LangGraph path appends the

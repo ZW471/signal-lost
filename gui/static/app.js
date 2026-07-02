@@ -2386,17 +2386,26 @@ function renderRollChips(rolls) {
     const outcome = success ? L('roll_success') : L('roll_failure');
     const glyph = success ? '▲' : '▼';   // ▲ rising / ▼ falling
 
+    // Pass/fail-only mechanic beats (cipher decrypts, Signal scans) carry no
+    // numeric check — the engine records them with target:0, result:0 — so the
+    // "result vs target" row would render a meaningless "0 vs 0". Suppress it;
+    // the label + SUCCESS/FAILURE tag are the real signal for those beats.
+    const hasNums = !(target === 0 && result === 0);
+
     // Header: skill label + outcome tag. Body: result vs target (result counts up).
     let inner =
       '<div class="roll-chip-head">' +
         '<span class="roll-chip-skill">' + esc(label) + '</span>' +
         '<span class="roll-chip-outcome">' + esc(glyph + ' ' + outcome) + '</span>' +
-      '</div>' +
-      '<div class="roll-chip-nums">' +
-        '<span class="roll-chip-result">0</span>' +
-        '<span class="roll-chip-vs">' + esc(L('roll_vs')) + '</span>' +
-        '<span class="roll-chip-target">' + esc(String(target)) + '</span>' +
       '</div>';
+    if (hasNums) {
+      inner +=
+        '<div class="roll-chip-nums">' +
+          '<span class="roll-chip-result">0</span>' +
+          '<span class="roll-chip-vs">' + esc(L('roll_vs')) + '</span>' +
+          '<span class="roll-chip-target">' + esc(String(target)) + '</span>' +
+        '</div>';
+    }
 
     // Expandable modifier breakdown — e.g. "Lockpick +15". Collapsed by default;
     // a click toggles it. Only rendered when the roll actually carries modifiers.
@@ -2766,8 +2775,9 @@ let _readyPredictions = new Set();
 // ----------------------------------------------------------------------------
 // METER "WHY" — an in-world, one-line cause for a meter move this turn.
 // state_delta may optionally carry reasons:{alert?,integrity?,decay?}, each an
-// {en,zh}. We stash the localized strings here so both the HUD gauge (as a
-// title/tooltip) and the WORLD panel (as a '· why' subtext) can surface them.
+// {en,zh}. We stash the RAW pairs here and resolve the language at render time
+// (inside _applyMeterReasons), so a mid-turn language switch re-localizes the
+// HUD tooltip and WORLD '· why' subtext like every other panel string.
 // Persists until the NEXT turn: cleared when the player acts (thinking frame).
 // Bilingual via the en/zh fields; a meter with no reason is simply omitted.
 // ----------------------------------------------------------------------------
@@ -2780,14 +2790,24 @@ function _reasonText(pair) {
   return String(zh || pair.en || '').trim();
 }
 
+/** Validate an {en,zh} reason pair for storage; null when empty/malformed. */
+function _reasonPair(pair) {
+  if (!pair || typeof pair !== 'object') return null;
+  const en = (typeof pair.en === 'string') ? pair.en.trim() : '';
+  const zh = (typeof pair.zh === 'string') ? pair.zh.trim() : '';
+  if (!en && !zh) return null;
+  return { en: en || zh, zh: zh || en };
+}
+
 /** Ingest a state_delta's optional reasons block. Only known keys are read;
- *  a missing key leaves the prior turn's reason cleared (we reset per turn). */
+ *  a missing key leaves the prior turn's reason cleared (we reset per turn).
+ *  Stores the raw {en,zh} pairs — language is resolved at render time. */
 function _ingestMeterReasons(reasons) {
   _meterReasons = { alert: null, integrity: null, decay: null };
   if (!reasons || typeof reasons !== 'object') return;
-  _meterReasons.alert = _reasonText(reasons.alert) || null;
-  _meterReasons.integrity = _reasonText(reasons.integrity) || null;
-  _meterReasons.decay = _reasonText(reasons.decay) || null;
+  _meterReasons.alert = _reasonPair(reasons.alert);
+  _meterReasons.integrity = _reasonPair(reasons.integrity);
+  _meterReasons.decay = _reasonPair(reasons.decay);
 }
 
 /** Clear the standing reasons at the start of a new turn (player acted). */
@@ -2808,7 +2828,7 @@ function _applyMeterReasons() {
   for (const [key, id] of hud) {
     const el = document.getElementById(id);
     if (!el) continue;
-    const reason = _meterReasons[key];
+    const reason = _reasonText(_meterReasons[key]);
     // Preserve the base tooltip (value/status) set by the renderers; append the
     // cause on a second line. dataset.baseTitle holds the pristine base.
     let base = el.dataset.baseTitle;
@@ -2824,8 +2844,8 @@ function _applyMeterReasons() {
   }
   // WORLD-panel subtext lines are (re)written inline by updateWorldPanel; just
   // patch the existing nodes so a bare state_delta (no session repaint) updates.
-  _patchWorldReasonSubtext('nexus_alert', _meterReasons.alert);
-  _patchWorldReasonSubtext('fragment_decay', _meterReasons.decay);
+  _patchWorldReasonSubtext('nexus_alert', _reasonText(_meterReasons.alert));
+  _patchWorldReasonSubtext('fragment_decay', _reasonText(_meterReasons.decay));
 }
 
 /** Insert/update/remove a '· why' subtext under a WORLD-panel meter caption.

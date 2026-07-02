@@ -54,6 +54,7 @@ from engine.tools import (
     generate_minor_npc,
     set_session_dir,
     set_current_inventory,
+    _record_reason,
 )
 
 logger = logging.getLogger(__name__)
@@ -113,7 +114,7 @@ Return ONLY a single JSON object. No prose, no markdown, no explanation outside 
     {"name": "tool_name", "args": { ... }},
     ...
   ],
-  "state_effects": {"integrity_delta": 0, "nexus_alert_delta": 0, "credits_delta": 0, "fragment_decay_delta": 0, "time_minutes": 0},
+  "state_effects": {"integrity_delta": 0, "nexus_alert_delta": 0, "credits_delta": 0, "fragment_decay_delta": 0, "time_minutes": 0, "integrity_reason": null, "alert_reason": null, "decay_reason": null},
   "record": ["a short fact the player just learned", "another lead or name"],
   "ending_signal": null,
   "location_update": null,
@@ -150,8 +151,9 @@ State mutations (declare what changes):
 - `update_npc`: `{"name": "NPC Name", "changes": {"trust": "wary", "mood": "nervous", ...}}`
 - `update_location`: `{"location_data": {"district": "...", "area": "...", "signal_strength": N, "danger_level": "...", "nexus_patrol": "..."}}`
 - `update_inventory`: `{"action": "add|remove|sell|update_credits", "item": {"name": "...", ...}, "credits_gained": N, "amount": N}`
-- `update_world_state`: `{"changes": {"nexus_alert_delta": N, "fragment_decay_delta": N, "discover_district": "Name", "add_event": "event text", "events_update": [{"action": "remove|replace|add", "index": N, "text": "..."}]}}`
+- `update_world_state`: `{"changes": {"nexus_alert_delta": N, "fragment_decay_delta": N, "discover_district": "Name", "add_event": "event text", "events_update": [{"action": "remove|replace|add", "index": N, "text": "..."}]}, "alert_reason": "why alert moved", "decay_reason": "why decay moved"}`
   - Use `events_update` to manage global_events: remove obsolete events, replace updated ones, add new ones. Review events each turn and clean up stale entries.
+  - `alert_reason`/`decay_reason` (optional): short in-world clause for WHY the meter moved, same rules as the state_effects reasons below.
 - `advance_time`: `{"minutes": N, "reason": "brief reason"}` — MANDATORY once per turn. Report how many in-world minutes elapsed (1-480). Quick look=1-5, conversation=5-15, travel=15-30, rest=120-480.
 - `add_log_entry`: `{"title": "...", "tag": "movement|dialogue|discovery|danger|signal|system|trade", "text": "..."}`
 
@@ -186,6 +188,12 @@ or are paid. Every purchase MUST send a negative delta.
 - `fragment_decay_delta`: positive as the Signal fragment degrades over deep resonance.
 - `time_minutes`: in-world minutes elapsed this turn (quick look 1-5, conversation \
 5-15, travel 15-30, deep work/rest 60-480). REQUIRED and non-zero every turn.
+- `integrity_reason` / `alert_reason` / `decay_reason`: whenever the matching delta \
+is non-zero, ALSO send a short in-world clause (under 10 words, in the narrative's \
+language) explaining WHY the meter moved — reference ONLY what the player just did \
+(e.g. "asking about NEXUS in the open", "deep resonance strained the implant"). \
+Never mention undiscovered content, ending names, or game numbers. null when the \
+delta is 0.
 
 **CRITICAL — COMMIT THE WORLD YOU NARRATE (via tool_calls).** The validator and next \
 turn's scene only ever see COMMITTED structured state, so if your narrative changes \
@@ -711,6 +719,13 @@ def _execute_game_tools(tool_calls: list, narrative: str, inventory: dict) -> tu
 # State mutation application (mirrors state_writer from graph.py)
 # ---------------------------------------------------------------------------
 
+def _reason_str(v) -> str | None:
+    """Normalize a model-supplied meter reason: non-empty string or None."""
+    if isinstance(v, str) and v.strip():
+        return v.strip()
+    return None
+
+
 def _apply_mutations(
     mutation_calls: list,
     player: dict, knowledge: dict, location: dict,
@@ -749,6 +764,11 @@ def _apply_mutations(
                     except (TypeError, ValueError):
                         pass
                     player["integrity"] = {"current": new_cur, "max": new_max}
+                    # Meter-why (wave 4): surface the model's in-world cause for
+                    # the integrity change, mirroring the LangGraph tool wrapper
+                    # (engine/tools.py update_player) which never runs on this path.
+                    _record_reason("integrity", _reason_str(args.get("reason")),
+                                   _reason_str(args.get("reason_zh")))
                 else:
                     player[k] = v
 
@@ -911,6 +931,15 @@ def _apply_mutations(
 
         elif name == "update_world_state":
             changes = args.get("changes", {})
+            # Meter-why (wave 4): mirror engine/tools.py update_world_state, whose
+            # @tool wrapper (the only other _record_reason caller) never runs on
+            # the bypass path — mutations are applied inline here.
+            if changes.get("nexus_alert_delta"):
+                _record_reason("alert", _reason_str(args.get("alert_reason")),
+                               _reason_str(args.get("alert_reason_zh")))
+            if changes.get("fragment_decay_delta"):
+                _record_reason("decay", _reason_str(args.get("decay_reason")),
+                               _reason_str(args.get("decay_reason_zh")))
             if "nexus_alert_delta" in changes:
                 alert = world_state.get("nexus_alert", {})
                 if isinstance(alert, dict):
@@ -1031,9 +1060,16 @@ def _apply_state_effects(effects: dict, player: dict, world_state: dict, invento
         mx = ig.get("max", ig.get("current", 3)) or 3
         cur = ig.get("current", mx)
         player["integrity"] = {"current": max(0, min(int(mx), int(cur) + di)), "max": int(mx)}
+        # Meter-why (wave 4): state_effects is the primary numeric channel on the
+        # bypass, so the in-world cause rides here too. _record_reason no-ops when
+        # the model sent none; the server only forwards reasons for meters that moved.
+        _record_reason("integrity", _reason_str(effects.get("integrity_reason")),
+                       _reason_str(effects.get("integrity_reason_zh")))
 
     da = _num(effects.get("nexus_alert_delta"))
     if da:
+        _record_reason("alert", _reason_str(effects.get("alert_reason")),
+                       _reason_str(effects.get("alert_reason_zh")))
         alert = world_state.get("nexus_alert", {})
         if isinstance(alert, dict):
             alert["current"] = max(0, min(100, alert.get("current", 0) + da))
@@ -1048,6 +1084,8 @@ def _apply_state_effects(effects: dict, player: dict, world_state: dict, invento
 
     dd = _num(effects.get("fragment_decay_delta"))
     if dd:
+        _record_reason("decay", _reason_str(effects.get("decay_reason")),
+                       _reason_str(effects.get("decay_reason_zh")))
         decay = world_state.get("fragment_decay", {})
         if isinstance(decay, dict):
             decay["current"] = max(0, min(100, decay.get("current", 0) + dd))

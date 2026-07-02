@@ -130,6 +130,28 @@ def drain_reasons(session_dir: str | None) -> dict:
         return _reason_buffer.pop(session_dir, {}) or {}
 
 
+def requeue_rolls(session_dir: str | None, rolls: list | None) -> None:
+    """Re-buffer roll records under *session_dir*.
+
+    Used by the prediction cache (gui/server.py): a speculative turn runs against
+    a per-action work dir, so its rolls land under THAT key and _finish_turn's
+    drain of the live session dir would miss them. The speculator drains the
+    work-dir buffer at speculate time and, on a cache hit, requeues the records
+    here so the normal drain surfaces them (and the work-dir key never leaks)."""
+    if not session_dir or not rolls:
+        return
+    with _buffer_lock:
+        _roll_buffer.setdefault(session_dir, []).extend(rolls)
+
+
+def requeue_reasons(session_dir: str | None, reasons: dict | None) -> None:
+    """Re-buffer meter-change reasons under *session_dir* (see requeue_rolls)."""
+    if not session_dir or not reasons:
+        return
+    with _buffer_lock:
+        _reason_buffer.setdefault(session_dir, {}).update(reasons)
+
+
 # Bilingual, in-world labels for the roll beat. Falls back to a title-cased
 # version of the raw skill/method token for anything not enumerated here, so a
 # novel skill still renders (never a spoiler — only the verb the player attempted).

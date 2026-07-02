@@ -54,10 +54,14 @@ DEFAULT_ACTIONS = [
 
 
 # Substrings marking a transient CLI/network stream drop worth retrying.
+# Connection-phase errors only — no bare "timeout"/"timed out": those match a
+# CLI turn that already burned its full multi-minute budget, and re-running it
+# stacks tens of minutes of retries on a merely slow model (wave 4 review).
+# Keep in sync with gui/server.py _TRANSIENT_CLI_MARKERS.
 _TRANSIENT_MARKERS = (
     "tls handshake eof", "handshake eof", "connection reset", "connection refused",
     "connection aborted", "connection closed", "broken pipe", "reconnecting",
-    "timed out", "timeout", "temporarily unavailable", "eof occurred",
+    "temporarily unavailable", "eof occurred",
     "stream closed", "network is unreachable", "read timed out", "remote end closed",
 )
 
