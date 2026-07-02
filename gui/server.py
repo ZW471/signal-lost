@@ -197,6 +197,14 @@ class PlayerSession:
         # Last meter/trace/knowledge snapshot, for computing state_delta from→to.
         self.meter_snapshot: dict | None = None
 
+        # --- Turn cancel (heartbeat / abort) -----------------------------
+        # Set by the {action:'cancel_turn'} WS frame; checked at phase
+        # boundaries inside the turn's executor thread. Abort is only honoured
+        # BEFORE state_writer has committed — once state is written the turn
+        # finishes normally and the flag is ignored (a half-written turn must
+        # never persist). Reset at the head of every turn so it can't bleed.
+        self.cancel_requested: bool = False
+
     @property
     def session_root(self) -> str:
         return os.path.join(SESSION_DIR, self.uid)
@@ -842,6 +850,14 @@ async def websocket_endpoint(ws: WebSocket):
                 except Exception as e:
                     await ws.send_json({"type": "error", "message": f"Save failed: {e}"})
 
+            elif action == "cancel_turn":
+                # Request an in-flight turn abort. Purely a flag flip on the
+                # event loop; the running turn's executor thread observes it at
+                # the next phase boundary and either aborts cleanly (before
+                # state_writer) or finishes normally (after). Additive + safe to
+                # send when no turn is running (the flag is reset each turn).
+                sess.cancel_requested = True
+
             elif action == "refresh":
                 if sess.session_dir:
                     await ws.send_json({
@@ -1014,6 +1030,10 @@ async def _handle_player_input(ws: WebSocket, sess: PlayerSession, msg: dict, lo
     text = msg.get("text", "").strip()
     if not text:
         return
+    # Clear any stale cancel from a prior turn so it can't abort this new input
+    # (belt-and-suspenders: _run_turn also resets at its head, but the cached
+    # fast path below bypasses _run_turn and completes instantly).
+    sess.cancel_requested = False
     if sess.graph is None or sess.game_state is None:
         # The socket reconnected and lost its in-memory game — transparently
         # rebind to the on-disk session and continue instead of erroring out.
@@ -1634,6 +1654,112 @@ async def _run_opening(sess: PlayerSession, ws: WebSocket, language: str, backgr
     await _run_turn(sess, ws, mode="resume", opening_key=(language, background))
 
 
+# ---------------------------------------------------------------------------
+# Turn progress heartbeat (phase frames) + cancel
+# ---------------------------------------------------------------------------
+# A turn can run for minutes (a slow model, a multi-step tool loop). Rather than
+# leave the client on an opaque spinner, the server emits additive
+# ``{type:'phase', phase, ts}`` frames as the turn crosses coarse boundaries.
+# Frames are best-effort and additive — a client that ignores them loses nothing,
+# and the flavor ticker on the client stays as the fallback when none arrive.
+
+# LangGraph node name → coarse phase. Nodes not listed (input_gate,
+# input_blocked_handler) don't emit a phase — they're instantaneous pure-Python
+# gates whose progress the player doesn't need to see.
+_NODE_PHASES = {
+    "input_validator": "validating",
+    "resolver": "resolving",
+    "tool_executor": "resolving",
+    "output_language_checker": "resolving",
+    "state_writer": "writing",
+    "location_updater": "world",
+    "world_ticker": "world",
+    "world_simulator": "world",
+    "trace_checker": "checking",
+    "consequence": "checking",
+}
+
+# The turn is only safely abortable BEFORE this node commits state to disk. A
+# node whose phase is one of these has not yet written durable state, so a cancel
+# observed up to (and including) their completion aborts cleanly. Once
+# ``state_writer`` runs, the turn finishes normally and cancel is ignored.
+_PRE_COMMIT_PHASES = frozenset({"validating", "resolving"})
+
+# Sentinel returned by the turn body when a cancel aborted it before any state
+# write. Distinct object so ``_run_turn`` can tell an abort from a real result.
+_TURN_ABORTED = object()
+
+
+def _make_phase_emitter(loop, ws: WebSocket):
+    """Return a thread-safe ``emit(phase)`` callable for use inside the turn's
+    executor thread.
+
+    The turn body runs off the event loop (``run_in_executor``), but WS sends
+    must happen on the loop. This schedules a best-effort ``_safe_send`` of a
+    ``phase`` frame via ``call_soon_threadsafe`` and de-dupes consecutive
+    identical phases so the resolver/tool loop doesn't spam ``resolving``.
+    """
+    import time as _time
+    state = {"last": None}
+
+    def emit(phase: str) -> None:
+        if not phase or phase == state["last"]:
+            return
+        state["last"] = phase
+        payload = {"type": "phase", "phase": phase, "ts": _time.time()}
+        try:
+            loop.call_soon_threadsafe(
+                lambda: asyncio.ensure_future(_safe_send(ws, payload))
+            )
+        except RuntimeError:
+            pass  # loop gone — client is away; nothing to deliver
+
+    return emit
+
+
+def _stream_graph_turn(graph, state: dict, emit, is_cancelled):
+    """Run one LangGraph turn via streaming, emitting phase frames and honouring
+    a cooperative cancel, and return the SAME final state ``invoke()`` would.
+
+    LangGraph contract (verified against langgraph 1.1.3): with
+    ``stream_mode=["updates","values"]`` the ``updates`` chunks name the node(s)
+    that just ran (in execution order) and each ``values`` chunk is the full
+    accumulated state after that super-step — the LAST ``values`` chunk is
+    byte-for-byte identical to ``graph.invoke(state)``. So streaming here changes
+    nothing about the state we extract; it only adds visibility + a cancel seam.
+
+    Cancel semantics: after each node completes we map it to a coarse phase and
+    emit it. If a cancel was requested AND we are still in a pre-commit phase
+    (before ``state_writer`` writes durable state), we stop consuming the stream
+    and return ``_TURN_ABORTED`` — no state has been persisted, so the abort is
+    clean. Once ``state_writer`` has run we ignore cancel and finish the turn
+    normally (a half-written turn must never be surfaced).
+    """
+    last_values = None
+    aborted = False
+    committed = False  # True once a node at/after state_writer has run
+
+    for mode, chunk in graph.stream(state, stream_mode=["updates", "values"]):
+        if mode == "updates":
+            # chunk maps {node_name: partial_update}; usually one key.
+            for node in chunk:
+                phase = _NODE_PHASES.get(node)
+                if phase is not None:
+                    emit(phase)
+                if phase not in _PRE_COMMIT_PHASES and phase is not None:
+                    committed = True
+            # Cooperative abort: only before any durable write.
+            if not committed and is_cancelled():
+                aborted = True
+                break
+        elif mode == "values":
+            last_values = chunk
+
+    if aborted:
+        return _TURN_ABORTED
+    return last_values
+
+
 async def _run_turn(sess: PlayerSession, ws: WebSocket, player_input: str | None = None,
                     mode: str = "play", opening_key: tuple[str, str] | None = None):
     """Run a single game turn for *sess* in a background thread."""
@@ -1642,10 +1768,21 @@ async def _run_turn(sess: PlayerSession, ws: WebSocket, player_input: str | None
     import time as _time
     _turn_start = _time.time()
 
+    # Fresh turn: clear any stale cancel request so it can't abort this turn
+    # before the player even asked.
+    sess.cancel_requested = False
+
     # A real turn supersedes any pending suggested-action predictions.
     _reset_prediction(sess)
 
     loop = asyncio.get_event_loop()
+
+    # Thread-safe phase emitter + a snapshot-free cancel probe. Both are read
+    # from inside the executor thread; the emitter marshals sends back onto the
+    # loop, and ``_cancelled`` just reads the session flag the WS handler sets.
+    _emit_phase = _make_phase_emitter(loop, ws)
+    def _cancelled() -> bool:
+        return sess.cancel_requested
 
     def _invoke():
         with sess.lock:
@@ -1662,11 +1799,25 @@ async def _run_turn(sess: PlayerSession, ws: WebSocket, player_input: str | None
             # routed to the bypass.
             _use_bypass = bool(_bypass and sess.session_dir and _current_llm)
             if _use_bypass:
-                return cc_run_turn(
+                # The bypass is a single opaque CLI/LLM call in engine (read-only
+                # to us), so we can only bracket it with COARSE phases at the
+                # visible call boundary: 'resolving' while the model runs, then
+                # 'writing' as pure-Python post-processing commits state. A cancel
+                # requested BEFORE the call aborts cleanly (nothing ran yet); once
+                # cc_run_turn is entered we cannot interrupt the in-flight CLI
+                # from here (the wrapper owns its own subprocess/hung-CLI kill via
+                # its timeout), so a mid-call cancel lands at this next boundary —
+                # i.e. it takes effect on the following turn, not this one.
+                if _cancelled():
+                    return _TURN_ABORTED
+                _emit_phase("resolving")
+                res = cc_run_turn(
                     session_dir=sess.session_dir,
                     player_input=player_input or "",
                     mode=mode,
                 )
+                _emit_phase("writing")
+                return res
 
             # --- Standard LangGraph path ---
             # Inject any pending world events from background world simulator
@@ -1711,7 +1862,17 @@ async def _run_turn(sess: PlayerSession, ws: WebSocket, player_input: str | None
             else:
                 sess.game_state["messages"].append(HumanMessage(content=player_input))
 
-            result = sess.graph.invoke(sess.game_state)
+            # Stream the turn so we can emit phase frames and honour a cancel,
+            # while extracting the exact same final state ``invoke`` would return
+            # (see _stream_graph_turn for the verified LangGraph contract).
+            result = _stream_graph_turn(
+                sess.graph, sess.game_state, _emit_phase, _cancelled,
+            )
+            if result is _TURN_ABORTED:
+                # Aborted before state_writer — nothing was persisted and
+                # sess.game_state is untouched (the streamed state was local).
+                # Leave game_state as-is so the next turn resumes cleanly.
+                return _TURN_ABORTED
             sess.game_state = result
             return result
 
@@ -1748,6 +1909,15 @@ async def _run_turn(sess: PlayerSession, ws: WebSocket, player_input: str | None
                     "transient CLI error (attempt %d/%d), retrying: %s",
                     _attempt, _attempts, _err)
                 await asyncio.sleep(1.5 * _attempt)
+
+        # Turn was cancelled cleanly before any state write (see
+        # _stream_graph_turn / the bypass pre-call check). Nothing was persisted
+        # and no meter/session snapshot advanced, so we just tell the client the
+        # turn is cancelled and unlock — no narrative, no state_delta, no autosave.
+        if result is _TURN_ABORTED:
+            sess.cancel_requested = False
+            await _safe_send(ws, {"type": "turn_cancelled"})
+            return
 
         # The CLI-bypass engine usually emits suggested_actions inline, but some
         # models/turns omit them (or a parse-fallback zeroes them), leaving the
@@ -1787,6 +1957,12 @@ async def _run_turn(sess: PlayerSession, ws: WebSocket, player_input: str | None
                                        result["narrative"], result.get("suggested_actions") or [])
                 except Exception:
                     pass
+
+        # A cancel that arrived after state_writer committed is honoured as a
+        # no-op (the turn finishes normally); clear it here so it can't leak into
+        # the next turn's abort check. The head-of-turn reset covers the same
+        # bleed, but clearing on completion keeps the flag tightly scoped.
+        sess.cancel_requested = False
 
         await _finish_turn(sess, ws, result, mode, _turn_start)
 
