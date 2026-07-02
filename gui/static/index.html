@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, viewport-fit=cover">
   <title>SIGNAL LOST</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='4' fill='%230a0a0f'/><text x='16' y='22' text-anchor='middle' font-size='18' fill='%2300ff88'>S</text></svg>">
-  <link rel="stylesheet" href="/static/style.css?v=w5b">
+  <link rel="stylesheet" href="/static/style.css?v=w5c">
   <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;400;500;600;700&family=Noto+Sans+SC:wght@300;400;500;700&display=swap" rel="stylesheet">
 </head>
 <body>
@@ -266,6 +266,8 @@
               <span></span><span></span><span></span>
             </div>
             <span class="thinking-text">PROCESSING NEURAL INPUT</span>
+            <button type="button" class="cyber-btn thinking-cancel-btn" id="cancelTurnBtn"
+                    style="display:none" onclick="requestCancelTurn()" data-i18n="cancel_turn">CANCEL</button>
           </div>
           <span class="thinking-hint" id="thinkingHint"></span>
         </div>
@@ -667,7 +669,7 @@
        lane so the two no longer collide. -->
   <div id="toastStack" class="toast-stack" aria-live="polite" aria-relevant="additions"></div>
 
-  <script src="/static/music.js?v=w5b"></script>
-  <script src="/static/app.js?v=w5b"></script>
+  <script src="/static/music.js?v=w5c"></script>
+  <script src="/static/app.js?v=w5c"></script>
 </body>
 </html>

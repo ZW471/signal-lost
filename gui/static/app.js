@@ -211,6 +211,14 @@ const LABELS = {
     // Chat
     chat_placeholder: 'What do you do?', processing: 'PROCESSING NEURAL INPUT',
     thinking_hint: '// link resolving — review your INTEL panels while you wait',
+    // Turn-progress phases (server 'phase' frames) — honest, in-world status.
+    phase_validating: 'CHECKING YOUR MOVE…',
+    phase_resolving: 'RESOLVING THE SCENE…',
+    phase_writing: 'COMMITTING THE WORLD…',
+    phase_world: 'THE WORLD REACTS…',
+    phase_checking: 'TRACING CONSEQUENCES…',
+    cancel_turn: 'CANCEL',
+    turn_cancelled: '// turn cancelled — the thread goes slack. Try something else.',
     thinking_lines: [
       'PARSING NEURAL INPUT…',
       'CROSS-REFERENCING THE GRID…',
@@ -425,6 +433,14 @@ const LABELS = {
     hud_coherence: '信号一致性',
     chat_placeholder: '你想做什么？', processing: '正在处理神经输入',
     thinking_hint: '// 链路解析中 —— 可在等待时查看右侧情报面板',
+    // 回合进度阶段（服务器 'phase' 帧）—— 诚实的、融入剧情的状态提示。
+    phase_validating: '正在核对你的行动…',
+    phase_resolving: '正在解析场景…',
+    phase_writing: '正在写入世界…',
+    phase_world: '世界作出反应…',
+    phase_checking: '正在追溯因果…',
+    cancel_turn: '取消',
+    turn_cancelled: '// 回合已取消 —— 链路松弛下来。换个动作试试。',
     thinking_lines: [
       '解析神经输入…',
       '比对城市网格…',
@@ -697,11 +713,18 @@ function setLanguage(lang) {
   const _verbRow = document.getElementById('verbChips');
   if (_verbRow) { _verbRow.dataset.built = ''; const ci = document.getElementById('chatInput'); if (ci && typeof _updateVerbChips === 'function') _updateVerbChips(ci); }
   if (typeof _renderShortcutSheet === 'function') _renderShortcutSheet();
-  // Wait ticker: if mid-cycle, re-render its current line in the new language;
-  // otherwise fall back to the resting label. (.thinking-text is a live ticker,
-  // .thinkingHint is static so data-i18n could own it, but it shares this block.)
+  // Wait ticker: if a phase heartbeat has taken over, re-render the current
+  // phase text in the new language; else if the flavor ticker is mid-cycle,
+  // re-render its line; otherwise the resting label. (.thinking-text is a live
+  // ticker; .thinkingHint is static so data-i18n could own it, shares this block.)
   const thinkingText = document.querySelector('.thinking-text');
-  if (thinkingText) thinkingText.textContent = (_thinkingTimer || _thinkingLineIdx > 0) ? _thinkingLineText() : L('processing');
+  if (thinkingText) {
+    if (_phaseFrameSeen && _lastPhase && _phaseLabel(_lastPhase)) {
+      thinkingText.textContent = _phaseLabel(_lastPhase);
+    } else {
+      thinkingText.textContent = (_thinkingTimer || _thinkingLineIdx > 0) ? _thinkingLineText() : L('processing');
+    }
+  }
   const thinkingHint = document.getElementById('thinkingHint');
   if (thinkingHint) thinkingHint.textContent = L('thinking_hint');
 
@@ -1853,9 +1876,31 @@ function handleServerMessage(msg) {
     case 'thinking':
       clearSuggestedActions();
       showThinking();
+      // A new turn began — reset the phase heartbeat state (drops any stale
+      // phase text + hides/rearms the cancel button) so the flavor ticker owns
+      // the indicator until the first real 'phase' frame (if any) arrives.
+      _resetPhaseState();
       // A new turn began — drop last turn's meter-why reasons so a stale cause
       // can't linger under a meter that didn't move this turn.
       _clearMeterReasons();
+      break;
+
+    case 'phase':
+      // Turn-progress heartbeat (additive/optional): the server reports coarse
+      // phases (validating/resolving/writing/world/checking) so a multi-minute
+      // turn isn't opaque. Update the thinking line with honest bilingual text
+      // and, once we've been resolving a while, offer a cancel button. Degrades
+      // to nothing if these frames never arrive (the flavor ticker stays).
+      _onPhaseFrame(msg.phase);
+      break;
+
+    case 'turn_cancelled':
+      // The player cancelled and the server aborted the turn cleanly before any
+      // state write. Release the wait UI and note it in-fiction; nothing was
+      // persisted, so no narrative / panels update follows.
+      _resetPhaseState();
+      endTurnUI();
+      showSystemNotice(L('turn_cancelled'));
       break;
 
     case 'roll':
@@ -3482,6 +3527,83 @@ let _thinkingLineIdx = 0;      // current ticker line
 let _ambientTimer = null;      // ambient-beep interval
 let _pendingPlayerEl = null;   // the in-flight player command line
 
+// --- Turn-progress phase heartbeat + cancel -------------------------------
+// The server emits additive {type:'phase'} frames as a turn crosses coarse
+// boundaries. When they arrive we take over the thinking line with honest
+// bilingual phase text (the flavor ticker stays as the fallback when no frames
+// come). After a stretch of 'resolving' we surface a small CANCEL button wired
+// to {action:'cancel_turn'}. Everything degrades to nothing if frames never
+// arrive or the client build predates them.
+let _phaseFrameSeen = false;   // once true, phase text overrides the flavor ticker
+let _lastPhase = null;         // last phase code seen (for language-switch re-render)
+let _cancelBtnTimer = null;    // arms the cancel button after N ms of 'resolving'
+const _CANCEL_AFTER_MS = 10000; // 10s of resolving before offering cancel
+
+/** Honest phase text for a server phase code, or null if unknown. */
+function _phaseLabel(phase) {
+  const key = 'phase_' + String(phase || '');
+  const val = (LABELS[currentLang] && LABELS[currentLang][key]) || (LABELS.en && LABELS.en[key]);
+  return val || null;
+}
+
+/** Handle one 'phase' frame: repaint the thinking line + manage the cancel btn. */
+function _onPhaseFrame(phase) {
+  const label = _phaseLabel(phase);
+  if (!label) return;  // unknown phase → ignore, keep whatever's showing
+  _phaseFrameSeen = true;
+  _lastPhase = phase;
+  // Phase text supersedes the flavor ticker (stop it so they don't fight).
+  _stopThinkingTicker();
+  const el = document.querySelector('.thinking-text');
+  if (el) el.textContent = label;
+  // Offer cancel only while the model is doing the long work ('resolving').
+  // Other phases are quick and past the safe abort seam, so retract the offer.
+  if (phase === 'resolving') {
+    _armCancelBtn();
+  } else {
+    _hideCancelBtn();
+  }
+}
+
+/** After a stretch of resolving, reveal the cancel button (once per turn). */
+function _armCancelBtn() {
+  if (_cancelBtnTimer || _cancelBtnVisible()) return;
+  _cancelBtnTimer = setTimeout(() => {
+    _cancelBtnTimer = null;
+    const btn = document.getElementById('cancelTurnBtn');
+    if (btn) { btn.style.display = ''; btn.disabled = false; }
+  }, _CANCEL_AFTER_MS);
+}
+
+function _cancelBtnVisible() {
+  const btn = document.getElementById('cancelTurnBtn');
+  return !!(btn && btn.style.display !== 'none');
+}
+
+/** Hide + disarm the cancel button (any terminal frame / turn teardown). */
+function _hideCancelBtn() {
+  if (_cancelBtnTimer) { clearTimeout(_cancelBtnTimer); _cancelBtnTimer = null; }
+  const btn = document.getElementById('cancelTurnBtn');
+  if (btn) { btn.style.display = 'none'; btn.disabled = false; }
+}
+
+/** Reset all phase-heartbeat state at the head of a turn / on teardown. */
+function _resetPhaseState() {
+  _phaseFrameSeen = false;
+  _lastPhase = null;
+  _hideCancelBtn();
+}
+
+/** Cancel-button click → ask the server to abort this turn at the next seam. */
+function requestCancelTurn() {
+  const btn = document.getElementById('cancelTurnBtn');
+  if (btn) btn.disabled = true;  // one-shot; the turn_cancelled/narrative frame tears it down
+  const el = document.querySelector('.thinking-text');
+  if (el) el.textContent = L('processing');  // neutral text while the abort lands
+  try { playBeep(300, 0.05); } catch (_) {}
+  sendWS({ action: 'cancel_turn' });
+}
+
 function _thinkingLineList() {
   return (LABELS[currentLang] && LABELS[currentLang].thinking_lines) || LABELS.en.thinking_lines || [];
 }
@@ -3601,6 +3723,11 @@ function hideThinking() {
   _stopThinkingTicker();
   _stopAmbient();
   _clearPendingPlayer();
+  // Retract the turn-cancel button + disarm its timer: hideThinking is the
+  // single chokepoint every terminal path (narrative / error / game_over /
+  // watchdog, via endTurnUI or directly) passes through, so the button can
+  // never outlive its turn.
+  _hideCancelBtn();
   const tabs = document.querySelector('.panel-tabs');
   if (tabs) tabs.classList.remove('hint-pulse');
 }
