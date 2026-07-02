@@ -794,6 +794,97 @@ def _maybe_autosave(session_dir: str, saves_root: str) -> None:
         pass
 
 
+# --- Endings history (per-user meta-progression) --------------------------
+# The roguelike remembers which of the game's designed endings each ACCOUNT has
+# ever reached, across every playthrough. One file per user at
+# ``session/<uid>/endings_discovered.json`` holding a de-duplicated list of
+# {id, turn, day, timestamp} — one entry per DISTINCT ending id, first reach
+# wins (turn/day/timestamp of the first time that ending fired). The gallery the
+# client renders only ever names endings the player ACTUALLY reached; unreached
+# ones are sealed '???' slots the client draws from the count alone, so this file
+# is the sole source of "which endings are unlocked". The generic multi-cause
+# "death" failure state is not one of the nine designed endings, so it is stored
+# for completeness but never resolved into a named gallery slot.
+_ENDINGS_FILE = "endings_discovered.json"
+
+# The nine designed endings, id → {name, name_zh}, resolved once from game_data
+# so the payload never has to import ENDINGS at call time. NEVER expanded with
+# ad-hoc ids (e.g. "death"): only these nine can occupy a named gallery slot.
+from engine.game_data import ENDINGS as _ENDINGS_DEFS
+
+_DESIGNED_ENDINGS: "dict[str, dict]" = {
+    e["id"]: {"name": e.get("name", e["id"]), "name_zh": e.get("name_zh", e.get("name", e["id"]))}
+    for e in _ENDINGS_DEFS
+}
+ENDINGS_TOTAL = len(_DESIGNED_ENDINGS)  # 9 — the size of the gallery
+
+
+def _endings_path(session_root: str) -> str:
+    return os.path.join(session_root, _ENDINGS_FILE)
+
+
+def _read_endings_history(session_root: str) -> list[dict]:
+    """Read the raw endings-history list for a user (``[]`` if absent/corrupt)."""
+    data = _read_json(_endings_path(session_root))
+    if isinstance(data, dict):  # tolerate a wrapped {"endings": [...]} shape
+        data = data.get("endings")
+    return [e for e in data if isinstance(e, dict)] if isinstance(data, list) else []
+
+
+def _record_ending(session_root: str, ending_id: str, turn, day) -> None:
+    """Append a reached ending to the user's history, once per DISTINCT id.
+
+    Atomic (temp file + ``os.replace``) so a crash mid-write can never leave a
+    truncated JSON that would wipe the whole gallery. First-reach wins: if the id
+    is already present we do nothing (don't overwrite the original turn/day). Meant
+    to run in an executor thread — it does blocking disk I/O. Best-effort: any OS
+    error is swallowed so a history write can never break the game-over path.
+    """
+    if not ending_id:
+        return
+    import time as _t
+    try:
+        os.makedirs(session_root, exist_ok=True)
+        history = _read_endings_history(session_root)
+        if any(e.get("id") == ending_id for e in history):
+            return  # already unlocked — keep the first-reach record
+        history.append({
+            "id": ending_id,
+            "turn": turn if isinstance(turn, int) else None,
+            "day": day,
+            "timestamp": int(_t.time()),
+        })
+        path = _endings_path(session_root)
+        tmp = f"{path}.tmp.{os.getpid()}"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(history, f, ensure_ascii=False, indent=2)
+        os.replace(tmp, path)  # atomic on POSIX + Windows
+    except OSError:
+        pass
+
+
+def _endings_discovered_payload(session_root: str) -> list[dict]:
+    """Resolve the user's reached endings into the spoiler-safe gallery payload.
+
+    Returns ``[{id, name, name_zh, turn}]`` for ONLY the nine designed endings the
+    user has actually reached (a stored "death" or any unknown id is dropped — it
+    is not a gallery slot). Never emits an id/name for an UNREACHED ending, so no
+    ending the player hasn't seen can leak through this channel."""
+    out = []
+    for e in _read_endings_history(session_root):
+        eid = e.get("id")
+        meta = _DESIGNED_ENDINGS.get(eid)
+        if not meta:
+            continue  # "death" / unknown → not one of the nine named slots
+        out.append({
+            "id": eid,
+            "name": meta["name"],
+            "name_zh": meta["name_zh"],
+            "turn": e.get("turn"),
+        })
+    return out
+
+
 def _status_payload(sess: PlayerSession | None) -> dict:
     """Build the 'status' message — scoped to *sess*'s user, or logged-out.
 
@@ -807,8 +898,12 @@ def _status_payload(sess: PlayerSession | None) -> dict:
         "langsmith": _get_langsmith_status(),
     }
     if sess is None:
+        # Logged out: still advertise the gallery SIZE (so the menu can show
+        # sealed slots) but reveal no reached endings — there is no user to scope
+        # them to.
         base.update({"authed": False, "username": None,
-                     "has_session": False, "sessions": [], "saves": []})
+                     "has_session": False, "sessions": [], "saves": [],
+                     "endings_discovered": [], "endings_total": ENDINGS_TOTAL})
         return base
     sessions = _list_sessions(sess.session_root)
     saves = _list_saves(sess.saves_root)
@@ -818,6 +913,10 @@ def _status_payload(sess: PlayerSession | None) -> dict:
         "has_session": bool(sessions),
         "sessions": sessions,
         "saves": saves,
+        # Meta-progression: which of the nine designed endings this ACCOUNT has
+        # ever reached (names only for reached ones) + the gallery size.
+        "endings_discovered": _endings_discovered_payload(sess.session_root),
+        "endings_total": ENDINGS_TOTAL,
     })
     return base
 
@@ -2068,11 +2167,36 @@ async def _finish_turn(sess: PlayerSession, ws: WebSocket, result: dict, mode: s
             pass
 
     if game_over:
+        # Meta-progression: persist the reached ending to this ACCOUNT's history
+        # (once per distinct id) BEFORE the game_over frame, so the fresh gallery
+        # we ship with it already reflects this run. The in-fiction turn/day come
+        # from the spoiler-filtered session_data we already read this turn. All
+        # off the event loop; best-effort — a history-write failure must never
+        # swallow the game_over the client is waiting on.
+        endings_discovered = _endings_discovered_payload(sess.session_root) if sess.session_dir else []
+        if ending and sess.session_dir:
+            _plr = session_data.get("player") or {}
+            _wt = (session_data.get("world_state") or {}).get("time") or {}
+            try:
+                await asyncio.to_thread(
+                    _record_ending, sess.session_root, ending,
+                    _plr.get("turn"), _wt.get("day"),
+                )
+                endings_discovered = await asyncio.to_thread(
+                    _endings_discovered_payload, sess.session_root)
+            except Exception:
+                pass
         await _safe_send(ws, {
             "type": "game_over",
             "ending": ending,
             "death_cause": result.get("death_cause"),
             "narrative": narrative,
+            # The refreshed per-account gallery so the end-screen can light up the
+            # ending just earned (and any previously unlocked) without a round-trip.
+            # Names only for REACHED designed endings; sealed slots come from the
+            # total. A "death" or unknown id contributes no named slot.
+            "endings_discovered": endings_discovered,
+            "endings_total": ENDINGS_TOTAL,
         })
         if sess.scheduler:
             sess.scheduler.stop()

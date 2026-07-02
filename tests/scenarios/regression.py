@@ -889,6 +889,160 @@ def test_player_turn_priority_over_world_sim_lock():
     print("  [PASS] Player turns take priority over world-sim on the account lock")
 
 
+def test_endings_history_dedup_and_spoiler_safe():
+    """Endings history persists per-user, once per distinct id, spoiler-safe.
+
+    Server feature (endings gallery meta-progression): a reached ending is appended
+    to session/<uid>/endings_discovered.json exactly once (first-reach wins), the
+    'status' gallery payload names ONLY reached DESIGNED endings (never an unreached
+    id/name), the generic 'death' failure state is stored but never occupies a named
+    gallery slot, and endings_total is the count of designed endings (9).
+    """
+    import gui.server as srv
+
+    with tempfile.TemporaryDirectory() as root:
+        # Nothing reached yet → empty gallery, but total advertised.
+        assert srv._endings_discovered_payload(root) == [], "fresh user must have no reached endings"
+        assert srv.ENDINGS_TOTAL == 9, f"expected 9 designed endings, got {srv.ENDINGS_TOTAL}"
+
+        # Reach a real designed ending; it resolves to a named slot with turn.
+        srv._record_ending(root, "the_bridge", 47, 6)
+        gal = srv._endings_discovered_payload(root)
+        assert [g["id"] for g in gal] == ["the_bridge"], f"the_bridge not recorded: {gal}"
+        assert gal[0]["name"] == "The Bridge" and gal[0]["name_zh"] == "桥", \
+            f"designed ending names not resolved bilingually: {gal[0]}"
+        assert gal[0]["turn"] == 47, "reached ending must carry the first-reach turn"
+
+        # Re-reaching the SAME id must not duplicate it or overwrite the first turn.
+        srv._record_ending(root, "the_bridge", 99, 12)
+        raw = srv._read_endings_history(root)
+        assert len(raw) == 1, f"distinct ending id duplicated on second reach: {raw}"
+        assert raw[0]["turn"] == 47, "first-reach turn was overwritten by a later reach"
+
+        # The generic 'death' failure state is stored but NEVER a named gallery slot.
+        srv._record_ending(root, "death", 12, 2)
+        assert len(srv._read_endings_history(root)) == 2, "death should be stored in history"
+        gal2 = srv._endings_discovered_payload(root)
+        assert [g["id"] for g in gal2] == ["the_bridge"], \
+            f"'death' leaked into the named gallery: {gal2}"
+
+        # Spoiler gate: no UNREACHED designed ending appears anywhere in the payload.
+        reached_ids = {g["id"] for g in gal2}
+        for e in srv._ENDINGS_DEFS:
+            if e["id"] not in reached_ids:
+                assert all(g["id"] != e["id"] for g in gal2), \
+                    f"unreached ending {e['id']} leaked into the gallery"
+
+        # A second distinct designed ending lights up an additional named slot.
+        srv._record_ending(root, "exposure", 20, 3)
+        gal3 = srv._endings_discovered_payload(root)
+        assert {g["id"] for g in gal3} == {"the_bridge", "exposure"}, \
+            f"second distinct ending not surfaced: {gal3}"
+
+    print("  [PASS] Endings history dedups per id, resolves names for reached-only, hides death/unreached")
+
+
+def test_endings_history_atomic_write_survives_garbage():
+    """A corrupt/partial endings file must degrade to an empty gallery, not crash.
+
+    The atomic temp+rename write guards against truncation, but a pre-existing
+    garbage file (older build, disk corruption) must still be tolerated: reads
+    return [] and the next record_ending rewrites a clean file rather than raising.
+    """
+    import gui.server as srv
+
+    with tempfile.TemporaryDirectory() as root:
+        # Garbage on disk where the history should be.
+        with open(srv._endings_path(root), "w", encoding="utf-8") as f:
+            f.write("{ this is not valid json ]]")
+        assert srv._read_endings_history(root) == [], "corrupt history must read as empty"
+        assert srv._endings_discovered_payload(root) == [], "corrupt history must yield empty gallery"
+
+        # A subsequent reach rewrites a clean, valid file.
+        srv._record_ending(root, "symbiosis", 15, 4)
+        raw = srv._read_endings_history(root)
+        assert [e["id"] for e in raw] == ["symbiosis"], f"clean rewrite failed: {raw}"
+        # File on disk is now valid JSON.
+        assert isinstance(json.load(open(srv._endings_path(root), encoding="utf-8")), list)
+    print("  [PASS] Corrupt endings file degrades to empty gallery and self-heals on next write")
+
+
+def test_status_payload_carries_endings_gallery():
+    """The 'status' payload exposes endings_discovered + endings_total, spoiler-safe.
+
+    Logged-out: advertises the gallery SIZE only, zero reached endings. Logged-in:
+    reflects that user's own reached endings and never another shape's ending.
+    """
+    import shutil
+    import gui.server as srv
+
+    # Logged out — size only, no reached endings.
+    out = srv._status_payload(None)
+    assert out["endings_total"] == srv.ENDINGS_TOTAL, "logged-out payload missing endings_total"
+    assert out["endings_discovered"] == [], "logged-out payload must reveal no reached endings"
+
+    # Logged in — scoped to this user's own session_root.
+    with tempfile.TemporaryDirectory() as root:
+        sess = srv.PlayerSession("gallery-user", "gallery-uid")
+        # Point the user's session_root at our temp dir via a subclass-free shim:
+        # session_root is a property over SESSION_DIR/uid, so write into that path.
+        os.makedirs(sess.session_root, exist_ok=True)
+        try:
+            srv._record_ending(sess.session_root, "exile", 11, 2)
+            out2 = srv._status_payload(sess)
+            ids = {g["id"] for g in out2["endings_discovered"]}
+            assert ids == {"exile"}, f"status gallery not scoped to this user's reached endings: {ids}"
+            assert out2["endings_total"] == srv.ENDINGS_TOTAL
+        finally:
+            shutil.rmtree(sess.session_root, ignore_errors=True)
+    print("  [PASS] status payload carries a spoiler-safe endings gallery (logged in + out)")
+
+
+def test_district_access_carries_unlocked_names_only():
+    """Unlocked districts are client-visible by name; sealed ones stay hidden.
+
+    Documents the shape the frontend consumes: session world_state.district_access
+    is the list of UNLOCKED districts ({name, name_zh, status, notes}); the sealed
+    districts live in the hidden _district_registry, which _filter_hidden strips
+    from anything sent to the client (both the 'hidden': True dict and the leading
+    underscore key). So current-location + unlocked names are the only district
+    topology the client ever sees — no adjacency graph exists in engine data.
+    """
+    from engine.state import create_new_session, load_session
+    import gui.server as srv
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        session_dir = os.path.join(tmpdir, "distr")
+        create_new_session(session_dir=session_dir, name="D", alias="D",
+                           background="street_runner", difficulty="standard", language="en")
+
+        # Raw on-disk state: two unlocked districts + a HIDDEN registry of sealed ones.
+        raw = load_session(session_dir)
+        ws = raw["world_state"]
+        access_names = {d["name"] for d in ws["district_access"]}
+        assert "The Sprawl" in access_names and "Neon Row" in access_names, \
+            f"starting unlocked districts missing from district_access: {access_names}"
+        assert "_district_registry" in ws and ws["_district_registry"].get("hidden") is True, \
+            "sealed districts must live behind a hidden _district_registry"
+
+        # What the client actually receives is _filter_hidden'd: the registry and
+        # every sealed district name must be gone; unlocked names must remain.
+        sess = srv.PlayerSession("distr-user", "distr-uid")
+        sess.session_dir = session_dir
+        client_view = srv._get_session_data(sess)
+        cws = client_view["world_state"]
+        assert "_district_registry" not in cws, "hidden district registry leaked to the client"
+        client_access = {d["name"] for d in cws.get("district_access", [])}
+        assert "The Sprawl" in client_access and "Neon Row" in client_access, \
+            "unlocked district names must reach the client"
+        # No sealed district name (e.g. The Spire / The Resonance) anywhere in the
+        # client world_state — spoiler gate for district topology.
+        blob = json.dumps(cws, ensure_ascii=False)
+        for sealed in ("The Spire", "The Resonance", "The Undercroft", "Sector 7"):
+            assert sealed not in blob, f"sealed district '{sealed}' leaked into client world_state"
+    print("  [PASS] district_access exposes unlocked names only; sealed registry stripped for client")
+
+
 def main():
     print("=" * 60)
     print("Signal Lost — Regression Tests")
@@ -917,6 +1071,10 @@ def main():
         test_act_on_evidence_discovery_route,
         test_ambient_causes_and_bilingual_scarcity_rule,
         test_player_turn_priority_over_world_sim_lock,
+        test_endings_history_dedup_and_spoiler_safe,
+        test_endings_history_atomic_write_survives_garbage,
+        test_status_payload_carries_endings_gallery,
+        test_district_access_carries_unlocked_names_only,
     ]
 
     passed = 0
