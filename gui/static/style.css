@@ -2046,12 +2046,6 @@ mark.search-hl {
   box-shadow: 0 0 6px var(--cyan);
 }
 
-/* NPC trust colors */
-.trust-high { color: var(--green); }
-.trust-medium { color: var(--yellow); }
-.trust-low { color: var(--orange); }
-.trust-hostile { color: var(--red); }
-
 /* Alert level colors */
 .alert-calm { color: var(--green); }
 .alert-low { color: var(--yellow); }
@@ -2075,13 +2069,6 @@ mark.search-hl {
 .log-entry.signal {
   border-left-color: var(--magenta);
   background: rgba(255,0,255,0.03);
-}
-
-.log-entry-turn {
-  font-family: var(--font-display);
-  font-size: 10px;
-  color: var(--text-muted);
-  letter-spacing: 1px;
 }
 
 .log-entry-title {
@@ -2757,7 +2744,6 @@ mark.search-hl {
 .pip.filled { color: var(--green); text-shadow: 0 0 6px var(--green); }
 .pip.empty { color: var(--text-dim); opacity: 0.4; }
 
-.status-value.cyan-bright { color: var(--cyan); font-weight: bold; }
 .status-value.cyan { color: var(--cyan); }
 
 /* ================================================================
@@ -3049,11 +3035,6 @@ mark.search-hl {
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
-.npc-entry:hover .npc-avatar {
-  border-color: var(--cyan-dim);
-  box-shadow: 0 0 8px rgba(0, 255, 245, 0.35);
-}
-
 /* ================================================================
    PROGRESS BAR VARIANTS
    ================================================================ */
@@ -3232,7 +3213,6 @@ mark.search-hl {
   color: var(--green-bright);
   margin-bottom: 4px;
 }
-.discovery-icon { margin-right: 6px; }
 .discovery-text { color: var(--text-muted); font-style: italic; }
 @keyframes discovery-pulse {
   0% { opacity: 0; transform: translateY(10px); }

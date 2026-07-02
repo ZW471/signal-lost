@@ -72,7 +72,6 @@ from engine.llm_factory import (
     save_env_key,
     _read_json,
     GAME_ROOT,
-    SETTINGS_DIR,
     ZERO_COST_PROVIDERS,
     OAUTH_CLI_PROVIDERS,
     BYPASS_PROVIDERS,

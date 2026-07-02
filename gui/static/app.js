@@ -144,8 +144,7 @@ let currentLang = 'en'; // Set from settings
 const LABELS = {
   en: {
     // Tabs
-    tab_identity: 'ID', tab_knowledge: 'KNOW', tab_traces: 'TRACE',
-    tab_district: 'LOC', tab_inventory: 'INV', tab_network: 'NPC',
+    tab_knowledge: 'KNOW', tab_traces: 'TRACE', tab_network: 'NPC',
     tab_world: 'WORLD', tab_log: 'LOG', tab_conversation: 'CONV',
     tab_character: 'CHAR',
     // Identity
@@ -158,7 +157,6 @@ const LABELS = {
     theories: 'THEORIES', connections: 'CONNECTIONS', none_discovered: 'None discovered',
     // Traces
     traces_of_truth: 'TRACES OF TRUTH', discovered: 'Discovered',
-    no_traces: 'No traces discovered yet. Investigate the world to uncover the truth.',
     // Trace Ladder — descent gauge + layer bands (flavor names bilingual;
     // the traces.json scaffold ships English-only, so names route through L()).
     descent: 'DESCENT', trace_locked: 'LOCKED',
@@ -186,7 +184,7 @@ const LABELS = {
     inventory: 'INVENTORY', slots: 'Slots', items: 'ITEMS', empty_slot: '(empty)',
     // Network
     npc_tracker: 'NPC TRACKER', faction: 'Faction', trust: 'Trust',
-    last_seen: 'Last seen', quest: 'Quest', no_npcs: 'No NPCs encountered',
+    quest: 'Quest', no_npcs: 'No NPCs encountered',
     // World
     nexus_alert: 'NEXUS ALERT', fragment_decay: 'FRAGMENT DECAY',
     district_access: 'DISTRICT ACCESS', global_events: 'GLOBAL EVENTS',
@@ -246,7 +244,6 @@ const LABELS = {
     endings_gallery_short: 'Gallery',        // '◈ NEW ENDING RECORDED — Gallery 3/9'
     // District constellation map (WORLD tab)
     district_map_title: 'DISTRICT MAP',
-    district_map_current: 'Current',
     district_map_sealed: 'Sealed',           // dim edge slots ('{n} Sealed')
     district_map_travel: 'go to',            // click → prefill 'go to {name}'
     // Resume/load skeleton line
@@ -256,7 +253,6 @@ const LABELS = {
     label_designation: 'DESIGNATION', label_alias: 'ALIAS', label_background: 'BACKGROUND',
     label_difficulty: 'DIFFICULTY', label_language: 'LANGUAGE',
     placeholder_name: 'Enter name…', placeholder_alias: 'Enter alias…',
-    bg_street_runner: 'Street Runner', bg_corporate_exile: 'Corporate Exile', bg_netrunner: 'Netrunner',
     diff_paranoid: 'Easy', diff_cautious: 'Normal',
     diff_standard: 'Standard', diff_reckless: 'Very Hard',
     diff_paranoid_desc: 'More forgiving, extra integrity',
@@ -272,7 +268,6 @@ const LABELS = {
     save_autosave: 'AUTOSAVE',
     save_manual: 'SAVE',
     save_delete: 'Delete',
-    save_delete_soon: 'Delete is coming soon',
     save_captured: 'captured',
     // Delete-save confirm + result
     save_delete_title: '// DELETE SAVE?',
@@ -292,7 +287,7 @@ const LABELS = {
     confirm_menu_text: 'Any unsaved progress will be lost.',
     btn_confirm: 'CONFIRM',
     // Settings
-    settings_title: '// SETTINGS', label_ui_language: 'UI LANGUAGE',
+    settings_title: '// SETTINGS',
     settings_provider_title: '// LLM PROVIDER',
     label_provider: 'PROVIDER', label_model: 'MODEL',
     label_api_key: 'API KEY', label_base_url: 'BASE URL', label_temperature: 'TEMPERATURE',
@@ -407,8 +402,7 @@ const LABELS = {
     shortcut_close_dialog: 'Close dialog / menu',
   },
   zh: {
-    tab_identity: '身份', tab_knowledge: '知识', tab_traces: '痕迹',
-    tab_district: '区域', tab_inventory: '物品', tab_network: '人脉',
+    tab_knowledge: '知识', tab_traces: '痕迹', tab_network: '人脉',
     tab_world: '世界', tab_log: '日志', tab_conversation: '对话',
     tab_character: '角色',
     identity: '身份', name: '姓名', alias: '化名', background: '背景',
@@ -418,7 +412,6 @@ const LABELS = {
     facts: '事实', rumors: '传闻', evidence: '证据',
     theories: '推论', connections: '关联', none_discovered: '尚未发现',
     traces_of_truth: '真相痕迹', discovered: '已发现',
-    no_traces: '尚未发现任何痕迹。探索世界以揭示真相。',
     descent: '深潜', trace_locked: '未解封',
     trace_layer_1: '表层', trace_layer_2: '阴谋',
     trace_layer_3: '断离真相', trace_layer_4: '镜像',
@@ -440,7 +433,7 @@ const LABELS = {
     npcs_present: '在场角色',
     inventory: '物品栏', slots: '槽位', items: '物品', empty_slot: '(空)',
     npc_tracker: '角色追踪', faction: '阵营', trust: '信任',
-    last_seen: '上次出现', quest: '任务', no_npcs: '尚无已接触角色',
+    quest: '任务', no_npcs: '尚无已接触角色',
     nexus_alert: 'NEXUS警报', fragment_decay: '碎片衰变',
     district_access: '区域通行', global_events: '全局事件',
     world_nominal: '世界状态正常，无警报。',
@@ -493,7 +486,6 @@ const LABELS = {
     endings_gallery_short: '结局档案',        // '◈ 记录新结局 — 结局档案 3/9'
     // District constellation map (WORLD tab)
     district_map_title: '区域地图',
-    district_map_current: '当前',
     district_map_sealed: '封锁',              // '{n} 封锁'
     district_map_travel: '前往',              // click → prefill '前往{name}'
     // Resume/load skeleton line
@@ -503,7 +495,6 @@ const LABELS = {
     label_designation: '姓名', label_alias: '化名', label_background: '背景',
     label_difficulty: '难度', label_language: '语言',
     placeholder_name: '输入姓名…', placeholder_alias: '输入化名…',
-    bg_street_runner: '街头行者', bg_corporate_exile: '企业流亡者', bg_netrunner: '网行者',
     diff_paranoid: '简单', diff_cautious: '普通',
     diff_standard: '标准', diff_reckless: '极难',
     diff_paranoid_desc: '更宽容，额外完整性',
@@ -519,7 +510,6 @@ const LABELS = {
     save_autosave: '自动存档',
     save_manual: '存档',
     save_delete: '删除',
-    save_delete_soon: '删除功能即将推出',
     save_captured: '记录于',
     // Delete-save confirm + result
     save_delete_title: '// 删除存档？',
@@ -539,7 +529,7 @@ const LABELS = {
     confirm_menu_text: '未保存的进度将会丢失。',
     btn_confirm: '确认',
     // Settings
-    settings_title: '// 设置', label_ui_language: '界面语言',
+    settings_title: '// 设置',
     settings_provider_title: '// 语言模型',
     label_provider: '提供商', label_model: '模型',
     label_api_key: 'API密钥', label_base_url: '地址', label_temperature: '温度',
@@ -4610,14 +4600,6 @@ function renderBandedGauge(elId, value, label) {
   // Refresh the pristine base so _applyMeterReasons appends the cause onto the
   // just-rendered value/status, not a stale one from a prior render.
   el.dataset.baseTitle = label;
-}
-
-function countDiscoveredTraces(traces) {
-  if (!traces) return 0;
-  // Flat structure: { discovered: [...] }
-  if (Array.isArray(traces.discovered)) return traces.discovered.length;
-  const m = (traces.total_discovered || '0').toString().match(/(\d+)/);
-  return m ? parseInt(m[0]) : 0;
 }
 
 // ---------- IDENTITY PANEL (matches TUI IdentityPanel) ----------
