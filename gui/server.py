@@ -28,6 +28,7 @@ import shutil
 import sys
 import threading
 from collections import deque
+from contextlib import contextmanager
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
@@ -173,6 +174,149 @@ def _turn_lock_for(uid: str) -> threading.Lock:
         if lock is None:
             lock = _turn_locks[uid] = threading.Lock()
         return lock
+
+
+# ---------------------------------------------------------------------------
+# Player-turn priority over background lock holders (world-sim, predictions)
+# ---------------------------------------------------------------------------
+# The account turn lock is shared between PLAYER-VISIBLE turns (input / resume /
+# load) and BACKGROUND work — most notably the WorldSimScheduler tick, whose
+# single LLM call through a CLI provider can legally take many minutes (codex:
+# up to 3 attempts x 300s). Wave 6 handed the scheduler the account lock
+# verbatim, so a tick that fired around a resume could grab the lock first and
+# the player's turn queued behind it INVISIBLY (phase frames are only emitted
+# once the turn body holds the lock). Live incident: u18/波醒w1 resume, 8+ min
+# of silence behind a world-sim holder.
+#
+# Fix: (1) player-visible turns register themselves in ``_player_waiting`` for
+# the duration of their lock acquire + hold; (2) the scheduler no longer gets
+# the raw lock but a ``_BackgroundSimLock`` facade that REFUSES to start a tick
+# while a player turn is pending/running and only try-acquires with a short
+# timeout — contended ⇒ the tick is skipped and the scheduler's own loop
+# reschedules it; (3) a player turn that still finds the lock held (a tick
+# already in its LLM call cannot be preempted) tells the client immediately
+# instead of waiting in silence (see ``_notify_sim_wait`` in ``_run_turn``).
+
+_player_waiting: "dict[str, int]" = {}
+_player_waiting_guard = threading.Lock()
+
+
+def _player_turn_pending(uid: str) -> bool:
+    """True while any player-visible turn for *uid* is waiting for or holding
+    the account turn lock. Probed by background work before slow LLM calls."""
+    with _player_waiting_guard:
+        return _player_waiting.get(uid, 0) > 0
+
+
+class _note_player_waiting:
+    """Context manager marking a player-visible lock acquire/hold for *uid*.
+
+    A plain counter (not a bool) so overlapping waiters — e.g. an abandoned
+    kicked turn plus its replacement — can't clear each other's mark early.
+    """
+
+    def __init__(self, uid: str):
+        self._uid = uid
+
+    def __enter__(self):
+        with _player_waiting_guard:
+            _player_waiting[self._uid] = _player_waiting.get(self._uid, 0) + 1
+        return self
+
+    def __exit__(self, *exc):
+        with _player_waiting_guard:
+            n = _player_waiting.get(self._uid, 1) - 1
+            if n > 0:
+                _player_waiting[self._uid] = n
+            else:
+                _player_waiting.pop(self._uid, None)
+        return False
+
+
+class _WorldSimSkipped(Exception):
+    """Raised by _BackgroundSimLock to make the world-sim scheduler skip this
+    tick (its _run_sim catches it non-fatally and its loop reschedules)."""
+
+
+# How long a background world-sim tick may wait for the account turn lock
+# before skipping. Deliberately short: background work must never queue.
+_SIM_LOCK_TIMEOUT = 0.25
+
+
+class _BackgroundSimLock:
+    """Context-manager lock facade handed to the WorldSimScheduler.
+
+    Player-visible turns have PRIORITY on the account turn lock. ``__enter__``:
+
+    * refuses outright when a player turn is pending/running for this account
+      (the 'player turn pending' check before the sim's slow LLM call);
+    * otherwise try-acquires the real lock with a short timeout — contended
+      means someone is doing real work, so the tick skips rather than queues;
+    * re-checks the pending flag after acquiring (a player turn may have
+      arrived during the bounded wait) and backs off if so.
+
+    A skip raises :class:`_WorldSimSkipped`, which the scheduler's ``_run_sim``
+    already treats as a non-fatal tick failure; its timer loop reschedules the
+    next tick at the normal interval, so skipped work is retried later.
+    """
+
+    def __init__(self, real_lock: threading.Lock, uid: str):
+        self._real = real_lock
+        self._uid = uid
+
+    def __enter__(self):
+        if _player_turn_pending(self._uid):
+            raise _WorldSimSkipped(
+                "player turn pending — world-sim tick skipped (will retry next interval)")
+        if not self._real.acquire(timeout=_SIM_LOCK_TIMEOUT):
+            raise _WorldSimSkipped(
+                "account turn lock contended — world-sim tick skipped (will retry next interval)")
+        if _player_turn_pending(self._uid):
+            self._real.release()
+            raise _WorldSimSkipped(
+                "player turn arrived during acquire — world-sim tick skipped")
+        return self
+
+    def __exit__(self, *exc):
+        self._real.release()
+        return False
+
+
+# Bilingual notice shown when a player turn finds the account lock held by an
+# unpreemptable background holder (a world-sim tick already inside its LLM
+# call). Sent IMMEDIATELY so the wait is never silent.
+_SIM_WAIT_MSG = (
+    "The world kept moving while you were away — wrapping up a background "
+    "simulation, your turn starts right after… / "
+    "你离开时世界仍在运转——正在完成后台模拟，你的回合马上开始…"
+)
+
+
+@contextmanager
+def _player_priority_lock(sess: "PlayerSession", notify_wait=None):
+    """Acquire the account turn lock for a PLAYER-VISIBLE turn, with priority.
+
+    * Registers in ``_player_waiting`` for the whole acquire+hold, so no NEW
+      background tick will start (see :class:`_BackgroundSimLock`).
+    * Fast path: uncontended non-blocking acquire — the common case.
+    * Contended (an already-running background tick, or a superseded session's
+      abandoned turn, cannot be preempted): call *notify_wait* ONCE so the
+      client immediately learns why nothing is happening, then block. The
+      holder is finite (CLI wrappers own hard subprocess timeouts and
+      ``_run_turn`` has its 960s backstop), so the wait is bounded.
+    """
+    with _note_player_waiting(sess.uid):
+        if not sess.lock.acquire(blocking=False):
+            if notify_wait is not None:
+                try:
+                    notify_wait()
+                except Exception:
+                    pass  # notification is best-effort; never blocks the turn
+            sess.lock.acquire()
+        try:
+            yield
+        finally:
+            sess.lock.release()
 
 
 class PlayerSession:
@@ -996,25 +1140,27 @@ async def _handle_new_game(ws: WebSocket, sess: PlayerSession, msg: dict):
         # REUSE a same-origin dir, and create_new_session rmtree's it — without
         # the lock a superseded session's still-running turn could be mid-write
         # in that very dir (see _turn_lock_for). Bounded acquire so a wedged
-        # abandoned turn yields an error instead of a hang.
-        if not sess.lock.acquire(timeout=_BIND_LOCK_TIMEOUT):
-            return None
-        try:
-            create_new_session(
-                session_dir=sess.session_dir,
-                name=config.get("name", "Unknown"),
-                alias=config.get("alias", "Unknown"),
-                background=config.get("background", "street_runner"),
-                difficulty=diff,
-                language=lang,
-            )
-            # create_new_session rmtree's the dir, so (re)stamp the origin
-            # marker after it so future new-game collision checks can tell
-            # this game's display name.
-            _write_origin_marker(sess.session_dir, save_name)
-            return initial_state(sess.session_dir)
-        finally:
-            sess.lock.release()
+        # abandoned turn yields an error instead of a hang. Marked player-
+        # visible so background world-sim ticks defer instead of contending.
+        with _note_player_waiting(sess.uid):
+            if not sess.lock.acquire(timeout=_BIND_LOCK_TIMEOUT):
+                return None
+            try:
+                create_new_session(
+                    session_dir=sess.session_dir,
+                    name=config.get("name", "Unknown"),
+                    alias=config.get("alias", "Unknown"),
+                    background=config.get("background", "street_runner"),
+                    difficulty=diff,
+                    language=lang,
+                )
+                # create_new_session rmtree's the dir, so (re)stamp the origin
+                # marker after it so future new-game collision checks can tell
+                # this game's display name.
+                _write_origin_marker(sess.session_dir, save_name)
+                return initial_state(sess.session_dir)
+            finally:
+                sess.lock.release()
 
     state = await asyncio.to_thread(_create_locked)
     if state is None:
@@ -1048,15 +1194,20 @@ def _load_state_locked(sess: PlayerSession, *, copy_from: str | None = None):
     be mid-write while we copy/read the files (torn reads → silent empty state).
     Runs in a worker thread (blocking acquire). Returns the initial GameState,
     or None if the lock couldn't be acquired within _BIND_LOCK_TIMEOUT.
+
+    Marked player-visible (``_note_player_waiting``) for the whole acquire+hold,
+    so a world-sim tick firing mid-resume defers to us instead of stealing the
+    lock between this read and the resume turn itself.
     """
-    if not sess.lock.acquire(timeout=_BIND_LOCK_TIMEOUT):
-        return None
-    try:
-        if copy_from:
-            copy_save_to_session(copy_from, sess.session_dir)
-        return initial_state(sess.session_dir)
-    finally:
-        sess.lock.release()
+    with _note_player_waiting(sess.uid):
+        if not sess.lock.acquire(timeout=_BIND_LOCK_TIMEOUT):
+            return None
+        try:
+            if copy_from:
+                copy_save_to_session(copy_from, sess.session_dir)
+            return initial_state(sess.session_dir)
+        finally:
+            sess.lock.release()
 
 
 async def _handle_resume(ws: WebSocket, sess: PlayerSession, msg: dict):
@@ -1413,13 +1564,21 @@ async def companion_endpoint(ws: WebSocket):
 # ---------------------------------------------------------------------------
 
 def _start_world_sim_scheduler(sess: PlayerSession):
-    """Create or restart the WorldSimScheduler for *sess*."""
+    """Create or restart the WorldSimScheduler for *sess*.
+
+    The scheduler gets the account turn lock only through the
+    :class:`_BackgroundSimLock` facade: a tick that would contend with a
+    player-visible turn (pending, running, or arriving mid-acquire) SKIPS
+    instead of queueing, so a slow world-sim LLM call can never starve the
+    player's resume/input turn (the u18/波醒w1 incident). Data safety is
+    unchanged — when a tick does run it holds the same account-wide lock.
+    """
     if sess.scheduler is not None:
         sess.scheduler.stop()
     sess.scheduler = WorldSimScheduler(
         session_dir=sess.session_dir,
         llm_getter=get_llm,
-        game_lock=sess.lock,
+        game_lock=_BackgroundSimLock(sess.lock, sess.uid),
     )
 
 
@@ -1489,12 +1648,20 @@ async def _predict_outcomes(sess: PlayerSession, action_texts: list[str], gen: i
     loop = asyncio.get_event_loop()
 
     def _make_base():
-        with sess.lock:
+        # Bounded acquire: predictions are best-effort BACKGROUND work — never
+        # let one queue for minutes behind a world-sim tick / abandoned turn
+        # holding the account lock (it would pin an executor thread and then
+        # snapshot a stale base anyway). Contended ⇒ skip this prediction round.
+        if not sess.lock.acquire(timeout=5.0):
+            return None
+        try:
             if gen != sess.predict_generation:
                 return None
             action_cache.clear(session_dir)
             base = action_cache.make_base(session_dir)
             return base, action_cache.fingerprint(session_dir), _player_turn(session_dir)
+        finally:
+            sess.lock.release()
 
     try:
         info = await loop.run_in_executor(None, _make_base)
@@ -1571,16 +1738,19 @@ def _try_serve_cached(sess: PlayerSession, text: str) -> dict | None:
     # still-running turn may hold it for minutes. This fast path has no timeout
     # backstop of its own — degrade to a cache miss (the normal turn path has
     # both the 960s backstop and the cancel seam) instead of blocking unboundedly.
-    if not sess.lock.acquire(timeout=5.0):
-        return None
-    try:
-        if _player_turn(session_dir) != exp_turn:
+    # Marked player-visible: this IS the player's action, so a world-sim tick
+    # must defer to it rather than start mid-click and force a cache miss.
+    with _note_player_waiting(sess.uid):
+        if not sess.lock.acquire(timeout=5.0):
             return None
-        if action_cache.fingerprint(session_dir) != exp_fp:
-            return None
-        action_cache.promote(session_dir, entry["state_dir"])
-    finally:
-        sess.lock.release()
+        try:
+            if _player_turn(session_dir) != exp_turn:
+                return None
+            if action_cache.fingerprint(session_dir) != exp_fp:
+                return None
+            action_cache.promote(session_dir, entry["state_dir"])
+        finally:
+            sess.lock.release()
     with sess.cache_lock:
         sess.predict_generation += 1
     # The speculative turn's roll beats + meter reasons were drained from the
@@ -2132,8 +2302,22 @@ async def _run_turn(sess: PlayerSession, ws: WebSocket, player_input: str | None
     def _cancelled() -> bool:
         return sess.cancel_requested
 
+    def _notify_sim_wait():
+        # The account lock is held by an unpreemptable background holder
+        # (world-sim tick mid-LLM-call). Surface an immediate 'world' phase +
+        # bilingual system notice so the queued turn is never silent. Runs in
+        # the executor thread — marshal the send onto the loop, best-effort.
+        _emit_phase("world")
+        payload = {"type": "system_notice", "text": _SIM_WAIT_MSG}
+        try:
+            loop.call_soon_threadsafe(
+                lambda: asyncio.ensure_future(_safe_send(ws, payload))
+            )
+        except RuntimeError:
+            pass  # loop gone — client is away; nothing to deliver
+
     def _invoke():
-        with sess.lock:
+        with _player_priority_lock(sess, _notify_sim_wait):
             # --- CLI-bypass: single LLM call, pure Python post-processing ---
             # Snapshot (llm, is_cli_bypass) atomically so a concurrent provider
             # reconfigure by another player can't pair this turn's LLM with a

@@ -747,6 +747,148 @@ def test_ambient_causes_and_bilingual_scarcity_rule():
     print("  [PASS] Implant scarcity rule is bilingual; ambient meter causes carry en+zh")
 
 
+def test_player_turn_priority_over_world_sim_lock():
+    """Player-visible turns must never queue silently behind background world-sim.
+
+    Regression (wave 6): PlayerSession.lock became account-wide and the
+    WorldSimScheduler inherited the SAME lock (game_lock=sess.lock). A sim tick
+    firing around a resume grabbed the lock first and held it through a
+    multi-minute CLI LLM call; the player's resume turn queued behind it with
+    no phase frames and no error (live incident: u18/波醒w1, 8+ minutes of
+    silence). Pins the fix:
+
+    1. the scheduler receives the _BackgroundSimLock facade, not the raw lock;
+    2. a sim tick SKIPS (non-fatally, lock released) while a player turn is
+       pending, when the lock is contended, and when a player turn arrives
+       during its own acquire — it never queues;
+    3. a real WorldSimScheduler._run_sim treats the skip as a no-op: the slow
+       LLM path is NOT entered while a player turn is pending, and no
+       exception escapes into the timer thread;
+    4. a player turn that finds the lock held by a background holder emits an
+       immediate wait notice, then proceeds once the holder releases; an
+       uncontended turn emits nothing.
+
+    Stubbed locks/threads only — no LLM, no engine turn.
+    """
+    import logging
+    import shutil
+    import threading
+    import time
+
+    import gui.server as srv
+
+    uid = "regr-prio-uid"
+
+    # -- 1. scheduler wiring: facade around the ACCOUNT lock, never the raw lock
+    sess = srv.PlayerSession("regr-prio", uid)
+    sess.session_dir = tempfile.mkdtemp(prefix="slregr-prio-")
+    srv._start_world_sim_scheduler(sess)
+    try:
+        gate = sess.scheduler._game_lock
+        assert isinstance(gate, srv._BackgroundSimLock), \
+            "world-sim scheduler must get the _BackgroundSimLock facade"
+        assert gate._real is sess.lock, "facade must wrap the account turn lock"
+
+        # -- 2a. tick skips while a player turn is pending --------------------
+        with srv._note_player_waiting(uid):
+            try:
+                with gate:
+                    raise AssertionError("sim tick ran while a player turn was pending")
+            except srv._WorldSimSkipped:
+                pass
+            assert not sess.lock.locked(), "skip must not leak the account lock"
+
+        # -- 2b. tick skips (fast) when the lock is contended — never queues --
+        assert sess.lock.acquire(timeout=1)
+        try:
+            t0 = time.monotonic()
+            try:
+                with gate:
+                    raise AssertionError("sim tick ran on a contended lock")
+            except srv._WorldSimSkipped:
+                pass
+            assert time.monotonic() - t0 < 5.0, \
+                "contended sim tick must skip within the short try-acquire window"
+        finally:
+            sess.lock.release()
+
+        # -- 2c. tick backs off when a player arrives during its acquire ------
+        real_pending = srv._player_turn_pending
+        answers = iter([False, True])  # pre-acquire check, post-acquire re-check
+        srv._player_turn_pending = lambda _uid: next(answers)
+        try:
+            try:
+                with gate:
+                    raise AssertionError("sim tick kept the lock after a player turn arrived")
+            except srv._WorldSimSkipped:
+                pass
+            assert not sess.lock.locked(), "back-off must release the acquired lock"
+        finally:
+            srv._player_turn_pending = real_pending
+
+        # -- 3. real scheduler: skip is a silent no-op, LLM path never entered -
+        calls = []
+        sess.scheduler._execute_world_sim = lambda: (calls.append(1), [])[1]
+        sim_logger = logging.getLogger("engine.world_sim_scheduler")
+        sim_logger.disabled = True  # the skip is logged non-fatally; keep output clean
+        try:
+            with srv._note_player_waiting(uid):
+                sess.scheduler._run_sim()  # must swallow _WorldSimSkipped, not raise
+            assert not calls, "world-sim LLM path must NOT run while a player turn is pending"
+            sess.scheduler._run_sim()      # idle again: the tick runs normally
+            assert calls, "world-sim must still run when no player turn is pending"
+        finally:
+            sim_logger.disabled = False
+
+        # -- 4. queued player turn notifies immediately, then proceeds --------
+        notices: list = []
+        acquired: list = []
+        release = threading.Event()
+
+        def _background_holder():
+            with sess.lock:  # simulates a sim tick already inside its LLM call
+                release.wait(5)
+
+        holder = threading.Thread(target=_background_holder, daemon=True)
+        holder.start()
+        for _ in range(400):
+            if sess.lock.locked():
+                break
+            time.sleep(0.005)
+        assert sess.lock.locked(), "test holder failed to take the lock"
+
+        def _player_turn():
+            with srv._player_priority_lock(sess, lambda: notices.append(1)):
+                acquired.append(1)
+
+        player = threading.Thread(target=_player_turn, daemon=True)
+        player.start()
+        for _ in range(400):  # the notice must arrive while STILL queued
+            if notices:
+                break
+            time.sleep(0.005)
+        assert notices == [1], "queued player turn must emit the wait notice immediately"
+        assert not acquired, "player turn should still be waiting behind the holder"
+        release.set()
+        player.join(5)
+        holder.join(5)
+        assert acquired == [1], "player turn must proceed once the holder releases"
+        assert not srv._player_turn_pending(uid), \
+            "player-pending mark must clear once the turn finishes"
+
+        # -- 4b. uncontended player turn emits no notice ----------------------
+        notices.clear()
+        with srv._player_priority_lock(sess, lambda: notices.append(1)):
+            pass
+        assert not notices, "uncontended player turn must not emit a wait notice"
+    finally:
+        if sess.scheduler:
+            sess.scheduler.stop()
+        shutil.rmtree(sess.session_dir, ignore_errors=True)
+
+    print("  [PASS] Player turns take priority over world-sim on the account lock")
+
+
 def main():
     print("=" * 60)
     print("Signal Lost — Regression Tests")
@@ -774,6 +916,7 @@ def main():
         test_l3_07_requires_sector7_context,
         test_act_on_evidence_discovery_route,
         test_ambient_causes_and_bilingual_scarcity_rule,
+        test_player_turn_priority_over_world_sim_lock,
     ]
 
     passed = 0
