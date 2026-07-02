@@ -142,6 +142,11 @@ const LABELS = {
     kn_fact: 'New fact discovered', kn_rumor: 'New rumor discovered',
     kn_evidence: 'New evidence collected', kn_theory: 'New theory formed',
     kn_connection: 'New connection found',
+    // Roll chip — inline mechanical beat before narration (optional frame)
+    roll_success: 'SUCCESS', roll_failure: 'FAILURE',
+    roll_vs: 'vs', roll_modifiers: 'Modifiers',
+    // Meter "why" — one-line cause under a HUD/WORLD meter that moved
+    meter_why: 'why',
     // District
     current_location: 'CURRENT LOCATION', district: 'District', area: 'Area',
     signal_strength: 'Signal', danger_level: 'Danger', nexus_patrol: 'NEXUS Patrol',
@@ -347,6 +352,11 @@ const LABELS = {
     kn_fact: '新事实已记录', kn_rumor: '新传闻已记录',
     kn_evidence: '新证据已收集', kn_theory: '新理论已形成',
     kn_connection: '新关联已发现',
+    // Roll chip — inline mechanical beat before narration (optional frame)
+    roll_success: '成功', roll_failure: '失败',
+    roll_vs: '对', roll_modifiers: '修正',
+    // Meter "why" — one-line cause under a HUD/WORLD meter that moved
+    meter_why: '原因',
     current_location: '当前位置', district: '区域', area: '地点',
     signal_strength: '信号', danger_level: '危险', nexus_patrol: '连结巡逻',
     description: '描述', exits: '出口', poi: '兴趣点',
@@ -1778,6 +1788,18 @@ function handleServerMessage(msg) {
     case 'thinking':
       clearSuggestedActions();
       showThinking();
+      // A new turn began — drop last turn's meter-why reasons so a stale cause
+      // can't linger under a meter that didn't move this turn.
+      _clearMeterReasons();
+      break;
+
+    case 'roll':
+      // Optional mechanical beat: a compact chip per skill check, rendered inline
+      // in the chat flow BEFORE the upcoming narration. Additive/optional frame —
+      // may arrive between 'thinking' and 'narrative', or never. Degrade silently
+      // on a malformed payload. NOT skippable text: standalone element, so it
+      // sits outside the typewriter generation-guard entirely.
+      renderRollChips(msg.rolls);
       break;
 
     case 'narrative':
@@ -1823,6 +1845,18 @@ function handleServerMessage(msg) {
       // state_delta reports WHICH end-gating meters moved this turn, so we
       // pulse just those HUD gauges. Gated behind prefersReducedMotion.
       flashChangedMeters(msg);
+      // Optional reasons:{alert?,integrity?,decay?} → surface WHY a meter moved
+      // as a HUD tooltip + WORLD-panel subtext (persists until next turn).
+      // Absent block → reasons cleared; the meters just show their value.
+      _ingestMeterReasons(msg.reasons);
+      _applyMeterReasons();
+      // NOTE: traces_added / knowledge_added arrays are intentionally NOT
+      // consumed here. The dedicated per-item 'discovery' and 'knowledge_added'
+      // frames (sent just before this delta) already own the discovery ceremony
+      // and knowledge toast. Toasting again from these arrays would double-fire
+      // the ceremony — so the delta carries them for diffing only, and this
+      // handler deliberately leaves them to the ceremony path. See the
+      // 'discovery' / 'knowledge_added' cases below.
       break;
 
     case 'prediction_ready':
@@ -2283,6 +2317,148 @@ function loadGame(saveName) {
 
 function clearChat() { document.getElementById('chatMessages').innerHTML = ''; discoveryEls = []; }
 
+// ----------------------------------------------------------------------------
+// ROLL CHIP — inline mechanical beat (optional {type:'roll'} frame)
+// A compact chip per skill check, rendered in the chat flow before the upcoming
+// narration. Count-up of result → target, green/red success flash, expandable
+// modifier breakdown, rising/falling two-tone via the 'ui' SFX bus. Motion is
+// gated behind prefersReducedMotion (instant fill, no animation). This is a
+// standalone element, NOT skippable typewriter text — it never touches the
+// generation-guard (_activeTyper) and is never finalized/cleared by a skip.
+// ----------------------------------------------------------------------------
+
+/** Bilingual skill label from a roll entry, following the field_zh pattern
+ *  (server supplies label + label_zh). Falls back to the raw skill token. */
+function _rollLabel(r) {
+  const zh = (currentLang === 'zh' && r && r.label_zh) ? r.label_zh : (r && r.label);
+  return zh || (r && r.skill) || '';
+}
+
+/** Count a numeric element up from 0 → value over ~duration ms (rAF-driven).
+ *  Reduced-motion / tiny values snap straight to the final number. */
+function _countUp(el, value, duration) {
+  if (!el) return;
+  const end = Number(value) || 0;
+  if (prefersReducedMotion || Math.abs(end) < 2 || !duration) {
+    el.textContent = String(end);
+    return;
+  }
+  const start = performance.now();
+  let settled = false;
+  function step(now) {
+    if (settled) return;
+    const t = Math.min(1, (now - start) / duration);
+    // easeOutCubic — decelerate into the final value
+    const eased = 1 - Math.pow(1 - t, 3);
+    el.textContent = String(Math.round(end * eased));
+    if (t < 1) requestAnimationFrame(step);
+    else { settled = true; el.textContent = String(end); }
+  }
+  requestAnimationFrame(step);
+  // Safety net: requestAnimationFrame is paused while the tab is backgrounded,
+  // which would freeze the count-up at 0. Snap to the final value once the
+  // animation window has elapsed regardless of whether rAF ever ticked, so a
+  // roll result is never stuck mid-count in a hidden/throttled tab.
+  setTimeout(() => { if (!settled) { settled = true; el.textContent = String(end); } }, duration + 60);
+}
+
+function renderRollChips(rolls) {
+  // Degrade silently: nothing to show on a missing/empty/malformed payload.
+  if (!Array.isArray(rolls) || rolls.length === 0) return;
+  const container = document.getElementById('chatMessages');
+  if (!container) return;
+
+  const wrap = document.createElement('div');
+  wrap.className = 'chat-msg roll-beat';
+
+  rolls.forEach((r, idx) => {
+    if (!r || typeof r !== 'object') return;
+    const success = !!r.success;
+    const result = Number(r.result) || 0;
+    const target = Number(r.target) || 0;
+    const label = _rollLabel(r);
+    const mods = Array.isArray(r.modifiers) ? r.modifiers.filter(Boolean) : [];
+
+    const chip = document.createElement('div');
+    chip.className = 'roll-chip ' + (success ? 'roll-ok' : 'roll-fail')
+      + (prefersReducedMotion ? ' reduced' : '');
+
+    const outcome = success ? L('roll_success') : L('roll_failure');
+    const glyph = success ? '▲' : '▼';   // ▲ rising / ▼ falling
+
+    // Header: skill label + outcome tag. Body: result vs target (result counts up).
+    let inner =
+      '<div class="roll-chip-head">' +
+        '<span class="roll-chip-skill">' + esc(label) + '</span>' +
+        '<span class="roll-chip-outcome">' + esc(glyph + ' ' + outcome) + '</span>' +
+      '</div>' +
+      '<div class="roll-chip-nums">' +
+        '<span class="roll-chip-result">0</span>' +
+        '<span class="roll-chip-vs">' + esc(L('roll_vs')) + '</span>' +
+        '<span class="roll-chip-target">' + esc(String(target)) + '</span>' +
+      '</div>';
+
+    // Expandable modifier breakdown — e.g. "Lockpick +15". Collapsed by default;
+    // a click toggles it. Only rendered when the roll actually carries modifiers.
+    if (mods.length > 0) {
+      let rows = '';
+      for (const m of mods) {
+        const src = (m && m.source != null) ? String(m.source) : '';
+        const val = Number(m && m.value) || 0;
+        const sign = val >= 0 ? '+' : '';
+        rows += '<span class="roll-mod-row"><span class="roll-mod-src">' + esc(src)
+              + '</span><span class="roll-mod-val ' + (val >= 0 ? 'pos' : 'neg') + '">'
+              + esc(sign + val) + '</span></span>';
+      }
+      inner +=
+        '<button type="button" class="roll-chip-toggle" aria-expanded="false">'
+          + esc(L('roll_modifiers')) + ' ▸</button>'
+        + '<div class="roll-chip-mods" hidden>' + rows + '</div>';
+    }
+
+    chip.innerHTML = inner;
+
+    // Wire the modifier toggle (no inline handler → CSP-safe, esc()'d content).
+    const toggle = chip.querySelector('.roll-chip-toggle');
+    const modsBox = chip.querySelector('.roll-chip-mods');
+    if (toggle && modsBox) {
+      toggle.addEventListener('click', () => {
+        const open = modsBox.hasAttribute('hidden');
+        if (open) { modsBox.removeAttribute('hidden'); toggle.setAttribute('aria-expanded', 'true'); }
+        else { modsBox.setAttribute('hidden', ''); toggle.setAttribute('aria-expanded', 'false'); }
+        toggle.innerHTML = esc(L('roll_modifiers')) + (open ? ' ▾' : ' ▸');
+      });
+    }
+
+    wrap.appendChild(chip);
+
+    // Stagger the count-up + success flash so multiple chips land in sequence.
+    const delay = prefersReducedMotion ? 0 : idx * 220;
+    setTimeout(() => {
+      const resEl = chip.querySelector('.roll-chip-result');
+      _countUp(resEl, result, 480);
+      // Rising/falling two-tone via the shared 'ui' SFX bus (honours mute).
+      if (success) {
+        playBeep(520, 0.05, 0.03, 'ui');
+        setTimeout(() => playBeep(780, 0.06, 0.035, 'ui'), 90);
+      } else {
+        playBeep(440, 0.05, 0.03, 'ui');
+        setTimeout(() => playBeep(300, 0.07, 0.035, 'ui'), 90);
+      }
+      // Green/red success flash — a one-shot class the CSS animates.
+      if (!prefersReducedMotion) {
+        chip.classList.add('roll-flash');
+        chip.addEventListener('animationend', () => chip.classList.remove('roll-flash'), { once: true });
+      }
+    }, delay);
+  });
+
+  // If every entry was malformed, nothing got appended — bail without an empty row.
+  if (!wrap.querySelector('.roll-chip')) return;
+  container.appendChild(wrap);
+  container.scrollTop = container.scrollHeight;
+}
+
 function showDiscoveryNotification(msg) {
   const container = document.getElementById('chatMessages');
   const el = document.createElement('div');
@@ -2586,6 +2762,86 @@ function addTypingMessage(text, role = 'agent', usage = null, elapsedSeconds = n
 // renderSuggestedActions then prunes the set to just the incoming action texts,
 // dropping any stale ready-flags from a prior turn while keeping fresh ones.
 let _readyPredictions = new Set();
+
+// ----------------------------------------------------------------------------
+// METER "WHY" — an in-world, one-line cause for a meter move this turn.
+// state_delta may optionally carry reasons:{alert?,integrity?,decay?}, each an
+// {en,zh}. We stash the localized strings here so both the HUD gauge (as a
+// title/tooltip) and the WORLD panel (as a '· why' subtext) can surface them.
+// Persists until the NEXT turn: cleared when the player acts (thinking frame).
+// Bilingual via the en/zh fields; a meter with no reason is simply omitted.
+// ----------------------------------------------------------------------------
+let _meterReasons = { alert: null, integrity: null, decay: null };
+
+/** Pick the localized reason string from an {en,zh} pair, or '' if absent. */
+function _reasonText(pair) {
+  if (!pair || typeof pair !== 'object') return '';
+  const zh = (currentLang === 'zh') ? pair.zh : null;
+  return String(zh || pair.en || '').trim();
+}
+
+/** Ingest a state_delta's optional reasons block. Only known keys are read;
+ *  a missing key leaves the prior turn's reason cleared (we reset per turn). */
+function _ingestMeterReasons(reasons) {
+  _meterReasons = { alert: null, integrity: null, decay: null };
+  if (!reasons || typeof reasons !== 'object') return;
+  _meterReasons.alert = _reasonText(reasons.alert) || null;
+  _meterReasons.integrity = _reasonText(reasons.integrity) || null;
+  _meterReasons.decay = _reasonText(reasons.decay) || null;
+}
+
+/** Clear the standing reasons at the start of a new turn (player acted). */
+function _clearMeterReasons() {
+  _meterReasons = { alert: null, integrity: null, decay: null };
+}
+
+/** Append the stored reason (if any) to a HUD gauge's title/aria tooltip, and
+ *  refresh the WORLD-panel subtext. Called after state_delta stores reasons
+ *  (session_update already repainted the panels a frame earlier) and again from
+ *  the panel/status renderers so the reason persists across re-renders. */
+function _applyMeterReasons() {
+  const hud = [
+    ['integrity', 'statIntegrityPips'],
+    ['alert', 'statNexusGauge'],
+    ['decay', 'statDecayGauge'],
+  ];
+  for (const [key, id] of hud) {
+    const el = document.getElementById(id);
+    if (!el) continue;
+    const reason = _meterReasons[key];
+    // Preserve the base tooltip (value/status) set by the renderers; append the
+    // cause on a second line. dataset.baseTitle holds the pristine base.
+    let base = el.dataset.baseTitle;
+    if (base == null) { base = el.getAttribute('title') || ''; el.dataset.baseTitle = base; }
+    if (reason) {
+      const full = base ? (base + ' · ' + L('meter_why') + ': ' + reason) : reason;
+      el.setAttribute('title', full);
+      el.setAttribute('aria-label', full);
+    } else if (base) {
+      el.setAttribute('title', base);
+      el.setAttribute('aria-label', base);
+    }
+  }
+  // WORLD-panel subtext lines are (re)written inline by updateWorldPanel; just
+  // patch the existing nodes so a bare state_delta (no session repaint) updates.
+  _patchWorldReasonSubtext('nexus_alert', _meterReasons.alert);
+  _patchWorldReasonSubtext('fragment_decay', _meterReasons.decay);
+}
+
+/** Insert/update/remove a '· why' subtext under a WORLD-panel meter caption.
+ *  Idempotent — safe to call on every render and on a bare state_delta. */
+function _patchWorldReasonSubtext(meterKey, reason) {
+  const host = document.querySelector('.world-meter-reason[data-meter="' + meterKey + '"]');
+  if (!host) return;
+  if (reason) {
+    host.innerHTML = '<span class="world-meter-reason-why">· ' + esc(L('meter_why'))
+      + '</span> ' + esc(reason);
+    host.hidden = false;
+  } else {
+    host.innerHTML = '';
+    host.hidden = true;
+  }
+}
 
 /** Pulse the HUD gauges whose value moved this turn, per a state_delta frame.
  *  session_update already repainted the numbers; this only draws the eye to
@@ -3582,8 +3838,10 @@ function updateStatusBar(session) {
   if (pipsEl) {
     pipsEl.innerHTML = pips;
     // Icon-only mode (<480px) hides the label, so keep an accessible tooltip.
-    pipsEl.setAttribute('title', L('integrity').toUpperCase() + ': ' + cur + ' / ' + max);
+    const pipTitle = L('integrity').toUpperCase() + ': ' + cur + ' / ' + max;
+    pipsEl.setAttribute('title', pipTitle);
     pipsEl.setAttribute('aria-label', L('integrity').toUpperCase() + ' ' + cur + ' / ' + max);
+    pipsEl.dataset.baseTitle = pipTitle;
   }
 
   // --- Banded mini-gauges (mirror WORLD panel semantics) ---
@@ -3638,6 +3896,11 @@ function updateStatusBar(session) {
   setText('statLabelClock', L('hud_time').toUpperCase());
   setText('statLabelLocation', L('location').toUpperCase());
   setText('statLabelArea', L('area').toUpperCase());
+
+  // Re-apply any standing meter-why reasons onto the freshly-rendered gauge
+  // tooltips (the renderers above reset dataset.baseTitle). Persists the cause
+  // across a mid-turn session repaint (e.g. reconnect resync) until next turn.
+  _applyMeterReasons();
 }
 
 /** Render a banded mini-gauge into `elId`: a track with tick marks at 25/50/75/90
@@ -3659,6 +3922,9 @@ function renderBandedGauge(elId, value, label) {
     '</span>';
   el.setAttribute('title', label);
   el.setAttribute('aria-label', label);
+  // Refresh the pristine base so _applyMeterReasons appends the cause onto the
+  // just-rendered value/status, not a stale one from a prior render.
+  el.dataset.baseTitle = label;
 }
 
 function countDiscoveredTraces(traces) {
@@ -4339,6 +4605,7 @@ function updateWorldPanel(worldState) {
       <div class="progress-bar"><div class="progress-fill alert-gradient" style="width:${alertPct}%"></div></div>
       <div class="dim" style="font-size:11px;text-align:right">${alertVal}%</div>
       ${bandCaption(ALERT_THRESHOLDS, alertVal, alertStatusDisplay)}
+      <div class="world-meter-reason" data-meter="nexus_alert" hidden></div>
     </div>`;
   }
 
@@ -4353,6 +4620,7 @@ function updateWorldPanel(worldState) {
       <div class="progress-bar"><div class="progress-fill decay-gradient" style="width:${decayVal}%"></div></div>
       <div class="dim" style="font-size:11px;text-align:right">${decayVal}%</div>
       ${bandCaption(DECAY_THRESHOLDS, decayVal, decayStatusDisplay)}
+      <div class="world-meter-reason" data-meter="fragment_decay" hidden></div>
     </div>`;
   }
 
@@ -4404,6 +4672,9 @@ function updateWorldPanel(worldState) {
 
   if (!html) html = panelEmptyHint('world_nominal', 'empty_world_hint');
   document.getElementById('panel-world').innerHTML = html;
+  // The innerHTML rewrite recreated the (hidden) reason hosts — refill them from
+  // the standing meter-why store so a mid-turn repaint keeps the cause visible.
+  _applyMeterReasons();
 }
 
 // ---------- LOG PANEL (matches TUI LogPanel — tags, expandable, reverse order) ----------
