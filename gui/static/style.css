@@ -977,6 +977,28 @@ html, body {
   100% { opacity: 0.75; }
 }
 
+/* A narration that is still typing out is click-to-skip. The cursor hint tells
+   the player the whole line is interactive; the typewriter is just eye-candy. */
+.chat-msg.skippable { cursor: pointer; }
+.chat-msg.skippable .msg-content { cursor: pointer; }
+
+/* Subtle "▸ skip" affordance, faded in ~800ms into a long type-out. */
+.skip-hint {
+  margin-top: 4px;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  letter-spacing: 1px;
+  color: var(--text-dim);
+  opacity: 0;
+  transition: opacity 0.4s ease;
+  user-select: none;
+  pointer-events: none;
+}
+.skip-hint.visible { opacity: 0.65; }
+@media (prefers-reduced-motion: reduce) {
+  .skip-hint { transition: none; }
+}
+
 /* Gentle breathing hint on the info-panel tabs while the player waits */
 .panel-tabs.hint-pulse {
   animation: tabs-hint-pulse 2.2s ease-in-out infinite;

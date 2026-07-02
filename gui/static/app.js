@@ -150,12 +150,16 @@ const LABELS = {
     label_predict_outcome: 'Pre-compute suggested actions (instant replies, extra LLM calls)',
     btn_close: 'CLOSE',
     settings_saved: 'Settings saved', saving: 'Saving...', saved: 'Saved',
+    tokens_unit: 'tokens', tokens_short: 'tok',
     // Chat prefixes
     chat_player: '\u25B6 PLAYER', chat_agent: '\u25C0 SIGNAL LOST', chat_system: '\u25CF SYSTEM',
     // Game over
     game_over_reconnect: 'RECONNECT', game_over_fallback: '// CONNECTION TERMINATED',
     // Connection
     connection_lost: 'Connection lost. Reconnecting...',
+    reconnecting_inline: '// link dropped — reconnecting… your input is held',
+    link_quiet: '// the link went quiet — no reply came back. Retry your last action?',
+    skip_hint: '▸ skip',
     // Accounts / auth
     auth_title: '// ACCESS TERMINAL',
     auth_sign_in: 'SIGN IN', auth_register: 'REGISTER', auth_sign_out: 'SIGN OUT',
@@ -282,12 +286,16 @@ const LABELS = {
     label_predict_outcome: '预计算推荐行动（点击即时响应，但会增加 LLM 调用）',
     btn_close: '关闭',
     settings_saved: '设置已保存', saving: '保存中...', saved: '已保存',
+    tokens_unit: '令牌', tokens_short: '令牌',
     // Chat prefixes
     chat_player: '\u25B6 玩家', chat_agent: '\u25C0 信号遗失', chat_system: '\u25CF 系统',
     // Game over
     game_over_reconnect: '重新连接', game_over_fallback: '// 连接已终止',
     // Connection
     connection_lost: '连接已断开，正在重连...',
+    reconnecting_inline: '// 链路中断 —— 正在重连…你的输入已保留',
+    link_quiet: '// 链路陷入沉默 —— 没有收到回应。重试上一步操作？',
+    skip_hint: '▸ 跳过',
     // Accounts / auth
     auth_title: '// 接入终端',
     auth_sign_in: '登录', auth_register: '注册', auth_sign_out: '退出登录',
@@ -838,13 +846,30 @@ let wasKicked = false;    // true after being kicked → stop auto-reconnect
 function connectWebSocket() {
   const protocol = location.protocol === 'https:' ? 'wss' : 'ws';
   ws = new WebSocket(`${protocol}://${location.host}/ws`);
-  ws.onopen = () => { sendInit(); };
-  ws.onmessage = (event) => handleServerMessage(JSON.parse(event.data));
+  ws.onopen = () => {
+    sendInit();
+    // If we dropped mid-game and just reconnected, ask the server to repaint the
+    // panels/state so stale pre-drop content is refreshed (additive action).
+    if (document.getElementById('gameScreen').classList.contains('active')) {
+      sendWS({ action: 'refresh' });
+    }
+  };
+  ws.onmessage = (event) => {
+    let msg;
+    try { msg = JSON.parse(event.data); }
+    catch (e) { console.warn('[ws] dropping malformed frame', e); return; }
+    handleServerMessage(msg);
+  };
   ws.onclose = () => {
     if (wasKicked) return;  // kicked elsewhere — don't fight the new session
     if (!wsReconnectTimer) wsReconnectTimer = setTimeout(() => { wsReconnectTimer = null; connectWebSocket(); }, 3000);
   };
-  ws.onerror = () => {};
+  ws.onerror = (e) => {
+    console.warn('[ws] socket error — link degraded', e);
+    // Degraded-state hook: the onclose handler drives reconnection; surface a
+    // transient bilingual notice so the player knows the link is unstable.
+    notify(L('connection_lost'), true);
+  };
 }
 
 /** Send the init/bind handshake, carrying the stored token if we have one. */
@@ -855,9 +880,21 @@ function sendInit(force) {
   if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(payload));
 }
 
+/** Send over the main socket. Returns true if the frame was written, false if
+ *  the socket is not open (caller keeps the user's input and shows a notice). */
 function sendWS(data) {
-  if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(data));
-  else notify(L('connection_lost'), true);
+  if (ws && ws.readyState === WebSocket.OPEN) { ws.send(JSON.stringify(data)); return true; }
+  notify(L('connection_lost'), true);
+  return false;
+}
+
+/** Whether the main socket is currently open (safe to send a game action). */
+function wsOpen() { return !!(ws && ws.readyState === WebSocket.OPEN); }
+
+/** Append an inline, bilingual "reconnecting…" system line to the chat so the
+ *  player sees why their input didn't go through. Deduped by showSystemNotice. */
+function showReconnectingNotice() {
+  showSystemNotice(L('reconnecting_inline'));
 }
 
 // ================================================================
@@ -1307,16 +1344,18 @@ function handleServerMessage(msg) {
       break;
 
     case 'narrative':
-      // New game: the tutorial masks the first-turn wait. Buffer the opening
-      // scene (and its suggested actions) and reveal it the instant the tutorial
-      // ends — never type it out behind the overlay. Falls through to normal
-      // rendering if the tutorial is already done (slow first turn).
-      if (_firstSceneArmed && (msg.role || 'agent') === 'system') {
+      if (_firstSceneArmed) {
+        // Buffered opening scene: the tutorial masks the first-turn wait. Hold the
+        // scene regardless of its role (system OR agent — the backend has labelled
+        // it both ways) and reveal it the instant the tutorial ends, never typing
+        // it out behind the overlay. Park the wait experience; leave input as-is
+        // (the tutorial owns the screen). Clear the hang watchdog.
+        _clearWatchdog();
         hideThinking();
         _pendingFirstScene = msg;
         break;
       }
-      hideThinking();
+      endTurnUI();
       const role = msg.role || 'agent';
       if (role === 'system') {
         // Resume message — will be removed after first player input
@@ -1348,6 +1387,10 @@ function handleServerMessage(msg) {
       break;
 
     case 'game_over':
+      // Release the wait experience immediately — otherwise the 2600ms ticker
+      // and 650ms ambient beep intervals leak for the life of the page while the
+      // 2s overlay delay runs and beyond.
+      endTurnUI();
       clearSuggestedActions();
       setTimeout(() => showGameOver(msg.ending, msg.narrative, msg.death_cause), 2000);
       break;
@@ -1367,7 +1410,8 @@ function handleServerMessage(msg) {
       break;
 
     case 'error':
-      hideThinking(); enableInput();
+      _finalizeActiveTyper();  // snap any in-flight narration to done first
+      endTurnUI();
       notify(msg.message, true);
       addChatMessage(msg.message, 'system');
       break;
@@ -1387,6 +1431,12 @@ function handleServerMessage(msg) {
     case 'auth_required':
       // Server rejected a game action for lack of a session — prompt sign-in.
       openAuth('signin');
+      break;
+
+    default:
+      // Unknown/typo'd or newer-protocol message type — ignore, never fatal,
+      // but warn so frontend/backend drift is visible during development.
+      console.warn('[ws] ignoring unknown message type:', msg && msg.type);
       break;
   }
 }
@@ -1839,7 +1889,22 @@ function renderMarkdown(text) {
   return h;
 }
 
+// The narrative is fully interactive the instant it hits the DOM — the
+// typewriter is pure eye-candy over already-committed state. A per-typer
+// generation id lets a newer narrative/error cancel+finalize any prior
+// in-flight typer, and lets a click / Esc / Space skip straight to the end.
+let _typerGen = 0;              // increments per typewriter; the live one owns _activeTyper
+let _activeTyper = null;        // { finalize } for the currently-typing message, or null
+
+/** Cancel+finalize the in-flight typewriter (if any). Idempotent. */
+function _finalizeActiveTyper() {
+  if (_activeTyper && typeof _activeTyper.finalize === 'function') _activeTyper.finalize();
+}
+
 function addTypingMessage(text, role = 'agent', usage = null, elapsedSeconds = null, suggestedActions = null) {
+  // A new message supersedes any prior in-flight typer — snap it to done first.
+  _finalizeActiveTyper();
+
   const container = document.getElementById('chatMessages');
   const msg = document.createElement('div');
   msg.className = `chat-msg ${role}`;
@@ -1852,8 +1917,54 @@ function addTypingMessage(text, role = 'agent', usage = null, elapsedSeconds = n
   // Scroll to the START of the new message
   msg.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
+  const myGen = ++_typerGen;
   let i = 0; const speed = 8, interval = 20;
+  let timer = null;         // setTimeout handle for the next type step
+  let skipHintTimer = null; // delay handle for the '▸ skip' affordance
+  let skipHintEl = null;    // '▸ skip' affordance, added ~800ms into long type-outs
+  let done = false;
+
+  // Stash the full text + a skip() handle on the element so a click can finalize.
+  msg._fullText = text;
+
+  function _removeSkipHint() {
+    if (skipHintEl && skipHintEl.parentNode) skipHintEl.parentNode.removeChild(skipHintEl);
+    skipHintEl = null;
+  }
+
+  function finalize() {
+    if (done) return;
+    done = true;
+    if (timer) { clearTimeout(timer); timer = null; }
+    if (skipHintTimer) { clearTimeout(skipHintTimer); }
+    _removeSkipHint();
+    contentEl.classList.remove('typing');
+    msg.classList.remove('skippable');
+    // Re-render with the safe markdown subset so **bold**/lists/`code` render.
+    contentEl.innerHTML = renderMarkdown(text);
+    // Build info line: time always shown, tokens optional
+    const infoParts = [];
+    if (elapsedSeconds != null) infoParts.push(`${elapsedSeconds}s`);
+    if (usage && usage.total && _showTokens()) {
+      const cost = _getCost(usage);
+      infoParts.push(`${usage.total.toLocaleString()} ${L('tokens_unit')} · ${_formatCost(cost)}`);
+    }
+    if (infoParts.length > 0) {
+      const infoEl = document.createElement('div');
+      infoEl.className = 'msg-tokens';
+      infoEl.textContent = infoParts.join(' · ');
+      msg.appendChild(infoEl);
+    }
+    if (_activeTyper && _activeTyper.gen === myGen) _activeTyper = null;
+    // Keep the chat pinned to the end of the now-complete message if we were near it.
+    if (container.scrollHeight - container.scrollTop - container.clientHeight < 200) {
+      container.scrollTop = container.scrollHeight;
+    }
+  }
+  msg._skip = finalize;
+
   function typeNext() {
+    if (done) return;
     if (i < text.length) {
       contentEl.textContent += text.slice(i, i + speed);
       i += speed;
@@ -1861,37 +1972,41 @@ function addTypingMessage(text, role = 'agent', usage = null, elapsedSeconds = n
       if (container.scrollHeight - container.scrollTop - container.clientHeight < 200) {
         container.scrollTop = container.scrollHeight;
       }
-      if (Math.random() < 0.05) playBeep(600 + Math.random() * 400, 0.02, 0.01);
-      setTimeout(typeNext, interval);
+      // Decrypt/typing beeps respect the music mute flag.
+      if (Math.random() < 0.05 && !_musicMuted()) playBeep(600 + Math.random() * 400, 0.02, 0.01);
+      timer = setTimeout(typeNext, interval);
     } else {
-      contentEl.classList.remove('typing');
-      // Re-render the finished narration with a safe markdown subset so
-      // **bold**/lists/`code` don't show as literal asterisks.
-      contentEl.innerHTML = renderMarkdown(text);
-      // Build info line: time always shown, tokens optional
-      const infoParts = [];
-      if (elapsedSeconds != null) {
-        infoParts.push(`${elapsedSeconds}s`);
-      }
-      if (usage && usage.total && _showTokens()) {
-        const cost = _getCost(usage);
-        infoParts.push(`${usage.total.toLocaleString()} tokens · ${_formatCost(cost)}`);
-      }
-      if (infoParts.length > 0) {
-        const infoEl = document.createElement('div');
-        infoEl.className = 'msg-tokens';
-        infoEl.textContent = infoParts.join(' · ');
-        msg.appendChild(infoEl);
-      }
-      enableInput();
-      // Render quick-pick action buttons once the narration finishes typing.
-      renderSuggestedActions(suggestedActions);
+      finalize();
     }
   }
+
+  // Register this typer so Esc/Space (global) and a newer message can finalize it.
+  _activeTyper = { gen: myGen, finalize };
+
+  // Interactive immediately: input + suggested actions render up front so the
+  // typewriter never gates play. A click anywhere on the typing message skips it.
+  enableInput();
+  renderSuggestedActions(suggestedActions);
+  msg.classList.add('skippable');
+  msg.addEventListener('click', () => { if (!done) finalize(); });
+
+  // Fade in a subtle '▸ skip' hint only for long type-outs (~800ms in).
+  if (text.length > speed * (800 / interval)) {
+    skipHintTimer = setTimeout(() => {
+      if (done) return;
+      skipHintEl = document.createElement('div');
+      skipHintEl.className = 'skip-hint';
+      skipHintEl.textContent = L('skip_hint');
+      msg.appendChild(skipHintEl);
+      requestAnimationFrame(() => { if (skipHintEl) skipHintEl.classList.add('visible'); });
+    }, 800);
+  }
+
   // Agent narration gets a brief "incoming transmission" decrypt flash first;
-  // resume/system messages type out plainly.
+  // resume/system messages type out plainly. Guard the callback against a skip
+  // that fired during the ~300ms decrypt window.
   if (role === 'agent') {
-    _decryptReveal(msg, contentEl, typeNext);
+    _decryptReveal(msg, contentEl, () => { if (!done) typeNext(); });
   } else {
     typeNext();
   }
@@ -1970,6 +2085,10 @@ function chooseSuggestedAction(text) {
   text = (text || '').trim();
   if (!text) return;
 
+  // Guard the socket first — don't tear down the suggested actions or disable
+  // input if the frame can't be sent. Leave everything interactive for a retry.
+  if (!wsOpen()) { showReconnectingNotice(); return; }
+
   // Mirror sendMessage()'s cleanup of ephemeral UI.
   if (isFirstInput && resumeMessageEl) {
     resumeMessageEl.classList.add('fade-out');
@@ -1994,6 +2113,11 @@ function sendMessage() {
   if (input.disabled) return;
   const text = input.value.trim();
   if (!text) return;
+
+  // Guard the socket BEFORE any optimistic UI. If it's closed, keep the typed
+  // text in the box, surface a bilingual "reconnecting…" line, and leave the
+  // input enabled so the player can resend once the link is back.
+  if (!wsOpen()) { showReconnectingNotice(); return; }
 
   // Remove resume system message on first player input
   if (isFirstInput && resumeMessageEl) {
@@ -2063,11 +2187,16 @@ function _stopThinkingTicker() {
   _thinkingLineIdx = 0;
 }
 
+/** True when the music engine is currently muted (safe if MusicEngine absent). */
+function _musicMuted() {
+  return typeof MusicEngine !== 'undefined' && typeof MusicEngine.isMuted === 'function' && MusicEngine.isMuted();
+}
+
 function _startAmbient() {
   _stopAmbient();
   _ambientTimer = setInterval(() => {
-    // Honour the music mute toggle (isMuted is a function — call it).
-    if (typeof MusicEngine !== 'undefined' && typeof MusicEngine.isMuted === 'function' && MusicEngine.isMuted()) return;
+    // Honour the music mute toggle.
+    if (_musicMuted()) return;
     if (Math.random() < 0.5) playBeep(150 + Math.random() * 130, 0.05 + Math.random() * 0.05, 0.006);
   }, 650);
 }
@@ -2087,8 +2216,11 @@ const _DECRYPT_GLYPHS = '▓▒░#@%&/\\|<>=+*01';
 /** Brief "signal locking in" scramble before an agent message types out. */
 function _decryptReveal(msg, contentEl, done) {
   msg.classList.add('decrypting');
-  playBeep(420, 0.05, 0.02);
-  setTimeout(() => playBeep(900, 0.06, 0.02), 90); // two-tone lock-in
+  // Decrypt lock-in beeps respect the music mute flag.
+  if (!_musicMuted()) {
+    playBeep(420, 0.05, 0.02);
+    setTimeout(() => { if (!_musicMuted()) playBeep(900, 0.06, 0.02); }, 90); // two-tone lock-in
+  }
   const width = 14;
   let frames = 0;
   const t = setInterval(() => {
@@ -2104,11 +2236,32 @@ function _decryptReveal(msg, contentEl, done) {
   }, 50);
 }
 
+// A turn can hang: the server may drop mid-turn, or emit a terminal message
+// (game_over) that never routes through hideThinking. This watchdog guarantees
+// the UI is released after WATCHDOG_MS so the player is never stuck with the
+// ticker + ambient beeps running forever and input disabled.
+let _turnWatchdog = null;
+const _WATCHDOG_MS = 90000;
+
+function _armWatchdog() {
+  _clearWatchdog();
+  _turnWatchdog = setTimeout(() => {
+    _turnWatchdog = null;
+    endTurnUI();
+    // Surface a recoverable, bilingual system line — the player can retry.
+    showSystemNotice(L('link_quiet'));
+  }, _WATCHDOG_MS);
+}
+function _clearWatchdog() {
+  if (_turnWatchdog) { clearTimeout(_turnWatchdog); _turnWatchdog = null; }
+}
+
 function showThinking() {
   document.getElementById('thinkingIndicator').style.display = 'flex';
   document.getElementById('chatMessages').scrollTop = document.getElementById('chatMessages').scrollHeight;
   _startThinkingTicker();
   _startAmbient();
+  _armWatchdog();
   const tabs = document.querySelector('.panel-tabs');
   if (tabs) tabs.classList.add('hint-pulse');
 }
@@ -2120,6 +2273,16 @@ function hideThinking() {
   const tabs = document.querySelector('.panel-tabs');
   if (tabs) tabs.classList.remove('hint-pulse');
 }
+
+/** Idempotent end-of-turn cleanup: stop the wait experience and re-enable input.
+ *  Safe to call from any turn-terminating handler (narrative / error / game_over)
+ *  and from the watchdog. Clears the hang watchdog too. */
+function endTurnUI() {
+  _clearWatchdog();
+  hideThinking();
+  enableInput();
+}
+
 function enableInput() { const i = document.getElementById('chatInput'); i.disabled = false; i.focus(); document.querySelector('.send-btn').disabled = false; document.querySelectorAll('.suggested-action-btn').forEach(b => b.disabled = false); }
 function disableInput() { document.getElementById('chatInput').disabled = true; document.querySelector('.send-btn').disabled = true; document.querySelectorAll('.suggested-action-btn').forEach(b => b.disabled = true); }
 
@@ -2235,7 +2398,9 @@ function _revealFirstScene() {
   if (!msg) return;
   hideThinking();
   const role = msg.role || 'agent';
-  resumeMessageEl = addTypingMessage(msg.text, role, null, msg.elapsed_seconds, msg.suggested_actions);
+  // Preserve token usage for an agent-role opening; system openings carry none.
+  const usage = role === 'system' ? null : (msg.usage || null);
+  resumeMessageEl = addTypingMessage(msg.text, role, usage, msg.elapsed_seconds, msg.suggested_actions);
   isFirstInput = true;
 }
 
@@ -3139,7 +3304,7 @@ function updateConversationPanel(conversation) {
       if (entry.tokens && _showTokens()) {
         const t = entry.tokens;
         const cost = typeof t.cost === 'number' ? t.cost : 0;
-        tokenHtml = `<span class="conv-tokens">${(t.total || 0).toLocaleString()} tok · ${_formatCost(cost)}</span>`;
+        tokenHtml = `<span class="conv-tokens">${(t.total || 0).toLocaleString()} ${esc(L('tokens_short'))} · ${_formatCost(cost)}</span>`;
       }
       html += `<div class="conv-entry">
         <div class="conv-header"><span class="dim">T${entry.turn || '?'}</span> <span class="${roleCls}">${roleLabel}</span>${tokenHtml}</div>
@@ -3337,6 +3502,9 @@ document.addEventListener('keydown', (e) => {
     );
     if (e.key === 'Escape') {
       if (companionOpen) { closeCompanion(); return; }
+      if (overlayOpen) { closeSaveDialog(); closeSettings(); closeConfirmMenu(); return; }
+      // Nothing to close — if narration is typing out, Esc skips it to the end.
+      if (_activeTyper) { _finalizeActiveTyper(); e.preventDefault(); return; }
       closeSaveDialog(); closeSettings(); closeConfirmMenu(); return;
     }
     // Block all other keybindings when an overlay is open
@@ -3350,6 +3518,11 @@ document.addEventListener('keydown', (e) => {
       active.tagName === 'TEXTAREA' ||
       active.isContentEditable
     );
+    // Space skips the in-flight typewriter — but only when the player isn't
+    // focused in a text field (there Space must type a literal space).
+    if ((e.key === ' ' || e.code === 'Space') && _activeTyper && !isInput) {
+      _finalizeActiveTyper(); e.preventDefault(); return;
+    }
     const num = parseInt(e.key);
     if (num >= 1 && num <= 9 && !e.ctrlKey && !e.metaKey && !isInput) {
       const tabs = document.querySelectorAll('.panel-tab');
