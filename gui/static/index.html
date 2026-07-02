@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, viewport-fit=cover">
   <title>SIGNAL LOST</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='4' fill='%230a0a0f'/><text x='16' y='22' text-anchor='middle' font-size='18' fill='%2300ff88'>S</text></svg>">
-  <link rel="stylesheet" href="/static/style.css?v=w2fix">
+  <link rel="stylesheet" href="/static/style.css?v=w3a">
   <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;400;500;600;700&family=Noto+Sans+SC:wght@300;400;500;700&display=swap" rel="stylesheet">
 </head>
 <body>
@@ -41,17 +41,17 @@
       </div>
       <div class="menu-buttons">
         <button class="cyber-btn" id="btnNewGame" onclick="showNewGame()">
-          <span class="cyber-btn-text">NEW GAME</span>
+          <span class="cyber-btn-text" data-i18n="menu_new_game">NEW GAME</span>
           <span class="cyber-btn-glitch"></span>
           <span class="cyber-btn-tag">01</span>
         </button>
         <button class="cyber-btn" id="btnLoadGame" onclick="showLoadGame()" style="display:none">
-          <span class="cyber-btn-text">LOAD GAME</span>
+          <span class="cyber-btn-text" data-i18n="menu_load_game">LOAD GAME</span>
           <span class="cyber-btn-glitch"></span>
           <span class="cyber-btn-tag">02</span>
         </button>
         <button class="cyber-btn" id="btnSettings" onclick="openSettings()">
-          <span class="cyber-btn-text">SETTINGS</span>
+          <span class="cyber-btn-text" data-i18n="menu_settings">SETTINGS</span>
           <span class="cyber-btn-glitch"></span>
           <span class="cyber-btn-tag">03</span>
         </button>
@@ -73,7 +73,7 @@
     <!-- Account widget (bottom-left corner) -->
     <div class="account-widget" id="accountWidget">
       <div class="account-menu" id="accountMenu" aria-hidden="true">
-        <button class="account-menu-item" id="accountMenuLogout" onclick="doLogout()">SIGN OUT</button>
+        <button class="account-menu-item" id="accountMenuLogout" onclick="doLogout()" data-i18n="auth_sign_out">SIGN OUT</button>
       </div>
       <button class="account-btn" id="accountBtn" onclick="onAccountButton(event)" aria-haspopup="true" aria-expanded="false">
         <span class="account-status-dot" id="accountDot"></span>
@@ -85,18 +85,18 @@
   <!-- ========== NEW GAME SCREEN ========== -->
   <div id="newGameScreen" class="screen">
     <div class="config-container">
-      <h2 class="config-title">// IDENTITY CONFIGURATION</h2>
+      <h2 class="config-title" data-i18n="config_title">// IDENTITY CONFIGURATION</h2>
       <div class="config-form">
         <div class="form-group">
-          <label class="cyber-label">DESIGNATION</label>
-          <input type="text" class="cyber-input" id="inputName" placeholder="Enter name..." value="Kael">
+          <label class="cyber-label" data-i18n="label_designation">DESIGNATION</label>
+          <input type="text" class="cyber-input" id="inputName" placeholder="Enter name..." data-i18n-placeholder="placeholder_name" value="Kael">
         </div>
         <div class="form-group">
-          <label class="cyber-label">ALIAS</label>
-          <input type="text" class="cyber-input" id="inputAlias" placeholder="Enter alias..." value="Ghost">
+          <label class="cyber-label" data-i18n="label_alias">ALIAS</label>
+          <input type="text" class="cyber-input" id="inputAlias" placeholder="Enter alias..." data-i18n-placeholder="placeholder_alias" value="Ghost">
         </div>
         <div class="form-group">
-          <label class="cyber-label">BACKGROUND</label>
+          <label class="cyber-label" data-i18n="label_background">BACKGROUND</label>
           <div class="cyber-select-group">
             <button class="cyber-select active" data-bg="street_runner" onclick="selectBg(this)">
               <span class="select-icon">⚡</span>
@@ -117,7 +117,7 @@
         </div>
         <div class="form-row">
           <div class="form-group half">
-            <label class="cyber-label">DIFFICULTY</label>
+            <label class="cyber-label" data-i18n="label_difficulty">DIFFICULTY</label>
             <select class="cyber-input" id="selectDifficulty">
               <option value="paranoid">Easy</option>
               <option value="cautious">Normal</option>
@@ -126,7 +126,7 @@
             </select>
           </div>
           <div class="form-group half">
-            <label class="cyber-label">LANGUAGE</label>
+            <label class="cyber-label" data-i18n="label_language">LANGUAGE</label>
             <select class="cyber-input" id="selectLanguage">
               <option value="en" selected>English</option>
               <option value="zh">中文</option>
@@ -136,11 +136,11 @@
 
         <div class="form-actions">
           <button class="cyber-btn accent" onclick="startNewGame()">
-            <span class="cyber-btn-text">INITIALIZE</span>
+            <span class="cyber-btn-text" data-i18n="btn_initialize">INITIALIZE</span>
             <span class="cyber-btn-glitch"></span>
           </button>
           <button class="cyber-btn" onclick="showMenu()">
-            <span class="cyber-btn-text">BACK</span>
+            <span class="cyber-btn-text" data-i18n="btn_back">BACK</span>
             <span class="cyber-btn-glitch"></span>
           </button>
         </div>
@@ -151,11 +151,11 @@
   <!-- ========== LOAD GAME SCREEN ========== -->
   <div id="loadGameScreen" class="screen">
     <div class="config-container">
-      <h2 class="config-title">// LOAD SAVED SESSION</h2>
+      <h2 class="config-title" data-i18n="load_title">// LOAD SAVED SESSION</h2>
       <div id="savesList" class="saves-list"></div>
       <div class="form-actions">
         <button class="cyber-btn" onclick="showMenu()">
-          <span class="cyber-btn-text">BACK</span>
+          <span class="cyber-btn-text" data-i18n="btn_back">BACK</span>
           <span class="cyber-btn-glitch"></span>
         </button>
       </div>
@@ -205,10 +205,10 @@
         <div class="nav-menu-wrap">
           <button class="status-btn" onclick="toggleNavMenu(event)" title="Menu" aria-label="Menu" aria-haspopup="true" aria-expanded="false" id="btnNavMenu">☰</button>
           <div class="nav-menu" id="navMenu" role="menu" aria-hidden="true">
-            <button class="nav-menu-item" role="menuitem" onclick="navMenuAction('tutorial')" id="navItemTutorial">Tutorial</button>
-            <button class="nav-menu-item" role="menuitem" onclick="navMenuAction('save')" id="navItemSave">Save Game</button>
-            <button class="nav-menu-item" role="menuitem" onclick="navMenuAction('settings')" id="navItemSettings">Settings</button>
-            <button class="nav-menu-item" role="menuitem" onclick="navMenuAction('menu')" id="navItemMenu">Main Menu</button>
+            <button class="nav-menu-item" role="menuitem" onclick="navMenuAction('tutorial')" id="navItemTutorial" data-i18n="nav_tutorial">Tutorial</button>
+            <button class="nav-menu-item" role="menuitem" onclick="navMenuAction('save')" id="navItemSave" data-i18n="nav_save">Save Game</button>
+            <button class="nav-menu-item" role="menuitem" onclick="navMenuAction('settings')" id="navItemSettings" data-i18n="nav_settings">Settings</button>
+            <button class="nav-menu-item" role="menuitem" onclick="navMenuAction('menu')" id="navItemMenu" data-i18n="nav_menu">Main Menu</button>
           </div>
         </div>
       </div>
@@ -254,26 +254,26 @@
       <div class="info-panels" id="infoPanels">
         <!-- Drawer handle: visible only on mobile, lets the user collapse the drawer -->
         <div class="info-panels-drawer-head">
-          <span class="info-panels-drawer-title">// DATA PANELS</span>
+          <span class="info-panels-drawer-title" data-i18n="data_panels">// DATA PANELS</span>
           <button class="info-panels-close" onclick="closeInfoPanels()" title="Close panels" aria-label="Close info panels">✕</button>
         </div>
         <div class="panel-tabs">
-          <button class="panel-tab active" data-panel="identity" onclick="switchPanel(this)">ID</button>
-          <button class="panel-tab" data-panel="knowledge" onclick="switchPanel(this)">KNOW</button>
-          <button class="panel-tab" data-panel="traces" onclick="switchPanel(this)">TRACE</button>
-          <button class="panel-tab" data-panel="district" onclick="switchPanel(this)">LOC</button>
-          <button class="panel-tab" data-panel="inventory" onclick="switchPanel(this)">INV</button>
-          <button class="panel-tab" data-panel="network" onclick="switchPanel(this)">NPC</button>
-          <button class="panel-tab" data-panel="world" onclick="switchPanel(this)">WORLD</button>
-          <button class="panel-tab" data-panel="log" onclick="switchPanel(this)">LOG</button>
-          <button class="panel-tab" data-panel="conversation" onclick="switchPanel(this)">CONV</button>
+          <button class="panel-tab active" data-panel="identity" onclick="switchPanel(this)" data-i18n="tab_identity">ID</button>
+          <button class="panel-tab" data-panel="knowledge" onclick="switchPanel(this)" data-i18n="tab_knowledge">KNOW</button>
+          <button class="panel-tab" data-panel="traces" onclick="switchPanel(this)" data-i18n="tab_traces">TRACE</button>
+          <button class="panel-tab" data-panel="district" onclick="switchPanel(this)" data-i18n="tab_district">LOC</button>
+          <button class="panel-tab" data-panel="inventory" onclick="switchPanel(this)" data-i18n="tab_inventory">INV</button>
+          <button class="panel-tab" data-panel="network" onclick="switchPanel(this)" data-i18n="tab_network">NPC</button>
+          <button class="panel-tab" data-panel="world" onclick="switchPanel(this)" data-i18n="tab_world">WORLD</button>
+          <button class="panel-tab" data-panel="log" onclick="switchPanel(this)" data-i18n="tab_log">LOG</button>
+          <button class="panel-tab" data-panel="conversation" onclick="switchPanel(this)" data-i18n="tab_conversation">CONV</button>
         </div>
         <div class="panel-content" id="panelContent">
           <div class="panel active" id="panel-identity"></div>
           <div class="panel has-search" id="panel-knowledge">
             <div class="panel-search">
               <span class="panel-search-icon">⌕</span>
-              <input type="text" class="panel-search-input" id="search-knowledge" placeholder="Search…" autocomplete="off" oninput="onPanelSearch('knowledge')">
+              <input type="text" class="panel-search-input" id="search-knowledge" placeholder="Search…" data-i18n-placeholder="search_placeholder" autocomplete="off" oninput="onPanelSearch('knowledge')">
               <button type="button" class="panel-search-clear" id="search-knowledge-clear" onclick="clearPanelSearch('knowledge')" title="Clear" aria-label="Clear search">✕</button>
             </div>
             <div class="panel-body" id="panel-knowledge-body"></div>
@@ -281,7 +281,7 @@
           <div class="panel has-search" id="panel-traces">
             <div class="panel-search">
               <span class="panel-search-icon">⌕</span>
-              <input type="text" class="panel-search-input" id="search-traces" placeholder="Search…" autocomplete="off" oninput="onPanelSearch('traces')">
+              <input type="text" class="panel-search-input" id="search-traces" placeholder="Search…" data-i18n-placeholder="search_placeholder" autocomplete="off" oninput="onPanelSearch('traces')">
               <button type="button" class="panel-search-clear" id="search-traces-clear" onclick="clearPanelSearch('traces')" title="Clear" aria-label="Clear search">✕</button>
             </div>
             <div class="panel-body" id="panel-traces-body"></div>
@@ -293,7 +293,7 @@
           <div class="panel has-search" id="panel-log">
             <div class="panel-search">
               <span class="panel-search-icon">⌕</span>
-              <input type="text" class="panel-search-input" id="search-log" placeholder="Search…" autocomplete="off" oninput="onPanelSearch('log')">
+              <input type="text" class="panel-search-input" id="search-log" placeholder="Search…" data-i18n-placeholder="search_placeholder" autocomplete="off" oninput="onPanelSearch('log')">
               <button type="button" class="panel-search-clear" id="search-log-clear" onclick="clearPanelSearch('log')" title="Clear" aria-label="Clear search">✕</button>
             </div>
             <div class="panel-body" id="panel-log-body"></div>
@@ -301,7 +301,7 @@
           <div class="panel has-search" id="panel-conversation">
             <div class="panel-search">
               <span class="panel-search-icon">⌕</span>
-              <input type="text" class="panel-search-input" id="search-conversation" placeholder="Search…" autocomplete="off" oninput="onPanelSearch('conversation')">
+              <input type="text" class="panel-search-input" id="search-conversation" placeholder="Search…" data-i18n-placeholder="search_placeholder" autocomplete="off" oninput="onPanelSearch('conversation')">
               <button type="button" class="panel-search-clear" id="search-conversation-clear" onclick="clearPanelSearch('conversation')" title="Clear" aria-label="Clear search">✕</button>
             </div>
             <div class="panel-body" id="panel-conversation-body"></div>
@@ -373,7 +373,7 @@
       </div>
       <div class="dialog-actions">
         <button class="cyber-btn accent" onclick="location.reload()">
-          <span class="cyber-btn-text">RECONNECT</span>
+          <span class="cyber-btn-text" data-i18n="game_over_reconnect">RECONNECT</span>
           <span class="cyber-btn-glitch"></span>
         </button>
       </div>
@@ -384,17 +384,17 @@
   <div id="confirmMenuDialog" class="overlay" style="display:none">
     <div class="save-dialog dialog" role="dialog" aria-modal="true" aria-labelledby="confirmMenuTitle">
       <div class="dialog-header">
-        <h3 class="config-title" id="confirmMenuTitle">// RETURN TO MENU?</h3>
+        <h3 class="config-title" id="confirmMenuTitle" data-i18n="confirm_menu_title">// RETURN TO MENU?</h3>
       </div>
       <div class="dialog-body">
-        <p class="confirm-text" id="confirmMenuText">Any unsaved progress will be lost.</p>
+        <p class="confirm-text" id="confirmMenuText" data-i18n="confirm_menu_text">Any unsaved progress will be lost.</p>
       </div>
       <div class="dialog-actions form-actions">
         <button class="cyber-btn accent" onclick="confirmReturnToMenu()">
-          <span class="cyber-btn-text" id="confirmMenuYes">CONFIRM</span>
+          <span class="cyber-btn-text" id="confirmMenuYes" data-i18n="btn_confirm">CONFIRM</span>
         </button>
         <button class="cyber-btn" onclick="closeConfirmMenu()">
-          <span class="cyber-btn-text" id="confirmMenuNo">CANCEL</span>
+          <span class="cyber-btn-text" id="confirmMenuNo" data-i18n="btn_cancel">CANCEL</span>
         </button>
       </div>
     </div>
@@ -404,20 +404,20 @@
   <div id="saveDialog" class="overlay" style="display:none">
     <div class="save-dialog dialog" role="dialog" aria-modal="true" aria-labelledby="saveDialogTitle">
       <div class="dialog-header">
-        <h3 class="config-title" id="saveDialogTitle">// SAVE SESSION</h3>
+        <h3 class="config-title" id="saveDialogTitle" data-i18n="save_title">// SAVE SESSION</h3>
       </div>
       <div class="dialog-body">
         <div class="form-group">
-          <label class="cyber-label">SAVE NAME</label>
+          <label class="cyber-label" data-i18n="label_save_name">SAVE NAME</label>
           <input type="text" class="cyber-input" id="saveName" placeholder="quicksave" value="quicksave">
         </div>
       </div>
       <div class="dialog-actions form-actions">
         <button class="cyber-btn accent" onclick="confirmSave()">
-          <span class="cyber-btn-text">SAVE</span>
+          <span class="cyber-btn-text" data-i18n="btn_save">SAVE</span>
         </button>
         <button class="cyber-btn" onclick="closeSaveDialog()">
-          <span class="cyber-btn-text">CANCEL</span>
+          <span class="cyber-btn-text" data-i18n="btn_cancel">CANCEL</span>
         </button>
       </div>
     </div>
@@ -427,14 +427,14 @@
   <div id="settingsOverlay" class="overlay" style="display:none">
     <div class="settings-dialog dialog" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
       <div class="dialog-header">
-        <h3 class="config-title" id="settingsTitle">// SETTINGS</h3>
+        <h3 class="config-title" id="settingsTitle" data-i18n="settings_title">// SETTINGS</h3>
       </div>
       <div class="dialog-body">
       <div class="config-form">
-        <h4 class="config-subtitle">// LLM PROVIDER</h4>
+        <h4 class="config-subtitle" data-i18n="settings_provider_title">// LLM PROVIDER</h4>
         <div class="form-row">
           <div class="form-group half">
-            <label class="cyber-label">PROVIDER</label>
+            <label class="cyber-label" data-i18n="label_provider">PROVIDER</label>
             <select class="cyber-input" id="selectProvider" onchange="onProviderChange()">
               <option value="openai">OpenAI</option>
               <option value="anthropic">Anthropic</option>
@@ -445,60 +445,60 @@
             </select>
           </div>
           <div class="form-group half">
-            <label class="cyber-label">MODEL</label>
+            <label class="cyber-label" data-i18n="label_model">MODEL</label>
             <input type="text" class="cyber-input" id="inputModel" placeholder="gpt-4o" value="gpt-4o">
           </div>
         </div>
         <div class="form-group" id="apiKeyGroup">
-          <label class="cyber-label">API KEY</label>
+          <label class="cyber-label" data-i18n="label_api_key">API KEY</label>
           <input type="password" class="cyber-input" id="inputApiKey" placeholder="sk-...">
         </div>
         <div class="form-group" id="baseUrlGroup" style="display:none">
-          <label class="cyber-label">BASE URL</label>
+          <label class="cyber-label" data-i18n="label_base_url">BASE URL</label>
           <input type="text" class="cyber-input" id="inputBaseUrl" placeholder="http://localhost:1234/v1" value="http://localhost:1234/v1">
         </div>
         <div class="form-group">
-          <label class="cyber-label">TEMPERATURE</label>
+          <label class="cyber-label" data-i18n="label_temperature">TEMPERATURE</label>
           <div class="slider-container">
             <input type="range" class="cyber-slider" id="inputTemp" min="0" max="1" step="0.1" value="0.7">
             <span class="slider-value" id="tempValue">0.7</span>
           </div>
         </div>
-        <h4 class="config-subtitle">// LANGSMITH TRACING</h4>
+        <h4 class="config-subtitle" data-i18n="settings_langsmith_title">// LANGSMITH TRACING</h4>
         <div class="form-row">
           <div class="form-group half">
-            <label class="cyber-label">API KEY</label>
+            <label class="cyber-label" data-i18n="label_langsmith_key">API KEY</label>
             <input type="password" class="cyber-input" id="inputLangsmithKey" placeholder="lsv2_pt_...">
           </div>
           <div class="form-group half">
-            <label class="cyber-label">PROJECT NAME</label>
+            <label class="cyber-label" data-i18n="label_langsmith_project">PROJECT NAME</label>
             <input type="text" class="cyber-input" id="inputLangsmithProject" placeholder="signal_lost" value="signal_lost">
           </div>
         </div>
-        <h4 class="config-subtitle">// USAGE TRACKING</h4>
+        <h4 class="config-subtitle" data-i18n="settings_usage_title">// USAGE TRACKING</h4>
         <div class="form-group">
           <label class="cyber-label" style="display:flex;align-items:center;gap:8px;cursor:pointer">
-            <input type="checkbox" id="chkShowTokens" style="accent-color:var(--cyan)"> Show token usage in conversation
+            <input type="checkbox" id="chkShowTokens" style="accent-color:var(--cyan)"> <span id="lblShowTokens" data-i18n="label_show_tokens">Show token usage in conversation</span>
           </label>
         </div>
         <div id="usageStats" class="usage-stats"></div>
-        <h4 class="config-subtitle">// AUDIO</h4>
+        <h4 class="config-subtitle" data-i18n="settings_audio_title">// AUDIO</h4>
         <div class="form-group">
-          <label class="cyber-label">MUSIC VOLUME</label>
+          <label class="cyber-label" data-i18n="label_music_volume">MUSIC VOLUME</label>
           <div class="slider-container">
             <input type="range" class="cyber-slider" id="inputMusicVolume" min="0" max="1" step="0.05" value="0.35" oninput="MusicEngine.setVolume(parseFloat(this.value)); document.getElementById('musicVolValue').textContent = Math.round(this.value * 100) + '%'">
             <span class="slider-value" id="musicVolValue">35%</span>
           </div>
         </div>
-        <h4 class="config-subtitle" id="gameplaySectionTitle">// GAMEPLAY</h4>
+        <h4 class="config-subtitle" id="gameplaySectionTitle" data-i18n="settings_gameplay_title">// GAMEPLAY</h4>
         <div class="form-group">
           <label class="cyber-label" style="display:flex;align-items:center;gap:8px;cursor:pointer">
-            <input type="checkbox" id="chkSuggestedActions" style="accent-color:var(--cyan)"> <span id="lblSuggestedActions">Suggest actions each turn</span>
+            <input type="checkbox" id="chkSuggestedActions" style="accent-color:var(--cyan)"> <span id="lblSuggestedActions" data-i18n="label_suggested_actions">Suggest actions each turn</span>
           </label>
         </div>
         <div class="form-group">
           <label class="cyber-label" style="display:flex;align-items:center;gap:8px;cursor:pointer">
-            <input type="checkbox" id="chkPredictOutcome" style="accent-color:var(--cyan)"> <span id="lblPredictOutcome">Pre-compute suggested actions (instant replies, extra LLM calls)</span>
+            <input type="checkbox" id="chkPredictOutcome" style="accent-color:var(--cyan)"> <span id="lblPredictOutcome" data-i18n="label_predict_outcome">Pre-compute suggested actions (instant replies, extra LLM calls)</span>
           </label>
         </div>
       </div>
@@ -506,10 +506,10 @@
       <div class="dialog-actions">
         <div class="form-actions">
           <button class="cyber-btn accent" onclick="saveSettings()">
-            <span class="cyber-btn-text">SAVE</span>
+            <span class="cyber-btn-text" data-i18n="btn_save">SAVE</span>
           </button>
           <button class="cyber-btn" onclick="closeSettings()">
-            <span class="cyber-btn-text">CLOSE</span>
+            <span class="cyber-btn-text" data-i18n="btn_close">CLOSE</span>
           </button>
         </div>
         <div class="settings-status" id="settingsStatus"></div>
@@ -521,21 +521,21 @@
   <div id="authOverlay" class="overlay" style="display:none">
     <div class="auth-dialog dialog" role="dialog" aria-modal="true" aria-labelledby="authTitle">
       <div class="dialog-header">
-        <h3 class="config-title" id="authTitle">// ACCESS TERMINAL</h3>
+        <h3 class="config-title" id="authTitle" data-i18n="auth_title">// ACCESS TERMINAL</h3>
       </div>
       <div class="dialog-body">
         <div class="auth-tabs">
-          <button class="auth-tab active" id="authTabSignin" onclick="switchAuthTab('signin')">SIGN IN</button>
-          <button class="auth-tab" id="authTabRegister" onclick="switchAuthTab('register')">REGISTER</button>
+          <button class="auth-tab active" id="authTabSignin" onclick="switchAuthTab('signin')" data-i18n="auth_sign_in">SIGN IN</button>
+          <button class="auth-tab" id="authTabRegister" onclick="switchAuthTab('register')" data-i18n="auth_register">REGISTER</button>
         </div>
         <div class="config-form">
           <div class="form-group">
-            <label class="cyber-label" id="authUserLabel">USERNAME</label>
-            <input type="text" class="cyber-input" id="authUsername" autocomplete="username" maxlength="32" placeholder="Enter a username" onkeydown="if(event.key==='Enter')submitAuth()">
+            <label class="cyber-label" id="authUserLabel" data-i18n="auth_username">USERNAME</label>
+            <input type="text" class="cyber-input" id="authUsername" autocomplete="username" maxlength="32" placeholder="Enter a username" data-i18n-placeholder="auth_username_placeholder" onkeydown="if(event.key==='Enter')submitAuth()">
           </div>
           <div class="form-group">
-            <label class="cyber-label" id="authPassLabel">PASSWORD</label>
-            <input type="password" class="cyber-input" id="authPassword" autocomplete="current-password" placeholder="Enter a password" onkeydown="if(event.key==='Enter')submitAuth()">
+            <label class="cyber-label" id="authPassLabel" data-i18n="auth_password">PASSWORD</label>
+            <input type="password" class="cyber-input" id="authPassword" autocomplete="current-password" placeholder="Enter a password" data-i18n-placeholder="auth_password_placeholder" onkeydown="if(event.key==='Enter')submitAuth()">
           </div>
           <div class="auth-error" id="authError"></div>
         </div>
@@ -545,7 +545,7 @@
           <span class="cyber-btn-text" id="authSubmitLabel">SIGN IN</span>
         </button>
         <button class="cyber-btn" onclick="closeAuth()">
-          <span class="cyber-btn-text" id="authCancelLabel">CANCEL</span>
+          <span class="cyber-btn-text" id="authCancelLabel" data-i18n="btn_cancel">CANCEL</span>
         </button>
       </div>
     </div>
@@ -555,17 +555,17 @@
   <div id="sessionConflictDialog" class="overlay overlay-top" style="display:none">
     <div class="save-dialog dialog" role="dialog" aria-modal="true" aria-labelledby="conflictTitle">
       <div class="dialog-header">
-        <h3 class="config-title" id="conflictTitle">// ACCOUNT ALREADY ACTIVE</h3>
+        <h3 class="config-title" id="conflictTitle" data-i18n="conflict_title">// ACCOUNT ALREADY ACTIVE</h3>
       </div>
       <div class="dialog-body">
-        <p class="confirm-text" id="conflictText">This account is already signed in on another session. Continue here and disconnect the other one?</p>
+        <p class="confirm-text" id="conflictText" data-i18n="conflict_text">This account is already signed in on another session. Continue here and disconnect the other one?</p>
       </div>
       <div class="dialog-actions form-actions">
         <button class="cyber-btn accent" onclick="confirmTakeover()">
-          <span class="cyber-btn-text" id="conflictYes">CONTINUE HERE</span>
+          <span class="cyber-btn-text" id="conflictYes" data-i18n="conflict_yes">CONTINUE HERE</span>
         </button>
         <button class="cyber-btn" onclick="closeConflict()">
-          <span class="cyber-btn-text" id="conflictNo">CANCEL</span>
+          <span class="cyber-btn-text" id="conflictNo" data-i18n="conflict_no">CANCEL</span>
         </button>
       </div>
     </div>
@@ -575,14 +575,14 @@
   <div id="kickedOverlay" class="overlay overlay-top" style="display:none">
     <div class="save-dialog dialog" role="dialog" aria-modal="true" aria-labelledby="kickedTitle">
       <div class="dialog-header">
-        <h3 class="config-title" id="kickedTitle">// SESSION ENDED</h3>
+        <h3 class="config-title" id="kickedTitle" data-i18n="kicked_title">// SESSION ENDED</h3>
       </div>
       <div class="dialog-body">
-        <p class="confirm-text" id="kickedText">This account was opened in another session. You have been signed out here.</p>
+        <p class="confirm-text" id="kickedText" data-i18n="kicked_text">This account was opened in another session. You have been signed out here.</p>
       </div>
       <div class="dialog-actions form-actions">
         <button class="cyber-btn accent" onclick="location.reload()">
-          <span class="cyber-btn-text" id="kickedReload">RECONNECT</span>
+          <span class="cyber-btn-text" id="kickedReload" data-i18n="kicked_reload">RECONNECT</span>
         </button>
       </div>
     </div>
@@ -595,7 +595,7 @@
        lane so the two no longer collide. -->
   <div id="toastStack" class="toast-stack" aria-live="polite" aria-relevant="additions"></div>
 
-  <script src="/static/music.js?v=w2fix"></script>
-  <script src="/static/app.js?v=w2fix"></script>
+  <script src="/static/music.js?v=w3a"></script>
+  <script src="/static/app.js?v=w3a"></script>
 </body>
 </html>

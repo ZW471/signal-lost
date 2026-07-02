@@ -232,6 +232,20 @@ const LABELS = {
     btn_close: 'CLOSE',
     settings_saved: 'Settings saved', saving: 'Saving...', saved: 'Saved',
     tokens_unit: 'tokens', tokens_short: 'tok',
+    // Usage stats (settings overlay)
+    usage_llm_calls: 'LLM calls', usage_input: 'Input', usage_output: 'Output',
+    usage_total: 'Total', usage_cost: 'Cost',
+    // Data panels drawer + nav menu (game chrome)
+    data_panels: '// DATA PANELS',
+    nav_tutorial: 'Tutorial', nav_save: 'Save Game',
+    nav_settings: 'Settings', nav_menu: 'Main Menu',
+    nav_info_panels: 'Info Panels', nav_menu_tip: 'Menu',
+    // Suggested-action chip tooltips (predict_outcome)
+    sa_ready: 'ready (instant)', sa_pending: 'pre-computing…',
+    // Death-cause endings
+    death_collapse: 'NEURAL COLLAPSE', death_capture: 'CAPTURED BY NEXUS',
+    death_unknown: 'DEATH',
+    death_reconnect_nudge: '— You can RECONNECT from an autosave (every 5 turns) or a manual save.',
     // Chat prefixes
     chat_player: '\u25B6 PLAYER', chat_agent: '\u25C0 SIGNAL LOST', chat_system: '\u25CF SYSTEM',
     // Game over
@@ -398,6 +412,20 @@ const LABELS = {
     btn_close: '关闭',
     settings_saved: '设置已保存', saving: '保存中...', saved: '已保存',
     tokens_unit: '令牌', tokens_short: '令牌',
+    // Usage stats (settings overlay)
+    usage_llm_calls: '调用次数', usage_input: '输入', usage_output: '输出',
+    usage_total: '合计', usage_cost: '花费',
+    // Data panels drawer + nav menu (game chrome)
+    data_panels: '// 数据面板',
+    nav_tutorial: '教程', nav_save: '保存游戏',
+    nav_settings: '设置', nav_menu: '主菜单',
+    nav_info_panels: '信息面板', nav_menu_tip: '菜单',
+    // Suggested-action chip tooltips (predict_outcome)
+    sa_ready: '即时', sa_pending: '预计算中…',
+    // Death-cause endings
+    death_collapse: '神经崩溃', death_capture: '被NEXUS擒获',
+    death_unknown: '死亡',
+    death_reconnect_nudge: '— 你可以从自动存档（每5回合）或手动存档重新连接。',
     // Chat prefixes
     chat_player: '\u25B6 玩家', chat_agent: '\u25C0 信号遗失', chat_system: '\u25CF 系统',
     // Game over
@@ -521,44 +549,56 @@ function localizeData(category, value) {
   return map[String(value).toLowerCase()] || String(value);
 }
 
+/** Walk every keyed element and set its text/placeholder from LABELS.
+ *  This is the single source of truth for static chrome — [data-i18n] sets
+ *  textContent, [data-i18n-placeholder] sets the placeholder attribute. New
+ *  strings only need the attribute in index.html + a LABELS entry; no per-
+ *  element JS. Dynamic labels (title/dataset.text, toggled submit labels,
+ *  per-render panels) keep their bespoke handlers below. */
+function applyStaticI18n(root) {
+  const scope = root || document;
+  scope.querySelectorAll('[data-i18n]').forEach(el => {
+    const key = el.dataset.i18n;
+    if (key) el.textContent = L(key);
+  });
+  scope.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+    const key = el.dataset.i18nPlaceholder;
+    if (key) el.placeholder = L(key);
+  });
+}
+
 /** Set the UI language and refresh everything */
 function setLanguage(lang) {
   currentLang = lang;
   localStorage.setItem('signal_lost_ui_lang', lang);
+  // Single-pass: every element carrying a data-i18n / data-i18n-placeholder key
+  // (menu, new-game, load, settings, all dialogs, panel tabs, drawer, auth) is
+  // updated from LABELS. Bespoke handlers below cover only what can't be keyed.
+  applyStaticI18n();
   // Reflect language on <html> for correct CJK line-breaking, font selection
   // (html[lang="zh"] tuning) and screen-reader pronunciation.
   document.documentElement.lang = lang === 'zh' ? 'zh' : 'en';
+  // Language selectors sync from one source of truth (currentLang): the menu
+  // dropdown and the new-game session-language select both reflect the UI lang.
   const menuLangSel = document.getElementById('selectMenuLanguage');
   if (menuLangSel) menuLangSel.value = lang;
-  // Update tab labels
-  const tabKeys = ['identity','knowledge','traces','district','inventory','network','world','log','conversation'];
-  const tabs = document.querySelectorAll('.panel-tab');
-  tabs.forEach((tab, i) => {
-    if (tabKeys[i]) tab.textContent = L('tab_' + tabKeys[i]);
-  });
-  // Chat
-  const chatInput = document.getElementById('chatInput');
-  if (chatInput) chatInput.placeholder = L('chat_placeholder');
   // Error-recovery chrome (wave 2c): relabel the degraded chip, any inline
   // "didn't confirm" notes, and standing retry cards on a language switch.
   if (_connChipEl) _connChipEl.textContent = L('conn_degraded');
   document.querySelectorAll('.busy-note').forEach(n => { n.textContent = L('busy_no_confirm'); });
   document.querySelectorAll('.retry-card-btn .cyber-btn-text').forEach(b => { b.textContent = L('retry_last_action'); });
-  // Implant companion chrome
+  // Implant companion chrome (sets titles/placeholders — not data-i18n-able)
   applyCompanionLanguage();
-  // Panel search inputs
-  ['knowledge', 'traces', 'log', 'conversation'].forEach(k => {
-    const si = document.getElementById('search-' + k);
-    if (si) si.placeholder = L('search_placeholder');
-  });
+  // Wait ticker: if mid-cycle, re-render its current line in the new language;
+  // otherwise fall back to the resting label. (.thinking-text is a live ticker,
+  // .thinkingHint is static so data-i18n could own it, but it shares this block.)
   const thinkingText = document.querySelector('.thinking-text');
-  // If the wait ticker is mid-cycle, re-render its current line in the new
-  // language; otherwise fall back to the resting label.
   if (thinkingText) thinkingText.textContent = (_thinkingTimer || _thinkingLineIdx > 0) ? _thinkingLineText() : L('processing');
   const thinkingHint = document.getElementById('thinkingHint');
   if (thinkingHint) thinkingHint.textContent = L('thinking_hint');
 
-  // Game title (boot logo, menu h1, game over h1)
+  // Game title (boot logo, menu h1, game over h1) — each needs dataset.text too
+  // for the glitch effect, so these stay bespoke rather than plain data-i18n.
   const title = L('game_title');
   const bootLogo = document.querySelector('.logo-glitch');
   if (bootLogo) { bootLogo.textContent = title; bootLogo.dataset.text = title; }
@@ -572,30 +612,18 @@ function setLanguage(lang) {
   const bootSub = document.querySelector('.logo-sub');
   if (bootSub) bootSub.textContent = L('boot_sub');
 
-  // Menu screen
-  setText('btnNewGame', L('menu_new_game'), '.cyber-btn-text');
-  setText('btnLoadGame', L('menu_load_game'), '.cyber-btn-text');
-  setText('btnSettings', L('menu_settings'), '.cyber-btn-text');
+  // Menu footer carries a leading <span class="blink">, so it's rebuilt here
+  // rather than keyed (data-i18n would clobber the span).
   const menuFooter = document.querySelector('.menu-footer');
   if (menuFooter) menuFooter.innerHTML = '<span class="blink">_</span> ' + L('menu_footer');
 
-  // Account widget + auth dialog
+  // Account widget + auth dialog (renders widget + toggles submit label)
   applyAuthLanguage();
 
-  // New game screen
-  const configTitle = document.querySelector('#newGameScreen .config-title');
-  if (configTitle) configTitle.textContent = L('config_title');
-  // Labels
-  _setLabelsInForm('#newGameScreen', [
-    ['DESIGNATION', 'label_designation'], ['ALIAS', 'label_alias'],
-    ['BACKGROUND', 'label_background'], ['DIFFICULTY', 'label_difficulty'],
-    ['LANGUAGE', 'label_language'],
-  ]);
-  // Default values + placeholders for new game form
+  // New game screen: default character-name/alias values track the language
+  // only while the player hasn't customized them (placeholders are data-i18n).
   const inputName = document.getElementById('inputName');
   if (inputName) {
-    inputName.placeholder = L('placeholder_name');
-    // Update default value if user hasn't customized it
     const defaults = { en: 'Kael', zh: '凯尔' };
     const oldDefaults = Object.values(defaults);
     if (!inputName.value || oldDefaults.includes(inputName.value)) {
@@ -604,14 +632,13 @@ function setLanguage(lang) {
   }
   const inputAlias = document.getElementById('inputAlias');
   if (inputAlias) {
-    inputAlias.placeholder = L('placeholder_alias');
     const defaults = { en: 'Ghost', zh: '幽灵' };
     const oldDefaults = Object.values(defaults);
     if (!inputAlias.value || oldDefaults.includes(inputAlias.value)) {
       inputAlias.value = defaults[lang] || defaults.en;
     }
   }
-  // Sync session language selector with UI language
+  // Sync session language selector with UI language (source of truth: currentLang)
   const selectLang = document.getElementById('selectLanguage');
   if (selectLang) selectLang.value = lang;
   // Background select buttons. The subtitle must stay in the CURRENT language —
@@ -647,112 +674,21 @@ function setLanguage(lang) {
       if (diffs[i]) opt.textContent = L('diff_' + diffs[i]) + ' — ' + L('diff_' + diffs[i] + '_desc');
     });
   }
-  // Initialize / Back buttons
-  _setBtnText('#newGameScreen', 0, L('btn_initialize'));
-  _setBtnText('#newGameScreen', 1, L('btn_back'));
+  // NOTE: new-game labels/buttons, load-screen, save/confirm/settings/auth
+  // dialogs, panel tabs, panel-search + input placeholders, and all
+  // data-i18n[-placeholder] chrome are already localized by applyStaticI18n()
+  // at the top of this function — no per-element handlers needed here.
 
-  // Load game screen
-  const loadTitle = document.querySelector('#loadGameScreen .config-title');
-  if (loadTitle) loadTitle.textContent = L('load_title');
-  _setBtnText('#loadGameScreen', 0, L('btn_back'));
-
-  // Save dialog
-  const saveTitle = document.querySelector('#saveDialog .config-title');
-  if (saveTitle) saveTitle.textContent = L('save_title');
-  const saveLabel = document.querySelector('#saveDialog .cyber-label');
-  if (saveLabel) saveLabel.textContent = L('label_save_name');
-  const saveBtns = document.querySelectorAll('#saveDialog .cyber-btn-text');
-  if (saveBtns[0]) saveBtns[0].textContent = L('btn_save');
-  if (saveBtns[1]) saveBtns[1].textContent = L('btn_cancel');
-
-  // Confirm menu dialog
-  document.getElementById('confirmMenuTitle').textContent = L('confirm_menu_title');
-  document.getElementById('confirmMenuText').textContent = L('confirm_menu_text');
-  document.getElementById('confirmMenuYes').textContent = L('btn_confirm');
-  document.getElementById('confirmMenuNo').textContent = L('btn_cancel');
-
-  // Settings overlay
-  const settingsTitle = document.querySelector('#settingsOverlay .config-title');
-  if (settingsTitle) settingsTitle.textContent = L('settings_title');
-  _setLabelsInOverlay('#settingsOverlay', [
-    [0, 'label_provider'], [1, 'label_model'],
-    [2, 'label_api_key'], [3, 'label_base_url'], [4, 'label_temperature'],
-    [5, 'label_langsmith_key'], [6, 'label_langsmith_project'],
-    [8, 'label_music_volume'],
-  ]);
-  const subtitles = document.querySelectorAll('#settingsOverlay .config-subtitle');
-  if (subtitles[0]) subtitles[0].textContent = L('settings_provider_title');
-  if (subtitles[1]) subtitles[1].textContent = L('settings_langsmith_title');
-  if (subtitles[2]) subtitles[2].textContent = L('settings_usage_title');
-  if (subtitles[3]) subtitles[3].textContent = L('settings_audio_title');
-  if (subtitles[4]) subtitles[4].textContent = L('settings_gameplay_title');
-  // Localize checkbox label (preserve the <input> inside). Only the text node
-  // AFTER the checkbox carries the label — setting EVERY text node (the loop used
-  // to) also filled the leading-whitespace node, rendering the label twice.
-  const chkLabel = document.querySelector('#chkShowTokens');
-  if (chkLabel && chkLabel.parentNode) {
-    const lbl = chkLabel.parentNode;
-    let labelNode = chkLabel.nextSibling;
-    while (labelNode && labelNode.nodeType !== 3) labelNode = labelNode.nextSibling;
-    if (labelNode) labelNode.textContent = ' ' + L('label_show_tokens');
-    lbl.childNodes.forEach(n => {
-      if (n.nodeType === 3 && n !== labelNode) n.textContent = '';
-    });
-  }
-  // Gameplay feature toggle labels (translated by id, not index)
-  const lblSA = document.getElementById('lblSuggestedActions');
-  if (lblSA) lblSA.textContent = L('label_suggested_actions');
-  const lblPO = document.getElementById('lblPredictOutcome');
-  if (lblPO) lblPO.textContent = L('label_predict_outcome');
-  const settingsBtns = document.querySelectorAll('#settingsOverlay .cyber-btn-text');
-  if (settingsBtns[0]) settingsBtns[0].textContent = L('btn_save');
-  if (settingsBtns[1]) settingsBtns[1].textContent = L('btn_close');
-
-  // Game over
-  const reconnectBtn = document.querySelector('#gameOverOverlay .cyber-btn-text');
-  if (reconnectBtn) reconnectBtn.textContent = L('game_over_reconnect');
-
-  // Status bar: info-panel toggle tooltip + the consolidated nav menu labels.
-  const isZhUI = lang === 'zh';
+  // Status bar: info-panel toggle tooltip + nav menu tooltips. These are title
+  // ATTRIBUTES on the icon buttons (not visible text), so they can't ride
+  // data-i18n; the nav-menu ITEM labels are keyed in HTML and handled above.
   const infoBtn = document.getElementById('btnInfoPanels');
-  if (infoBtn) infoBtn.title = isZhUI ? '信息面板' : 'Info Panels';
+  if (infoBtn) infoBtn.title = L('nav_info_panels');
   const navBtn = document.getElementById('btnNavMenu');
-  if (navBtn) navBtn.title = isZhUI ? '菜单' : 'Menu';
-  const navLabels = isZhUI
-    ? { navItemTutorial: '教程', navItemSave: '保存游戏', navItemSettings: '设置', navItemMenu: '主菜单' }
-    : { navItemTutorial: 'Tutorial', navItemSave: 'Save Game', navItemSettings: 'Settings', navItemMenu: 'Main Menu' };
-  Object.entries(navLabels).forEach(([id, label]) => { const el = document.getElementById(id); if (el) el.textContent = label; });
+  if (navBtn) navBtn.title = L('nav_menu_tip');
 
   // Re-render all panels if we have cached session
   if (cachedSession) updateAllPanels(cachedSession);
-}
-
-/** Helper: set text inside a button's .cyber-btn-text by parent+index */
-function _setBtnText(containerSel, idx, text) {
-  const btns = document.querySelectorAll(containerSel + ' .form-actions .cyber-btn-text');
-  if (btns[idx]) btns[idx].textContent = text;
-}
-
-/** Helper: set cyber-label text by index within a container */
-function _setLabelsInForm(containerSel, pairs) {
-  const labels = document.querySelectorAll(containerSel + ' .cyber-label');
-  for (const [_origText, lkey] of pairs) {
-    for (const lbl of labels) {
-      // Match by the original English text or just set all matching ones
-      if (lbl.textContent.trim().toUpperCase() === _origText || lbl.dataset.lkey === lkey) {
-        lbl.textContent = L(lkey);
-        lbl.dataset.lkey = lkey; // mark for future updates
-      }
-    }
-  }
-}
-
-/** Helper: set labels by index in settings overlay */
-function _setLabelsInOverlay(containerSel, indexPairs) {
-  const labels = document.querySelectorAll(containerSel + ' .cyber-label');
-  for (const [idx, lkey] of indexPairs) {
-    if (labels[idx]) labels[idx].textContent = L(lkey);
-  }
 }
 
 let cachedSession = null; // Store last session for re-render on language change
@@ -1308,22 +1244,14 @@ function renderAccountWidget() {
   }
 }
 
-/** Refresh static auth/account chrome when the UI language changes. */
+/** Refresh dynamic auth/account chrome when the UI language changes. The static
+ *  auth strings (title, tab labels, field labels, cancel button, placeholders)
+ *  are keyed via data-i18n[-placeholder] and handled by applyStaticI18n(); only
+ *  the account-widget label and the mode-dependent submit label live here. */
 function applyAuthLanguage() {
   renderAccountWidget();
-  const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
-  set('accountMenuLogout', L('auth_sign_out'));
-  set('authTitle', L('auth_title'));
-  set('authTabSignin', L('auth_sign_in'));
-  set('authTabRegister', L('auth_register'));
-  set('authUserLabel', L('auth_username'));
-  set('authPassLabel', L('auth_password'));
-  set('authCancelLabel', L('btn_cancel'));
-  set('authSubmitLabel', authMode === 'register' ? L('auth_register') : L('auth_sign_in'));
-  const u = document.getElementById('authUsername');
-  if (u) u.placeholder = L('auth_username_placeholder');
-  const pw = document.getElementById('authPassword');
-  if (pw) pw.placeholder = L('auth_password_placeholder');
+  const submit = document.getElementById('authSubmitLabel');
+  if (submit) submit.textContent = authMode === 'register' ? L('auth_register') : L('auth_sign_in');
 }
 
 /** Click on the account button: open the auth modal (logged out) or the
@@ -1797,7 +1725,7 @@ function handleServerMessage(msg) {
       // and 650ms ambient beep intervals leak for the life of the page while the
       // 2s overlay delay runs and beyond.
       endTurnUI();
-      clearSuggestedActions();
+      resetPredictions();
       setTimeout(() => showGameOver(msg.ending, msg.narrative, msg.death_cause), 2000);
       break;
 
@@ -2014,12 +1942,12 @@ function _updateUsageStats() {
     el.innerHTML = `<span class="dim" style="font-size:11px">${L('no_usage_data')}</span>`;
     return;
   }
-  const costStr = typeof u.cost === 'number' ? ` &nbsp;|&nbsp; Cost: <span class="cyan">${_formatCost(u.cost)}</span>` : '';
+  const costStr = typeof u.cost === 'number' ? ` &nbsp;|&nbsp; ${esc(L('usage_cost'))}: <span class="cyan">${_formatCost(u.cost)}</span>` : '';
   el.innerHTML = `<div style="font-size:11px;color:var(--text-dim);line-height:1.6">
-    LLM calls: <span class="cyan">${u.total_calls}</span> &nbsp;|&nbsp;
-    Input: <span class="cyan">${(u.input_tokens || 0).toLocaleString()}</span> &nbsp;|&nbsp;
-    Output: <span class="cyan">${(u.output_tokens || 0).toLocaleString()}</span> &nbsp;|&nbsp;
-    Total: <span class="cyan">${(u.total_tokens || 0).toLocaleString()}</span> tokens${costStr}
+    ${esc(L('usage_llm_calls'))}: <span class="cyan">${u.total_calls}</span> &nbsp;|&nbsp;
+    ${esc(L('usage_input'))}: <span class="cyan">${(u.input_tokens || 0).toLocaleString()}</span> &nbsp;|&nbsp;
+    ${esc(L('usage_output'))}: <span class="cyan">${(u.output_tokens || 0).toLocaleString()}</span> &nbsp;|&nbsp;
+    ${esc(L('usage_total'))}: <span class="cyan">${(u.total_tokens || 0).toLocaleString()}</span> ${esc(L('tokens_unit'))}${costStr}
   </div>`;
 }
 
@@ -2515,12 +2443,40 @@ function addTypingMessage(text, role = 'agent', usage = null, elapsedSeconds = n
 // button render straight to "ready" when its prediction finished before the
 // buttons were drawn — which is the norm for the buffered opening scene, where
 // predictions complete while the player is still reading the tutorial.
+//
+// Race note: the backend emits `prediction_ready` for the CURRENT turn's
+// suggestions right after the narrative. That message can land in the window
+// between a `thinking` (which tears down the old chips) and the next
+// `renderSuggestedActions` (which draws the new ones). If clearSuggestedActions
+// wiped this set, that early arrival would be forgotten and the chip would draw
+// as "pending" forever. So the teardown paths split:
+//   • clearSuggestedActions()  → DOM only; PRESERVES ready arrivals.
+//   • resetPredictions()       → DOM + set; only when the current suggestions
+//                                are truly spent (player committed / game over).
+// renderSuggestedActions then prunes the set to just the incoming action texts,
+// dropping any stale ready-flags from a prior turn while keeping fresh ones.
 let _readyPredictions = new Set();
 
+/** Tear down the on-screen chips but KEEP any prediction_ready arrivals, so a
+ *  prediction that landed during the clear→render gap still lights its chip. */
 function clearSuggestedActions() {
   const c = document.getElementById('suggestedActions');
   if (c) c.innerHTML = '';
+}
+
+/** Hard reset: chips gone AND the ready set emptied. Use only when the current
+ *  suggestion set is spent (player sent an action, game over) — never on the
+ *  per-turn `thinking` teardown, which must not lose an in-flight arrival. */
+function resetPredictions() {
+  clearSuggestedActions();
   _readyPredictions.clear();
+}
+
+/** Bilingual chip tooltip: base text plus a state suffix (ready/pending). */
+function _saTitle(text, state) {
+  if (state === 'ready') return `${text} — ${L('sa_ready')}`;
+  if (state === 'pending') return `${text} — ${L('sa_pending')}`;
+  return text;
 }
 
 function renderSuggestedActions(actions) {
@@ -2539,18 +2495,25 @@ function renderSuggestedActions(actions) {
   // When outcome pre-computation is on, buttons start "pending" and brighten to
   // "ready" (instant reply) once their prediction lands (prediction_ready msg).
   const predicting = !!(_cachedFeatures && _cachedFeatures.predict_outcome);
-  actions.slice(0, 3).forEach((a, idx) => {
-    const text = (a && (a.text || a)) ? (a.text || a) : '';
-    if (!text) return;
+  // Resolve the incoming action texts up front, then prune _readyPredictions to
+  // just this set. That drops stale ready-flags carried over from a prior turn
+  // while PRESERVING any prediction_ready that arrived for one of THESE actions
+  // during the clear→render gap (the race the split teardown protects).
+  const shown = actions.slice(0, 3)
+    .map(a => (a && (a.text || a)) ? (a.text || a) : '')
+    .filter(Boolean);
+  const shownSet = new Set(shown);
+  _readyPredictions.forEach(t => { if (!shownSet.has(t)) _readyPredictions.delete(t); });
+  shown.forEach(text => {
     // A prediction may already be ready (e.g. it finished during the tutorial).
     const ready = predicting && _readyPredictions.has(text);
+    const state = ready ? 'ready' : (predicting ? 'pending' : '');
     const btn = document.createElement('button');
     btn.type = 'button';
-    btn.className = 'suggested-action-btn' + (ready ? ' ready' : (predicting ? ' pending' : ''));
+    btn.className = 'suggested-action-btn' + (state ? ' ' + state : '');
     btn.dataset.action = text;
     btn.textContent = text;
-    btn.title = ready ? (text + ' — ready (instant)')
-              : (predicting ? (text + ' — pre-computing…') : text);
+    btn.title = _saTitle(text, state);
     btn.onclick = () => chooseSuggestedAction(text);
     c.appendChild(btn);
   });
@@ -2568,7 +2531,7 @@ function markPredictionReady(text) {
     if (btn.dataset.action === text) {
       btn.classList.remove('pending');
       btn.classList.add('ready');
-      btn.title = text + ' — ready (instant)';
+      btn.title = _saTitle(text, 'ready');
     }
   });
 }
@@ -2595,7 +2558,7 @@ function chooseSuggestedAction(text) {
   });
   discoveryEls = [];
 
-  clearSuggestedActions();
+  resetPredictions();  // player committed → the current suggestions are spent
   _setPendingPlayer(addChatMessage(text, 'player'));
   input.value = '';
   disableInput();
@@ -2627,7 +2590,7 @@ function sendMessage() {
   });
   discoveryEls = [];
 
-  clearSuggestedActions();
+  resetPredictions();  // player committed → the current suggestions are spent
   _setPendingPlayer(addChatMessage(text, 'player'));
   input.value = '';
   disableInput();
@@ -2687,7 +2650,7 @@ function retryLastAction() {
   if (!text) { _dismissRetryCard(); return; }
   if (!wsOpen()) { showReconnectingNotice(); return; }
   _dismissRetryCard();
-  clearSuggestedActions();
+  resetPredictions();  // re-sending the last action → old suggestions are spent
   _setPendingPlayer(addChatMessage(text, 'player'));
   disableInput();
   _sendPlayerInput(text);
@@ -2882,21 +2845,16 @@ function showGameOver(ending, narrative, deathCause) {
   triggerGlitch(); triggerGlitch();
   let label = ending ? `// ${ending.toUpperCase()}` : L('game_over_fallback');
   if (ending === 'death' && deathCause) {
-    const causes = {
-      collapse: { en: 'NEURAL COLLAPSE', zh: '神经崩溃' },
-      capture:  { en: 'CAPTURED BY NEXUS', zh: '被NEXUS擒获' },
-      unknown:  { en: 'DEATH', zh: '死亡' },
-    };
-    const c = causes[deathCause] || causes.unknown;
-    label = `// ${currentLang === 'zh' ? c.zh : c.en}`;
+    // Death-cause labels route through LABELS (death_collapse / death_capture /
+    // death_unknown); an unrecognized cause falls back to the generic key.
+    const causeKeys = { collapse: 'death_collapse', capture: 'death_capture', unknown: 'death_unknown' };
+    label = `// ${L(causeKeys[deathCause] || 'death_unknown')}`;
   }
   document.getElementById('gameOverEnding').textContent = label;
   let narr = narrative || '';
   // DEATH is a failure state, not a full story ending — nudge toward reloading.
   if (ending === 'death') {
-    narr += (narr ? '\n\n' : '') + (currentLang === 'zh'
-      ? '— 你可以从自动存档（每5回合）或手动存档重新连接。'
-      : '— You can RECONNECT from an autosave (every 5 turns) or a manual save.');
+    narr += (narr ? '\n\n' : '') + L('death_reconnect_nudge');
   }
   document.getElementById('gameOverNarrative').textContent = narr;
   openDialog(document.getElementById('gameOverOverlay'), { dismissible: false });

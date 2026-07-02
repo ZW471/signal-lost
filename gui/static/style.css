@@ -450,7 +450,12 @@ html, body {
   cursor: pointer;
   overflow: hidden;
   transition: all 0.3s ease;
-  min-width: 280px;
+  /* min() so the button never demands more than its container width: on the
+     roomy menu it holds a comfortable 280px, but inside narrow dialogs and
+     phone-width forms it shrinks to fit instead of overflowing. This replaces
+     the per-container patch rules (.save-dialog/.auth-dialog/.form-actions)
+     that previously fought the flat 280px floor. */
+  min-width: min(280px, 100%);
   text-transform: uppercase;
   clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 12px 100%, 0 calc(100% - 12px));
 }
@@ -1355,9 +1360,13 @@ html, body {
   display: none;
 }
 .suggested-action-btn {
-  flex: 1 1 auto;
+  /* flex:0 1 auto — a chip sizes to its own content and may shrink, but does NOT
+     grow to fill the row. So one long suggestion wraps to a few lines at a capped
+     width instead of ballooning into a giant full-width button, and short chips
+     keep a consistent, content-sized visual weight beside it. */
+  flex: 0 1 auto;
   min-width: 0;
-  max-width: 100%;
+  max-width: min(340px, 100%);
   text-align: left;
   background: var(--bg-input);
   border: 1px solid var(--magenta);
@@ -1390,14 +1399,33 @@ html, body {
   cursor: not-allowed;
   pointer-events: none;
 }
-/* predict_outcome: still pre-computing this action's outcome */
+/* predict_outcome: still pre-computing this action's outcome. The dashed border
+   is the STATIC state signal (survives reduced-motion, where the killswitch below
+   stops the shimmer); the sweeping highlight is the animated "working" cue. */
 .suggested-action-btn.pending {
-  opacity: 0.6;
+  opacity: 0.72;
   border-style: dashed;
-  animation: sa-fade-in 0.25s ease, sa-pulse 1.4s ease-in-out infinite;
+  position: relative;
+  overflow: hidden;
+  animation: sa-fade-in 0.25s ease;
 }
 .suggested-action-btn.pending::before {
   content: "○ ";
+}
+/* Shimmer sweep — a soft magenta-tinted highlight travels across the chip. */
+.suggested-action-btn.pending::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    100deg,
+    transparent 30%,
+    rgba(255, 0, 255, 0.18) 50%,
+    transparent 70%
+  );
+  transform: translateX(-100%);
+  animation: sa-shimmer 1.5s ease-in-out infinite;
+  pointer-events: none;
 }
 /* predict_outcome: outcome cached — clicking is instant (cyan = warm) */
 .suggested-action-btn.ready {
@@ -1418,9 +1446,11 @@ html, body {
   from { opacity: 0; transform: translateY(4px); }
   to   { opacity: 1; transform: translateY(0); }
 }
-@keyframes sa-pulse {
-  0%, 100% { opacity: 0.45; }
-  50%      { opacity: 0.7; }
+/* Pending-chip shimmer: a highlight sweeps left→right and rests off-screen so
+   there's a brief gap between passes (reads as "still working", not a strobe). */
+@keyframes sa-shimmer {
+  0%        { transform: translateX(-100%); }
+  60%, 100% { transform: translateX(100%); }
 }
 
 /* ================================================================
@@ -2074,13 +2104,9 @@ mark.search-hl {
 .save-dialog .form-actions {
   flex-wrap: wrap;
 }
-
-.save-dialog .cyber-btn {
-  min-width: 140px;
-  flex: 1;
-  padding: 12px 20px;
-  font-size: 14px;
-}
+/* .save-dialog .cyber-btn sizing override removed — the base .cyber-btn now uses
+   min-width:min(280px,100%), so the two action buttons shrink to fit this narrow
+   dialog (wrapping when needed) without a per-container patch. */
 
 .confirm-text {
   color: var(--text);
@@ -2187,16 +2213,10 @@ mark.search-hl {
   width: 400px;
 }
 
-/* Buttons: the base .cyber-btn has min-width:280px, which would overflow this
-   narrow dialog two-up. Constrain them to fit (same approach as .save-dialog). */
+/* Buttons wrap if two won't fit; the base .cyber-btn min-width:min(280px,100%)
+   now shrinks them to this narrow dialog, so no per-container sizing patch. */
 .auth-dialog .form-actions {
   flex-wrap: wrap;
-}
-.auth-dialog .cyber-btn {
-  min-width: 140px;
-  flex: 1;
-  padding: 12px 20px;
-  font-size: 14px;
 }
 
 .auth-tabs {
@@ -2466,6 +2486,12 @@ mark.search-hl {
   .discovery-ceremony .ceremony-title::before,
   .discovery-ceremony .ceremony-title::after { display: none; }
   .panel-tab.trace-pulse { animation: none; color: var(--green-bright); }
+  /* Suggested-action chips: drop the sweeping shimmer entirely and lean on
+     STATIC outline cues so pending vs. ready stays legible without motion —
+     pending keeps its dashed border + dimmer fill, ready its solid cyan border
+     and full opacity (plus the ⚡ badge). */
+  .suggested-action-btn.pending::after { display: none; }
+  .suggested-action-btn.pending { opacity: 0.8; border-width: 1px; border-style: dashed; }
 }
 
 /* ================================================================
@@ -3014,15 +3040,13 @@ mark.search-hl {
   /* No horizontal page scroll on phones. */
   html, body { overflow-x: hidden; }
 
-  /* Dialog/form action buttons stack full-width instead of overflowing — the
-     280px min-width on .cyber-btn blows past a phone screen when placed in a row. */
+  /* Dialog/form action buttons stack full-width instead of overflowing. The base
+     .cyber-btn min-width:min(280px,100%) already lets them shrink to the column,
+     and align-items:stretch makes them span it — so the old min-width:0/width:100%
+     per-button override is no longer needed. */
   .form-actions {
     flex-direction: column;
     align-items: stretch;
-  }
-  .form-actions .cyber-btn {
-    min-width: 0;
-    width: 100%;
   }
 
   /* ---- Status bar: degrade the 3-zone grid to [brand+meters | actions].
