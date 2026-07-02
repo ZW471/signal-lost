@@ -53,6 +53,21 @@ DEFAULT_ACTIONS = [
 ]
 
 
+# Substrings marking a transient CLI/network stream drop worth retrying.
+_TRANSIENT_MARKERS = (
+    "tls handshake eof", "handshake eof", "connection reset", "connection refused",
+    "connection aborted", "connection closed", "broken pipe", "reconnecting",
+    "timed out", "timeout", "temporarily unavailable", "eof occurred",
+    "stream closed", "network is unreachable", "read timed out", "remote end closed",
+)
+
+
+def _is_transient_error(err: BaseException) -> bool:
+    """True if *err* looks like a transient network/CLI stream drop (safe to retry)."""
+    msg = str(err).lower()
+    return any(marker in msg for marker in _TRANSIENT_MARKERS)
+
+
 def run_playthrough(max_turns: int, actions: list[str]) -> dict:
     """Run a full playthrough and return metrics."""
     load_env()
@@ -103,7 +118,22 @@ def run_playthrough(max_turns: int, actions: list[str]) -> dict:
         state["messages"].append(HumanMessage(content=action))
 
         try:
-            result = graph.invoke(state)
+            # A single transient stream drop (tls handshake eof, connection reset,
+            # timeout) used to break the whole run on turn 1. Retry the invoke up to
+            # 2 extra attempts with a short backoff on connection-ish errors before
+            # giving up. Re-invoking the same `state` is safe — the HumanMessage was
+            # already appended above and `state` is only reassigned on success.
+            _last_err = None
+            for _attempt in range(3):
+                try:
+                    result = graph.invoke(state)
+                    break
+                except Exception as _err:
+                    _last_err = _err
+                    if _attempt < 2 and _is_transient_error(_err):
+                        time.sleep(2 * (_attempt + 1))
+                        continue
+                    raise
             state = result
             metrics["turns_played"] += 1
 

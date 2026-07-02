@@ -1392,11 +1392,17 @@ async def _send_game_started(sess: PlayerSession, ws: WebSocket, mode: str = "ne
     await ws.send_json({"type": "game_started", "session": data, "mode": mode})
 
 
-def _build_state_delta(prev: dict | None, cur: dict) -> dict | None:
+def _build_state_delta(prev: dict | None, cur: dict,
+                       reasons: dict | None = None) -> dict | None:
     """Repackage the meter/trace/knowledge diff between two snapshots as numbers.
 
     Additive companion to ``session_update``; old clients ignore the ``state_delta``
-    type. Returns None when there is no prior snapshot to diff against."""
+    type. Returns None when there is no prior snapshot to diff against.
+
+    *reasons* (optional) carries the in-world cause the resolver gave for any meter
+    that moved, as ``{alert?:{en,zh}, integrity?:{en,zh}, decay?:{en,zh}}``. Only
+    reasons whose meter actually changed this turn are forwarded, so a stale/omitted
+    reason never mislabels a static meter."""
     if prev is None:
         return None
 
@@ -1405,7 +1411,8 @@ def _build_state_delta(prev: dict | None, cur: dict) -> dict | None:
 
     traces_added = sorted((cur.get("trace_ids") or set()) - (prev.get("trace_ids") or set()))
     knowledge_added = sorted((cur.get("know_titles") or set()) - (prev.get("know_titles") or set()))
-    return {
+
+    delta = {
         "type": "state_delta",
         "integrity": _pair("integrity"),
         "nexus_alert": _pair("nexus_alert"),
@@ -1413,6 +1420,24 @@ def _build_state_delta(prev: dict | None, cur: dict) -> dict | None:
         "traces_added": traces_added,
         "knowledge_added": knowledge_added,
     }
+
+    # Attach reasons only for meters that actually moved (guards against a reason
+    # the model supplied for a delta that got clamped to no-op).
+    if reasons:
+        out_reasons: dict = {}
+        _meter_key = {"alert": "nexus_alert", "integrity": "integrity", "decay": "fragment_decay"}
+        for meter, payload in reasons.items():
+            snap_key = _meter_key.get(meter)
+            if not snap_key or not isinstance(payload, dict):
+                continue
+            pair = delta[snap_key]
+            if pair["from"] != pair["to"] and (payload.get("en") or payload.get("zh")):
+                out_reasons[meter] = {"en": payload.get("en") or payload.get("zh"),
+                                      "zh": payload.get("zh") or payload.get("en")}
+        if out_reasons:
+            delta["reasons"] = out_reasons
+
+    return delta
 
 
 async def _finish_turn(sess: PlayerSession, ws: WebSocket, result: dict, mode: str,
@@ -1450,6 +1475,23 @@ async def _finish_turn(sess: PlayerSession, ws: WebSocket, result: dict, mode: s
     # repaint the quick-action buttons without waiting for the next input.
     shown_actions = [] if game_over else (result.get("suggested_actions") or [])
     sess.last_suggested_actions = shown_actions
+
+    # Roll beat: if the resolver used the dice/cipher/signal mechanic tools this
+    # turn, surface an additive 'roll' frame BEFORE the narrative so the client can
+    # animate the check. Drained per turn from the tools module buffer; in-world
+    # safe (only names the skill/method the player just attempted). Old clients
+    # ignore the unknown type. Stash the reasons here too (drained together) for the
+    # state_delta below.
+    turn_reasons: dict = {}
+    if sess.session_dir:
+        try:
+            from engine.tools import drain_rolls, drain_reasons
+            rolls = await asyncio.to_thread(drain_rolls, sess.session_dir)
+            turn_reasons = await asyncio.to_thread(drain_reasons, sess.session_dir)
+            if rolls and not game_over:
+                await _safe_send(ws, {"type": "roll", "rolls": rolls})
+        except Exception:
+            pass
 
     if not await _safe_send(ws, {
         "type": "narrative",
@@ -1501,7 +1543,7 @@ async def _finish_turn(sess: PlayerSession, ws: WebSocket, result: dict, mode: s
     # advances (even when the delta is suppressed) so the next turn diffs cleanly.
     cur_snapshot = _meter_snapshot_from_data(session_data)
     if mode != "resume":
-        delta = _build_state_delta(sess.meter_snapshot, cur_snapshot)
+        delta = _build_state_delta(sess.meter_snapshot, cur_snapshot, turn_reasons)
         if delta is not None:
             await _safe_send(ws, delta)
     sess.meter_snapshot = cur_snapshot
@@ -1530,6 +1572,23 @@ async def _finish_turn(sess: PlayerSession, ws: WebSocket, result: dict, mode: s
         sess.scheduler.on_player_input()
 
     _maybe_schedule_prediction(sess, result, ws)
+
+
+# Substrings that mark a transient CLI/network stream drop worth retrying (as
+# opposed to a content/auth/logic error, which won't get better on a retry).
+_TRANSIENT_CLI_MARKERS = (
+    "tls handshake eof", "handshake eof", "connection reset", "connection refused",
+    "connection aborted", "connection closed", "broken pipe", "reconnecting",
+    "timed out", "timeout", "temporarily unavailable", "eof occurred",
+    "stream closed", "stream disconnected", "network is unreachable",
+    "read timed out", "remote end closed",
+)
+
+
+def _is_transient_cli_error(err: BaseException) -> bool:
+    """True if *err* looks like a transient CLI/network stream drop (safe to retry)."""
+    msg = str(err).lower()
+    return any(marker in msg for marker in _TRANSIENT_CLI_MARKERS)
 
 
 async def _run_opening(sess: PlayerSession, ws: WebSocket, language: str, background: str) -> None:
@@ -1639,7 +1698,33 @@ async def _run_turn(sess: PlayerSession, ws: WebSocket, player_input: str | None
         # deadline (well beyond a slow-but-normal ~10-min codex turn), abort so the
         # except below surfaces an in-fiction error and the client re-enables input
         # — instead of leaving the player stuck on a dead spinner forever.
-        result = await asyncio.wait_for(loop.run_in_executor(None, _invoke), timeout=960)
+        #
+        # Transient CLI stream drops (tls handshake eof, connection reset, timeout)
+        # shouldn't nuke a turn on the first flake. Retry the invoke up to 3 attempts
+        # with a short backoff — but ONLY on the CLI-bypass path, where cc_run_turn
+        # reads state from disk and is safe to re-run. The LangGraph path appends the
+        # player's HumanMessage into sess.game_state before invoking, so re-running it
+        # would duplicate that message; leave it single-shot.
+        _attempts = 3
+        for _attempt in range(1, _attempts + 1):
+            try:
+                result = await asyncio.wait_for(
+                    loop.run_in_executor(None, _invoke), timeout=960)
+                break
+            except asyncio.TimeoutError:
+                # The 960s hard backstop means the turn wedged, not a transient
+                # network blip — don't retry (that's up to ~48min of dead spinner).
+                raise
+            except Exception as _err:
+                _retryable = (sess.is_cli_bypass and _attempt < _attempts
+                              and _is_transient_cli_error(_err))
+                if not _retryable:
+                    raise
+                import logging as _logging
+                _logging.getLogger(__name__).warning(
+                    "transient CLI error (attempt %d/%d), retrying: %s",
+                    _attempt, _attempts, _err)
+                await asyncio.sleep(1.5 * _attempt)
 
         # The CLI-bypass engine usually emits suggested_actions inline, but some
         # models/turns omit them (or a parse-fallback zeroes them), leaving the
