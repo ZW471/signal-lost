@@ -7,6 +7,8 @@ Used by deterministic Python nodes (trace_checker, world_ticker, consequence).
 
 from __future__ import annotations
 
+import re
+
 # ---------------------------------------------------------------------------
 # Trace discovery conditions
 # Each trace has an ID, description, layer, and a checker function.
@@ -109,6 +111,14 @@ def _has_evidence(knowledge: dict, keywords: list[str]) -> bool:
     return False
 
 
+def _layer_of(trace_id: str) -> int | None:
+    """Parse the layer number from a trace id like ``TRACE-L3-07`` -> 3.
+
+    Returns ``None`` when the id doesn't carry an ``L#`` segment."""
+    m = re.search(r"-L(\d+)-", str(trace_id or ""))
+    return int(m.group(1)) if m else None
+
+
 def _trace_discovered(traces: dict, trace_id: str) -> bool:
     """Check if a specific trace has already been discovered."""
     for t in traces.get("discovered", []):
@@ -147,8 +157,8 @@ def reconcile_trace_presentation(traces: dict) -> dict:
     """
     discovered = traces.get("discovered", []) or []
     disc_map = {d.get("id"): d for d in discovered if d.get("id")}
-    total = len(TRACE_CONDITIONS)
-    traces["total_discovered"] = f"{len(disc_map)} / {total}"
+    # Canonical live total — never a hard-coded literal (see LIVE_TRACE_TOTAL).
+    traces["total_discovered"] = f"{len(disc_map)} / {LIVE_TRACE_TOTAL}"
 
     layers = traces.get("layers", {})
     if isinstance(layers, dict):
@@ -159,7 +169,10 @@ def reconcile_trace_presentation(traces: dict) -> dict:
             if not isinstance(tr, dict):
                 continue
             count = 0
+            layer_num = None
             for trace_id, info in tr.items():
+                if layer_num is None:
+                    layer_num = _layer_of(trace_id)
                 if not isinstance(info, dict):
                     continue
                 if trace_id in disc_map:
@@ -168,7 +181,10 @@ def reconcile_trace_presentation(traces: dict) -> dict:
                     desc = disc_map[trace_id].get("description")
                     if desc and info.get("description") in (None, "", "[???]"):
                         info["description"] = desc
-            layer["progress"] = f"{count}/{len(tr)}"
+            # Denominator = canonical live count for this layer, falling back to
+            # the scaffold slot count only if the layer number can't be parsed.
+            denom = LIVE_TRACES_PER_LAYER.get(layer_num, len(tr))
+            layer["progress"] = f"{count}/{denom}"
     return traces
 
 
@@ -443,6 +459,26 @@ TRACE_CONDITIONS: list[dict] = [
      "check": lambda k, t, n, p, w: (
          _trace_discovered(t, "TRACE-L5-01") and _has_fact_or_rumor_about(k, ["merge", "融合", "permanent", "永久", "lose self", "失去自我"]))},
 ]
+
+
+# ---------------------------------------------------------------------------
+# Canonical trace totals (single source of truth)
+#
+# Every entry in ``TRACE_CONDITIONS`` above has a *live* ``check()`` condition,
+# so the number of discoverable traces is exactly ``len(TRACE_CONDITIONS)``.
+# The persisted ``traces.json`` scaffold advertises a slot per trace and used to
+# be summed ad-hoc ("N / 47"); deriving the totals here keeps the counter, the
+# per-layer denominators, and any GUI presentation reconciled to one number
+# instead of a hard-coded literal that silently drifts if traces are added.
+LIVE_TRACE_TOTAL: int = len(TRACE_CONDITIONS)
+
+# Per-layer live denominators: {layer_number: count-of-traces-with-live-check}.
+LIVE_TRACES_PER_LAYER: dict[int, int] = {}
+for _tc in TRACE_CONDITIONS:
+    _lyr = _tc.get("layer")
+    if _lyr is not None:
+        LIVE_TRACES_PER_LAYER[_lyr] = LIVE_TRACES_PER_LAYER.get(_lyr, 0) + 1
+del _tc, _lyr
 
 
 # ---------------------------------------------------------------------------

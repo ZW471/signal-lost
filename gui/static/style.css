@@ -1521,37 +1521,161 @@ mark.search-hl {
   padding: 20px;
 }
 
-/* Trace layer styles */
-.trace-layer {
-  margin-bottom: 14px;
+/* ================================================================
+   LAYERED TRACE LADDER + DESCENT DEPTH GAUGE
+   Neon depth ramp: dim cyan (L1) → hot magenta (L5), driven by --depth (1-5).
+   ================================================================ */
+
+/* Per-band accent color from --depth. Mixes cyan→magenta over the 5 layers. */
+.trace-band,
+.trace-item.discovered,
+.trace-segbar,
+.descent-seg.reached {
+  --depth-t: calc((var(--depth, 1) - 1) / 4);         /* 0 at L1 … 1 at L5 */
+  --depth-color: color-mix(in srgb, var(--magenta) calc(var(--depth-t) * 100%), var(--cyan));
 }
 
-.trace-layer-header {
+/* ---- Descent gauge (compact 0-5 header meter) ---- */
+.descent-gauge {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin-top: var(--sp-2);
+}
+.descent-label {
+  font-family: var(--font-display);
+  font-size: 10px;
+  letter-spacing: 2px;
+  color: var(--text-dim);
+  flex: 0 0 auto;
+}
+.descent-track {
+  display: flex;
+  flex: 1 1 auto;
+  gap: 3px;
+  align-items: stretch;
+  min-width: 0;
+}
+.descent-seg {
+  position: relative;
+  flex: 1 1 0;
+  min-width: 0;
+  height: 8px;
+  border-radius: var(--r-1);
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  font-family: var(--font-mono);
+  font-size: 0;                 /* segments are bars; only .current shows text */
+  overflow: visible;
+  transition: background 0.4s ease, box-shadow 0.4s ease;
+}
+.descent-seg.reached {
+  background: color-mix(in srgb, var(--magenta) calc(((var(--depth,1) - 1) / 4) * 100%), var(--cyan));
+  border-color: transparent;
+  box-shadow: 0 0 6px color-mix(in srgb, var(--magenta) calc(((var(--depth,1) - 1) / 4) * 100%), var(--cyan));
+}
+/* The current (deepest reached) layer expands to show its flavor name. */
+.descent-seg.current {
+  flex: 2 1 0;
+  height: auto;
+  min-height: 8px;
+  padding: 2px 6px;
+  font-size: 10px;
+  letter-spacing: 1px;
+  line-height: 1.2;
+  color: var(--bg-dark);
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+  text-shadow: none;
+}
+
+/* ---- Layer bands ---- */
+.trace-band {
+  margin-bottom: var(--sp-3);
+  padding-left: var(--sp-2);
+  border-left: 2px solid var(--depth-color, var(--cyan));
+}
+.trace-band.locked {
+  border-left-color: var(--border);
+  opacity: 0.7;
+}
+.trace-band-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-1);
+}
+.trace-band-name {
   font-family: var(--font-display);
   font-size: 12px;
   letter-spacing: 1px;
-  margin-bottom: 6px;
-  display: flex;
-  justify-content: space-between;
+  color: var(--depth-color, var(--cyan));
+}
+.trace-band-name.locked-name {
+  color: var(--text-dim);
+  letter-spacing: 2px;
+}
+.trace-band-count {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-dim);
+}
+.trace-band-lock {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 1px;
+  color: var(--text-dim);
 }
 
-.trace-layer-name { color: var(--cyan); }
-.trace-layer-progress { color: var(--text-dim); }
+/* ---- Segmented per-band progress bar (mirrors HUD banded-gauge language) ---- */
+.trace-segbar {
+  display: flex;
+  gap: 2px;
+  margin-bottom: var(--sp-2);
+}
+.trace-seg {
+  flex: 1 1 0;
+  height: 5px;
+  min-width: 2px;
+  border-radius: var(--r-1);
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  transition: background 0.4s ease, box-shadow 0.4s ease;
+}
+.trace-seg.on {
+  background: var(--depth-color, var(--cyan));
+  border-color: transparent;
+  box-shadow: 0 0 5px var(--depth-color, var(--cyan));
+}
 
+/* ---- Discovered trace lines (keep REAL ids) ---- */
 .trace-item {
   padding: 4px 8px;
   margin-bottom: 3px;
   font-size: 12px;
 }
-
 .trace-item.discovered {
-  color: var(--green);
-  border-left: 2px solid var(--green);
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  color: var(--text);
+  border-left: 2px solid var(--depth-color, var(--green));
+  background: rgba(255, 255, 255, 0.015);
 }
-
-.trace-item.undiscovered {
-  color: var(--text-dim);
-  border-left: 2px solid var(--border);
+.trace-item-id {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.5px;
+  color: var(--depth-color, var(--cyan));
+  opacity: 0.85;
+}
+.trace-item-desc {
+  color: var(--text);
+  line-height: 1.4;
 }
 
 /* Progress bar (traces, etc.) */

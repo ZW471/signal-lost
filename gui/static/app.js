@@ -124,6 +124,12 @@ const LABELS = {
     // Traces
     traces_of_truth: 'TRACES OF TRUTH', discovered: 'Discovered',
     no_traces: 'No traces discovered yet. Investigate the world to uncover the truth.',
+    // Trace Ladder — descent gauge + layer bands (flavor names bilingual;
+    // the traces.json scaffold ships English-only, so names route through L()).
+    descent: 'DESCENT', trace_locked: 'LOCKED',
+    trace_layer_1: 'The Surface', trace_layer_2: 'The Conspiracy',
+    trace_layer_3: 'The Severance Truth', trace_layer_4: 'The Mirror',
+    trace_layer_5: 'The Full Truth',
     // District
     current_location: 'CURRENT LOCATION', district: 'District', area: 'Area',
     signal_strength: 'Signal', danger_level: 'Danger', nexus_patrol: 'NEXUS Patrol',
@@ -273,6 +279,10 @@ const LABELS = {
     theories: '推论', connections: '关联', none_discovered: '尚未发现',
     traces_of_truth: '真相痕迹', discovered: '已发现',
     no_traces: '尚未发现任何痕迹。探索世界以揭示真相。',
+    descent: '深潜', trace_locked: '未解封',
+    trace_layer_1: '表层', trace_layer_2: '阴谋',
+    trace_layer_3: '断离真相', trace_layer_4: '镜像',
+    trace_layer_5: '完整真相',
     current_location: '当前位置', district: '区域', area: '地点',
     signal_strength: '信号', danger_level: '危险', nexus_patrol: '连结巡逻',
     description: '描述', exits: '出口', poi: '兴趣点',
@@ -2900,32 +2910,160 @@ function updateKnowledgePanel(knowledge) {
   applyPanelSearch('knowledge');
 }
 
-// ---------- TRACES PANEL (matches TUI TracesPanel — ONLY discovered) ----------
+// ---------- TRACES PANEL — Layered Trace Ladder + Descent depth gauge ----------
+//
+// The five real story layers (The Surface → The Full Truth) render as labeled
+// bands. Each *discovered* trace is bucketed under its TRUE layer by parsing the
+// L# from its real id (TRACE-L3-07 → layer 3) — ids are never renumbered. Layers
+// deeper than the player's reached depth render as ONE sealed row (counts only);
+// we never emit '[???]' text or any undiscovered trace name (hard spoiler rule).
+//
+// Per-layer denominators come from the server-reconciled scaffold (traces.layers
+// [*].progress, canonically synced to engine LIVE_TRACES_PER_LAYER) — never a
+// hard-coded 47.
+
+// Parse the layer number from a trace id like "TRACE-L3-07" → 3; null if absent.
+function traceLayerNum(id) {
+  const m = /-L(\d+)-/.exec(String(id || ''));
+  return m ? parseInt(m[1], 10) : null;
+}
+
+// Parse the layer number from a scaffold layer key like "layer_3_severance" → 3.
+function scaffoldLayerNum(key) {
+  const m = /layer[_-]?(\d+)/i.exec(String(key || ''));
+  return m ? parseInt(m[1], 10) : null;
+}
+
+// Deepest layer the player has reached: max L# across discovered ids, 0 if none.
+// Replicates the engine's depth derivation without touching hidden gate keys.
+function computeDeepestLayer(session) {
+  const discovered = (session && session.traces && session.traces.discovered) || [];
+  let deepest = 0;
+  for (const tr of discovered) {
+    const n = traceLayerNum(tr && tr.id);
+    if (n && n > deepest) deepest = n;
+  }
+  return deepest;
+}
+
+const TRACE_LADDER_LAYERS = 5;
+
+// Compact 0-5 Descent gauge: current layer's flavor name lit, deeper segments
+// unlit and UNLABELED (spoiler-safe — no deeper layer names revealed).
+function renderDescentGauge(deepest) {
+  let segs = '';
+  for (let n = 1; n <= TRACE_LADDER_LAYERS; n++) {
+    const reached = n <= deepest;
+    const isCurrent = n === deepest;
+    // Only the CURRENT (deepest reached) layer is named; reached-but-shallower
+    // layers stay lit-but-unlabeled, deeper layers unlit-and-unlabeled.
+    const label = isCurrent ? esc(L('trace_layer_' + n)) : '';
+    const cls = 'descent-seg' + (reached ? ' reached' : '') + (isCurrent ? ' current' : '');
+    segs += `<span class="${cls}" style="--depth:${n}">${label}</span>`;
+  }
+  return `<div class="descent-gauge" role="img" aria-label="${esc(L('descent'))} ${deepest}/${TRACE_LADDER_LAYERS}">
+    <span class="descent-label">${esc(L('descent'))}</span>
+    <span class="descent-track">${segs}</span>
+  </div>`;
+}
+
+// Segmented progress bar for one layer: `total` pips, `count` filled. Neon fill
+// intensifies with depth (dim cyan at L1 → hot magenta at L5) via --depth.
+function renderTraceSegments(count, total, layerNum) {
+  const n = Math.max(0, Number(total) || 0);
+  const c = Math.max(0, Math.min(n, Number(count) || 0));
+  let pips = '';
+  for (let i = 0; i < n; i++) {
+    pips += `<span class="trace-seg${i < c ? ' on' : ''}"></span>`;
+  }
+  return `<span class="trace-segbar" style="--depth:${layerNum}">${pips}</span>`;
+}
+
+// Parse "3/8" style progress → {count, total}. Falls back to slot count.
+function parseLayerProgress(layer, discoveredCount) {
+  const raw = String((layer && layer.progress) || '');
+  const m = /(\d+)\s*\/\s*(\d+)/.exec(raw);
+  if (m) return { count: parseInt(m[1], 10), total: parseInt(m[2], 10) };
+  const slots = (layer && layer.traces && typeof layer.traces === 'object')
+    ? Object.keys(layer.traces).length : 0;
+  return { count: discoveredCount, total: slots };
+}
 
 function updateTracesPanel(traces) {
   const t = traces || {};
-  // Data is flat: { discovered: [{id, description, turn}, ...] }
-  const discovered = t.discovered || [];
+  const discovered = Array.isArray(t.discovered) ? t.discovered : [];
+  const layersObj = (t.layers && typeof t.layers === 'object') ? t.layers : {};
 
+  // Build an ordered [1..5] view of the scaffold layers (key → number).
+  const layerEntries = Object.entries(layersObj)
+    .map(([key, layer]) => ({ num: scaffoldLayerNum(key), layer }))
+    .filter(e => e.num != null)
+    .sort((a, b) => a.num - b.num);
+
+  // Bucket discovered traces under their TRUE layer by real-id L# parsing.
+  const byLayer = {};
+  for (const tr of discovered) {
+    const n = traceLayerNum(tr && tr.id);
+    if (!n) continue;
+    (byLayer[n] = byLayer[n] || []).push(tr);
+  }
+
+  const deepest = computeDeepestLayer({ traces: t });
+
+  // Header: title + total + Descent gauge.
   let html = `<div class="panel-section">
     <div class="panel-section-title">${L('traces_of_truth')}</div>
     <div class="panel-row"><span class="panel-key">${L('discovered')}</span><span class="panel-val cyan">${discovered.length}</span></div>
+    ${renderDescentGauge(deepest)}
   </div>`;
 
-  if (discovered.length === 0) {
-    html += `<div class="panel-empty">${L('no_traces')}</div>`;
-  } else {
-    html += `<div class="panel-section">`;
-    for (let i = 0; i < discovered.length; i++) {
-      const trace = discovered[i];
-      html += `<div class="trace-item discovered">
-        <span class="dim" style="font-size:11px">TRACE-${String(i + 1).padStart(2, '0')}</span>
-        ${esc(trace.description)}
-        ${trace.turn ? `<span class="dim"> (${L('turn')} ${trace.turn})</span>` : ''}
+  if (discovered.length === 0 && deepest === 0) {
+    html += `<div class="panel-empty">${esc(L('no_traces'))}</div>`;
+    document.getElementById('panel-traces-body').innerHTML = html;
+    applyPanelSearch('traces');
+    return;
+  }
+
+  // Render each of the five bands in depth order.
+  for (const { num, layer } of layerEntries) {
+    const bucket = byLayer[num] || [];
+    const prog = parseLayerProgress(layer, bucket.length);
+    const total = prog.total;
+    const name = esc(L('trace_layer_' + num));
+
+    if (num > deepest) {
+      // Sealed row: counts only. NEVER any '[???]' or trace names.
+      html += `<div class="trace-band locked" style="--depth:${num}">
+        <div class="trace-band-header">
+          <span class="trace-band-name locked-name">▓ ${name}</span>
+          <span class="trace-band-lock">[${esc(L('trace_locked'))}] ? / ${total}</span>
+        </div>
+      </div>`;
+      continue;
+    }
+
+    // Open band: name, segmented bar, count, and the real discovered traces.
+    html += `<div class="trace-band open" style="--depth:${num}">
+      <div class="trace-band-header">
+        <span class="trace-band-name">${name}</span>
+        <span class="trace-band-count">${bucket.length} / ${total}</span>
+      </div>
+      ${renderTraceSegments(bucket.length, total, num)}`;
+
+    // Discovered trace lines — keep REAL ids, do not renumber.
+    for (const tr of bucket) {
+      const id = esc(tr && tr.id ? tr.id : '');
+      const desc = esc((tr && tr.description) || '');
+      const turn = tr && tr.turn
+        ? `<span class="dim"> (${esc(L('turn'))} ${esc(tr.turn)})</span>` : '';
+      html += `<div class="trace-item discovered" style="--depth:${num}">
+        <span class="trace-item-id">${id}</span>
+        <span class="trace-item-desc">${desc}${turn}</span>
       </div>`;
     }
     html += `</div>`;
   }
+
   document.getElementById('panel-traces-body').innerHTML = html;
   applyPanelSearch('traces');
 }
