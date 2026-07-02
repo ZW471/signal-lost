@@ -1997,6 +1997,12 @@ function handleServerMessage(msg) {
       // and 650ms ambient beep intervals leak for the life of the page while the
       // 2s overlay delay runs and beyond.
       endTurnUI();
+      // Terminal state: endTurnUI() just re-enabled AND focused the composer,
+      // but the game is over — during the 2s pre-overlay beat (and behind the
+      // non-dismissible modal after it) the input's inline Enter handler would
+      // happily send another player_input and play on past the ending. Lock it
+      // back down; disabling also drops focus, so Enter goes nowhere.
+      disableInput();
       resetPredictions();
       setTimeout(() => showGameOver(msg.ending, msg.narrative, msg.death_cause), 2000);
       break;

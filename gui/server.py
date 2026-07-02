@@ -27,6 +27,7 @@ import os
 import shutil
 import sys
 import threading
+from collections import deque
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
@@ -149,14 +150,41 @@ def _get_graph():
 # from the asyncio event loop (single-threaded), so a plain dict is safe.
 _sessions_by_user: "dict[str, PlayerSession]" = {}
 
+# One turn lock PER ACCOUNT (uid), shared by every PlayerSession ever bound to
+# that account. A force-kick / reconnect creates a brand-new PlayerSession for
+# the SAME on-disk session directory while the old session's turn thread may
+# still be running in the executor (nothing joins it) and writing
+# player.json/knowledge.json/... — a per-instance lock gave that abandoned
+# thread and the new session's turn two DIFFERENT locks, i.e. zero mutual
+# exclusion over the same files (torn/lost writes). Keying the lock by uid
+# means old and new sessions of one account serialize on the same object,
+# while distinct accounts (disjoint session/<uid>/ namespaces) stay fully
+# independent. Entries are tiny and bounded by the number of accounts, so the
+# registry is never pruned. Guarded because PlayerSessions can be constructed
+# while executor threads exist (cheap, uncontended).
+_turn_locks: "dict[str, threading.Lock]" = {}
+_turn_locks_guard = threading.Lock()
+
+
+def _turn_lock_for(uid: str) -> threading.Lock:
+    """Return the account-wide turn lock for *uid*, creating it on first use."""
+    with _turn_locks_guard:
+        lock = _turn_locks.get(uid)
+        if lock is None:
+            lock = _turn_locks[uid] = threading.Lock()
+        return lock
+
 
 class PlayerSession:
     """All per-player runtime state for one live connection.
 
-    Each instance is fully self-contained: its own game state, session dir, turn
-    ``lock`` (serializes this player's turns and guards its world-sim writes),
-    scheduler, and suggested-action prediction cache. Two PlayerSessions never
-    share mutable state, so concurrent players cannot interfere.
+    Each instance owns its game state, session dir, scheduler, and
+    suggested-action prediction cache — two PlayerSessions never share those,
+    so concurrent players cannot interfere. The turn ``lock`` is the one
+    deliberate exception: it is the ACCOUNT-wide lock from ``_turn_lock_for``,
+    so a superseded session's still-running turn thread and its replacement
+    session (same uid, same on-disk dir) can never write session files
+    concurrently.
     """
 
     def __init__(self, username: str, uid: str):
@@ -170,7 +198,15 @@ class PlayerSession:
         self.scheduler: WorldSimScheduler | None = None
 
         # Serializes this player's turn execution and world-sim disk writes.
-        self.lock = threading.Lock()
+        # Account-wide (shared with any prior/kicked session of the same uid)
+        # so an abandoned in-flight turn can never interleave file writes with
+        # this session's turns — see _turn_lock_for.
+        self.lock = _turn_lock_for(uid)
+
+        # Frames received by the mid-turn reader (see _read_frames_during_turn)
+        # that are NOT cancel_turn: replayed by the endpoint's main loop, in
+        # arrival order, once the in-flight turn returns.
+        self.pending_frames: "deque[str]" = deque()
 
         # --- Suggested-action prediction cache (predict_outcome feature) ---
         self.action_cache: dict[str, dict] = {}
@@ -658,6 +694,12 @@ async def _kick(existing: PlayerSession) -> None:
     """Forcibly disconnect an older session for the same account."""
     old_ws = existing.ws
     _reset_prediction(existing)
+    # If the old connection has a turn in flight, ask it to abort at the next
+    # pre-commit seam: its result has no audience anymore, and the sooner it
+    # releases the shared per-account turn lock the sooner the replacement
+    # session's resume/turn can proceed. A post-commit turn ignores the flag
+    # and finishes its writes normally (never tear a half-written turn).
+    existing.cancel_requested = True
     if existing.scheduler:
         existing.scheduler.stop()
     if _sessions_by_user.get(existing.username) is existing:
@@ -701,7 +743,14 @@ async def websocket_endpoint(ws: WebSocket):
 
     try:
         while True:
-            raw = await ws.receive_text()
+            if sess is not None and sess.pending_frames:
+                # Frames that arrived while a turn was in flight were drained by
+                # the turn's concurrent receiver (_read_frames_during_turn) —
+                # cancel_turn was acted on there; everything else was requeued.
+                # Replay them in arrival order before blocking on the socket.
+                raw = sess.pending_frames.popleft()
+            else:
+                raw = await ws.receive_text()
             try:
                 msg = json.loads(raw)
             except (json.JSONDecodeError, TypeError):
@@ -851,11 +900,12 @@ async def websocket_endpoint(ws: WebSocket):
                     await ws.send_json({"type": "error", "message": f"Save failed: {e}"})
 
             elif action == "cancel_turn":
-                # Request an in-flight turn abort. Purely a flag flip on the
-                # event loop; the running turn's executor thread observes it at
-                # the next phase boundary and either aborts cleanly (before
-                # state_writer) or finishes normally (after). Additive + safe to
-                # send when no turn is running (the flag is reset each turn).
+                # Mid-turn cancels are consumed by the turn's concurrent reader
+                # (_read_frames_during_turn) — this receive loop is suspended
+                # inside the turn await and only sees frames between turns. So
+                # a cancel landing HERE means no turn is in flight: flip the
+                # flag anyway (harmless; reset at the head of every turn) so a
+                # cancel racing the turn's very first frames isn't lost.
                 sess.cancel_requested = True
 
             elif action == "refresh":
@@ -918,25 +968,72 @@ async def _handle_new_game(ws: WebSocket, sess: PlayerSession, msg: dict):
         return
     sess.session_dir = session_dir
 
-    await asyncio.to_thread(
-        create_new_session,
-        session_dir=sess.session_dir,
-        name=config.get("name", "Unknown"),
-        alias=config.get("alias", "Unknown"),
-        background=config.get("background", "street_runner"),
-        difficulty=diff,
-        language=lang,
-    )
-    # create_new_session rmtree's the dir, so (re)stamp the origin marker after
-    # it so future new-game collision checks can tell this game's display name.
-    _write_origin_marker(sess.session_dir, save_name)
+    def _create_locked():
+        # Under the ACCOUNT turn lock: _resolve_new_session_dir may legally
+        # REUSE a same-origin dir, and create_new_session rmtree's it — without
+        # the lock a superseded session's still-running turn could be mid-write
+        # in that very dir (see _turn_lock_for). Bounded acquire so a wedged
+        # abandoned turn yields an error instead of a hang.
+        if not sess.lock.acquire(timeout=_BIND_LOCK_TIMEOUT):
+            return None
+        try:
+            create_new_session(
+                session_dir=sess.session_dir,
+                name=config.get("name", "Unknown"),
+                alias=config.get("alias", "Unknown"),
+                background=config.get("background", "street_runner"),
+                difficulty=diff,
+                language=lang,
+            )
+            # create_new_session rmtree's the dir, so (re)stamp the origin
+            # marker after it so future new-game collision checks can tell
+            # this game's display name.
+            _write_origin_marker(sess.session_dir, save_name)
+            return initial_state(sess.session_dir)
+        finally:
+            sess.lock.release()
+
+    state = await asyncio.to_thread(_create_locked)
+    if state is None:
+        await ws.send_json({"type": "error", "message": _PREV_TURN_BUSY_MSG})
+        return
 
     sess.graph = _get_graph()
-    sess.game_state = initial_state(sess.session_dir)
+    sess.game_state = state
     _start_world_sim_scheduler(sess)
 
     await _send_game_started(sess, ws)
     await _run_opening(sess, ws, lang, config.get("background", "street_runner"))
+
+
+# How long a resume/load may wait for the account turn lock before giving up.
+# Long enough to ride out a kicked turn finishing its post-commit writes (or
+# aborting at the next pre-commit seam via the cancel flag _kick sets); short
+# enough that a truly wedged abandoned turn yields an actionable error instead
+# of a resume that hangs forever.
+_BIND_LOCK_TIMEOUT = 60.0
+
+_PREV_TURN_BUSY_MSG = (
+    "A previous turn is still finishing on the server — try again in a moment. / "
+    "上一回合仍在服务器上收尾——请稍后再试。"
+)
+
+
+def _load_state_locked(sess: PlayerSession, *, copy_from: str | None = None):
+    """Read (and for load-game, first restore) the on-disk session under the
+    ACCOUNT turn lock, so a superseded session's still-running turn thread can't
+    be mid-write while we copy/read the files (torn reads → silent empty state).
+    Runs in a worker thread (blocking acquire). Returns the initial GameState,
+    or None if the lock couldn't be acquired within _BIND_LOCK_TIMEOUT.
+    """
+    if not sess.lock.acquire(timeout=_BIND_LOCK_TIMEOUT):
+        return None
+    try:
+        if copy_from:
+            copy_save_to_session(copy_from, sess.session_dir)
+        return initial_state(sess.session_dir)
+    finally:
+        sess.lock.release()
 
 
 async def _handle_resume(ws: WebSocket, sess: PlayerSession, msg: dict):
@@ -960,7 +1057,11 @@ async def _handle_resume(ws: WebSocket, sess: PlayerSession, msg: dict):
 
     sess.session_dir = sess_path
     sess.graph = _get_graph()
-    sess.game_state = initial_state(sess.session_dir)
+    state = await asyncio.to_thread(_load_state_locked, sess)
+    if state is None:
+        await ws.send_json({"type": "error", "message": _PREV_TURN_BUSY_MSG})
+        return
+    sess.game_state = state
     _start_world_sim_scheduler(sess)
 
     await _send_game_started(sess, ws, mode="resume")
@@ -988,9 +1089,12 @@ async def _handle_load_game(ws: WebSocket, sess: PlayerSession, msg: dict):
 
     os.makedirs(sess.session_root, exist_ok=True)
     sess.session_dir = os.path.join(sess.session_root, save_name)
-    await asyncio.to_thread(copy_save_to_session, save_path, sess.session_dir)
     sess.graph = _get_graph()
-    sess.game_state = initial_state(sess.session_dir)
+    state = await asyncio.to_thread(_load_state_locked, sess, copy_from=save_path)
+    if state is None:
+        await ws.send_json({"type": "error", "message": _PREV_TURN_BUSY_MSG})
+        return
+    sess.game_state = state
     _start_world_sim_scheduler(sess)
 
     await _send_game_started(sess, ws, mode="resume")
@@ -1020,7 +1124,10 @@ async def _try_autoresume(ws: WebSocket, sess: PlayerSession, msg: dict) -> bool
         return False
     sess.session_dir = sess_path
     sess.graph = _get_graph()
-    sess.game_state = initial_state(sess.session_dir)
+    state = await asyncio.to_thread(_load_state_locked, sess)
+    if state is None:
+        return False
+    sess.game_state = state
     _start_world_sim_scheduler(sess)
     await _send_game_started(sess, ws, mode="resume")
     return True
@@ -1364,12 +1471,20 @@ def _try_serve_cached(sess: PlayerSession, text: str) -> dict | None:
         exp_turn, exp_fp = sess.action_cache_turn, sess.action_cache_fp
     if not entry or not entry.get("ready"):
         return None
-    with sess.lock:
+    # Bounded acquire: the turn lock is account-wide, so a superseded session's
+    # still-running turn may hold it for minutes. This fast path has no timeout
+    # backstop of its own — degrade to a cache miss (the normal turn path has
+    # both the 960s backstop and the cancel seam) instead of blocking unboundedly.
+    if not sess.lock.acquire(timeout=5.0):
+        return None
+    try:
         if _player_turn(session_dir) != exp_turn:
             return None
         if action_cache.fingerprint(session_dir) != exp_fp:
             return None
         action_cache.promote(session_dir, entry["state_dir"])
+    finally:
+        sess.lock.release()
     with sess.cache_lock:
         sess.predict_generation += 1
     # The speculative turn's roll beats + meter reasons were drained from the
@@ -1760,6 +1875,49 @@ def _stream_graph_turn(graph, state: dict, emit, is_cancelled):
     return last_values
 
 
+async def _read_frames_during_turn(ws: WebSocket, sess: PlayerSession, rx_state: dict) -> None:
+    """Concurrently drain WS frames while a turn is in flight.
+
+    The endpoint's single receive loop is parked awaiting the turn coroutine,
+    so without this task a mid-turn ``{action:'cancel_turn'}`` frame would sit
+    unread in the socket buffer until the turn finished on its own — making the
+    CANCEL button a pure no-op. This task lives only for the duration of one
+    turn's executor await (created/cancelled by ``_run_turn``):
+
+    * ``cancel_turn``   → flips ``sess.cancel_requested`` immediately, so the
+      executor thread's ``is_cancelled()`` probe can abort at the next
+      pre-commit seam;
+    * any other frame   → requeued verbatim onto ``sess.pending_frames``; the
+      endpoint's main loop replays them in arrival order after the turn (the
+      same net behaviour as the old socket-buffer queueing);
+    * client disconnect → recorded in *rx_state* (``_run_turn`` re-raises it so
+      the endpoint's normal WebSocketDisconnect cleanup runs) and treated as an
+      implicit cancel — nobody is listening, so don't burn out the rest of a
+      still-pre-commit model run.
+    """
+    try:
+        while True:
+            raw = await ws.receive_text()
+            action = None
+            try:
+                frame = json.loads(raw)
+                if isinstance(frame, dict):
+                    action = frame.get("action")
+            except (json.JSONDecodeError, TypeError):
+                pass  # malformed frame — requeue; the main loop owns the error reply
+            if action == "cancel_turn":
+                sess.cancel_requested = True
+            else:
+                sess.pending_frames.append(raw)
+    except WebSocketDisconnect:
+        rx_state["disconnected"] = True
+        sess.cancel_requested = True
+    except Exception:
+        # Receive machinery failed some other way — stop reading; the main
+        # loop's own receive will surface the real condition after the turn.
+        pass
+
+
 async def _run_turn(sess: PlayerSession, ws: WebSocket, player_input: str | None = None,
                     mode: str = "play", opening_key: tuple[str, str] | None = None):
     """Run a single game turn for *sess* in a background thread."""
@@ -1905,26 +2063,56 @@ async def _run_turn(sess: PlayerSession, ws: WebSocket, player_input: str | None
         # reads state from disk and is safe to re-run. The LangGraph path appends the
         # player's HumanMessage into sess.game_state before invoking, so re-running it
         # would duplicate that message; leave it single-shot.
+        # While the invoke is parked in the executor this coroutine is
+        # suspended, so the endpoint's single receive loop can't see incoming
+        # frames — a mid-turn cancel_turn would otherwise sit unread in the
+        # socket buffer until the turn ended by itself. Run a concurrent
+        # receiver for exactly the duration of the invoke: it acts on
+        # cancel_turn immediately and requeues everything else for the main
+        # loop (see _read_frames_during_turn).
+        _rx_state = {"disconnected": False}
+        _reader = asyncio.create_task(_read_frames_during_turn(ws, sess, _rx_state))
+
         _attempts = 3
-        for _attempt in range(1, _attempts + 1):
-            try:
-                result = await asyncio.wait_for(
-                    loop.run_in_executor(None, _invoke), timeout=960)
-                break
-            except asyncio.TimeoutError:
-                # The 960s hard backstop means the turn wedged, not a transient
-                # network blip — don't retry (that's up to ~48min of dead spinner).
-                raise
-            except Exception as _err:
-                _retryable = (sess.is_cli_bypass and _attempt < _attempts
-                              and _is_transient_cli_error(_err))
-                if not _retryable:
+        try:
+            for _attempt in range(1, _attempts + 1):
+                try:
+                    result = await asyncio.wait_for(
+                        loop.run_in_executor(None, _invoke), timeout=960)
+                    break
+                except asyncio.TimeoutError:
+                    # The 960s hard backstop means the turn wedged, not a transient
+                    # network blip — don't retry (that's up to ~48min of dead spinner).
                     raise
-                import logging as _logging
-                _logging.getLogger(__name__).warning(
-                    "transient CLI error (attempt %d/%d), retrying: %s",
-                    _attempt, _attempts, _err)
-                await asyncio.sleep(1.5 * _attempt)
+                except Exception as _err:
+                    _retryable = (sess.is_cli_bypass and _attempt < _attempts
+                                  and _is_transient_cli_error(_err))
+                    if not _retryable:
+                        raise
+                    import logging as _logging
+                    _logging.getLogger(__name__).warning(
+                        "transient CLI error (attempt %d/%d), retrying: %s",
+                        _attempt, _attempts, _err)
+                    await asyncio.sleep(1.5 * _attempt)
+        finally:
+            # The reader must never outlive the invoke: once we're back on the
+            # main loop, IT owns ws.receive_text() again (never two concurrent
+            # readers on one socket).
+            _reader.cancel()
+            try:
+                await _reader
+            except (asyncio.CancelledError, Exception):
+                pass
+            if _rx_state["disconnected"]:
+                # Client vanished mid-turn. Whatever the turn committed is
+                # safely on disk, but nobody is listening for the result (or
+                # for a turn error — hence raising from finally, deliberately
+                # superseding any in-flight exception: the reader already
+                # consumed the socket's disconnect message, so the endpoint's
+                # next receive would raise RuntimeError and MISS its disconnect
+                # cleanup). Re-raise as the normal disconnect path so the
+                # endpoint unbinds this session.
+                raise WebSocketDisconnect(1006)
 
         # Turn was cancelled cleanly before any state write (see
         # _stream_graph_turn / the bypass pre-call check). Nothing was persisted
