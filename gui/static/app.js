@@ -241,6 +241,10 @@ const LABELS = {
     reconnecting_inline: '// link dropped — reconnecting… your input is held',
     link_quiet: '// the link went quiet — no reply came back. Retry your last action?',
     skip_hint: '▸ skip',
+    // Error-recovery UX (wave 2c)
+    busy_no_confirm: "didn't confirm — try again",
+    retry_last_action: '↻ Retry last action',
+    conn_degraded: '// link degraded — reconnecting…',
     // Accounts / auth
     auth_title: '// ACCESS TERMINAL',
     auth_sign_in: 'SIGN IN', auth_register: 'REGISTER', auth_sign_out: 'SIGN OUT',
@@ -390,6 +394,10 @@ const LABELS = {
     reconnecting_inline: '// 链路中断 —— 正在重连…你的输入已保留',
     link_quiet: '// 链路陷入沉默 —— 没有收到回应。重试上一步操作？',
     skip_hint: '▸ 跳过',
+    // Error-recovery UX (wave 2c)
+    busy_no_confirm: '未收到确认 —— 请重试',
+    retry_last_action: '↻ 重试上一动作',
+    conn_degraded: '// 链路降级 —— 正在重连…',
     // Accounts / auth
     auth_title: '// 接入终端',
     auth_sign_in: '登录', auth_register: '注册', auth_sign_out: '退出登录',
@@ -506,6 +514,11 @@ function setLanguage(lang) {
   // Chat
   const chatInput = document.getElementById('chatInput');
   if (chatInput) chatInput.placeholder = L('chat_placeholder');
+  // Error-recovery chrome (wave 2c): relabel the degraded chip, any inline
+  // "didn't confirm" notes, and standing retry cards on a language switch.
+  if (_connChipEl) _connChipEl.textContent = L('conn_degraded');
+  document.querySelectorAll('.busy-note').forEach(n => { n.textContent = L('busy_no_confirm'); });
+  document.querySelectorAll('.retry-card-btn .cyber-btn-text').forEach(b => { b.textContent = L('retry_last_action'); });
   // Implant companion chrome
   applyCompanionLanguage();
   // Panel search inputs
@@ -1031,8 +1044,13 @@ function connectWebSocket() {
     sendInit();
     // If we dropped mid-game and just reconnected, ask the server to repaint the
     // panels/state so stale pre-drop content is refreshed (additive action).
+    // The degraded chip stays up until that refresh actually lands (handled in
+    // the 'refresh'/full-state message path); with no active game there's
+    // nothing to repaint, so clear it right away on reopen.
     if (document.getElementById('gameScreen').classList.contains('active')) {
       sendWS({ action: 'refresh' });
+    } else {
+      clearConnDegraded();
     }
   };
   ws.onmessage = (event) => {
@@ -1043,13 +1061,17 @@ function connectWebSocket() {
   };
   ws.onclose = () => {
     if (wasKicked) return;  // kicked elsewhere — don't fight the new session
+    // Surface the persistent degraded chip (distinct from transient toasts) so
+    // the outage stays visible for the whole reconnect window, not 3 seconds.
+    showConnDegraded();
     if (!wsReconnectTimer) wsReconnectTimer = setTimeout(() => { wsReconnectTimer = null; connectWebSocket(); }, 3000);
   };
   ws.onerror = (e) => {
     console.warn('[ws] socket error — link degraded', e);
-    // Degraded-state hook: the onclose handler drives reconnection; surface a
-    // transient bilingual notice so the player knows the link is unstable.
-    notify(L('connection_lost'), true);
+    // Degraded-state hook: the onclose handler drives reconnection. Raise the
+    // persistent chip here too (onerror can fire without an onclose) so the
+    // player sees the link is unstable without waiting on a vanishing toast.
+    showConnDegraded();
   };
 }
 
@@ -1076,6 +1098,141 @@ function wsOpen() { return !!(ws && ws.readyState === WebSocket.OPEN); }
  *  player sees why their input didn't go through. Deduped by showSystemNotice. */
 function showReconnectingNotice() {
   showSystemNotice(L('reconnecting_inline'));
+}
+
+// ================================================================
+// IN-FLIGHT DISCIPLINE — busy() button lock + confirmation-or-timeout
+// A button that fires a WS action shouldn't fire again until the server's
+// reply lands (double-clicks sent duplicate register/save frames). busy()
+// disables the button, shows an inline spinner glyph, and arms a 10s
+// watchdog: if the expected reply key never resolves, it re-enables the
+// button and drops a bilingual "didn't confirm — try again" note *inline*
+// beside it (never a vanishing toast). No overlay is closed on the caller's
+// behalf — the caller decides when (and only ever after confirmation).
+// ================================================================
+const BUSY_TIMEOUT_MS = 10000;
+// Live controllers keyed by their confirmation token (a WS reply type). A
+// single pending controller per token; a new busy() on the same token
+// supersedes the old one so a stale watchdog can't fire against fresh UI.
+const _busyByToken = {};
+
+/**
+ * Lock a button while a WS round-trip is in flight.
+ *   btn   : the <button> element (or null → no-op controller)
+ *   token : the WS reply `type` we expect back (e.g. 'saved'); resolveBusy(token)
+ *           on arrival re-enables and clears the watchdog. Falsy → caller must
+ *           call the returned controller's .done()/.fail() manually.
+ * Returns { done, fail } so a synchronous failure (e.g. validation) can release.
+ */
+function busy(btn, token) {
+  if (!btn) return { done() {}, fail() {} };
+  // Supersede any prior pending controller on this same button/token.
+  if (token && _busyByToken[token]) _busyByToken[token].fail(true);
+
+  const label = btn.querySelector('.cyber-btn-text');
+  const prevDisabled = btn.disabled;
+  const prevHTML = label ? label.innerHTML : btn.innerHTML;
+  btn.disabled = true;
+  btn.classList.add('is-busy');
+  // Clear any leftover inline note from a previous failed attempt.
+  _clearBusyNote(btn);
+  const spinner = `<span class="busy-spinner" aria-hidden="true"></span>`;
+  if (label) label.innerHTML = spinner + label.innerHTML;
+  else btn.innerHTML = spinner + btn.innerHTML;
+
+  let settled = false;
+  const restore = () => {
+    btn.disabled = prevDisabled;
+    btn.classList.remove('is-busy');
+    if (label) label.innerHTML = prevHTML; else btn.innerHTML = prevHTML;
+  };
+  const ctrl = {
+    /** Success: silently restore the button, clear the watchdog. */
+    done() {
+      if (settled) return; settled = true;
+      clearTimeout(ctrl._timer);
+      if (token && _busyByToken[token] === ctrl) delete _busyByToken[token];
+      restore();
+    },
+    /** Failure/timeout: restore + show the inline retry note. `quiet` skips
+     *  the note (used when a newer busy() supersedes this one). */
+    fail(quiet) {
+      if (settled) return; settled = true;
+      clearTimeout(ctrl._timer);
+      if (token && _busyByToken[token] === ctrl) delete _busyByToken[token];
+      restore();
+      if (!quiet) _showBusyNote(btn);
+    },
+  };
+  ctrl._timer = setTimeout(() => ctrl.fail(), BUSY_TIMEOUT_MS);
+  if (token) _busyByToken[token] = ctrl;
+  return ctrl;
+}
+
+/** Resolve the pending busy controller for a given WS reply token, if any. */
+function resolveBusy(token) {
+  const ctrl = token && _busyByToken[token];
+  if (ctrl) ctrl.done();
+}
+
+/** Drop a bilingual "didn't confirm — try again" note right after the button. */
+function _showBusyNote(btn) {
+  _clearBusyNote(btn);
+  const note = document.createElement('div');
+  note.className = 'busy-note';
+  note.setAttribute('role', 'alert');
+  note.textContent = L('busy_no_confirm');
+  btn._busyNote = note;
+  // Prefer placing it inside the button's action row so it sits beside it.
+  const host = btn.parentNode || btn;
+  host.appendChild(note);
+}
+function _clearBusyNote(btn) {
+  if (btn && btn._busyNote && btn._busyNote.parentNode) {
+    btn._busyNote.parentNode.removeChild(btn._busyNote);
+  }
+  if (btn) btn._busyNote = null;
+}
+
+// ================================================================
+// CONNECTION-DEGRADED CHIP — persistent status near the input bar
+// Distinct from transient toasts: it stays put while the link is down,
+// pulses (unless reduced-motion) while reconnecting, and clears only once
+// the socket reopens AND the post-reconnect refresh handshake completes.
+// ================================================================
+let _connChipEl = null;
+
+/** Lazily create the degraded-status chip and mount it above the input bar. */
+function _ensureConnChip() {
+  if (_connChipEl && _connChipEl.parentNode) return _connChipEl;
+  const bar = document.querySelector('.chat-input-container');
+  if (!bar) return null;
+  const chip = document.createElement('div');
+  chip.id = 'connChip';
+  chip.className = 'conn-chip';
+  chip.setAttribute('role', 'status');
+  chip.setAttribute('aria-live', 'polite');
+  chip.textContent = L('conn_degraded');
+  // Insert directly before the input row so it reads as an input-bar status.
+  bar.parentNode.insertBefore(chip, bar);
+  _connChipEl = chip;
+  return chip;
+}
+
+/** Show the degraded chip (link error/close). Idempotent; refreshes its text
+ *  so a language switch mid-outage relabels it. */
+function showConnDegraded() {
+  const chip = _ensureConnChip();
+  if (!chip) return;
+  chip.textContent = L('conn_degraded');
+  chip.classList.add('visible');
+  chip.classList.toggle('pulsing', !prefersReducedMotion);
+}
+
+/** Clear the degraded chip once the link is healthy again. */
+function clearConnDegraded() {
+  if (!_connChipEl) return;
+  _connChipEl.classList.remove('visible', 'pulsing');
 }
 
 // ================================================================
@@ -1195,7 +1352,12 @@ function submitAuth() {
   if (!username) { setAuthError(L('auth_err_username_required')); return; }
   if (!password) { setAuthError(L('auth_err_password_required')); return; }
   setAuthError('');
-  sendWS({ action: authMode === 'register' ? 'register' : 'login', username, password });
+  // Lock the submit button until 'auth_result' lands (or 10s elapses) so a
+  // double-click can't fire duplicate register/login frames. Both tabs share
+  // this one button, so this covers sign-in and register alike.
+  const btn = document.querySelector('#authOverlay .cyber-btn.accent');
+  const b = busy(btn, 'auth_result');
+  if (!sendWS({ action: authMode === 'register' ? 'register' : 'login', username, password })) { b.fail(); }
 }
 
 /** Handle the server's auth_result for a register/login attempt. */
@@ -1466,6 +1628,11 @@ let _cachedFeatures = null; // Latest gameplay feature flags from the server
 // ================================================================
 
 function handleServerMessage(msg) {
+  // Any well-formed inbound frame proves the link is healthy again — clear the
+  // degraded chip. onopen fires a 'refresh' when a game is active, so the first
+  // reply after a reconnect (its session_update, or any other frame) lands here
+  // and retires the chip; this is the "reopen + refresh success" clear.
+  clearConnDegraded();
   switch (msg.type) {
     case 'status': {
       const wasAuthed = !!currentUser;
@@ -1527,6 +1694,10 @@ function handleServerMessage(msg) {
       break;
 
     case 'narrative':
+      // A narrative reply means the last action resolved — clear the retry
+      // offer and the stored command so a later error can't re-send stale text.
+      _lastPlayerInput = null;
+      _dismissRetryCard();
       if (_firstSceneArmed) {
         // Buffered opening scene: the tutorial masks the first-turn wait. Hold the
         // scene regardless of its role (system OR agent — the backend has labelled
@@ -1579,27 +1750,36 @@ function handleServerMessage(msg) {
       break;
 
     case 'saved':
+      resolveBusy('saved');           // release the SAVE button's in-flight lock
       notify(`${L('saved')}: ${msg.save_name}`);
       closeSaveDialog();
       break;
 
     case 'provider_saved':
+      resolveBusy('provider_saved');  // release the settings SAVE button
       notify(L('settings_saved'));
       if (msg.provider) prefillProviderSettings(msg.provider);
       if (msg.langsmith) prefillLangsmithSettings(msg.langsmith);
       if (msg.features) _cachedFeatures = msg.features;
       document.getElementById('settingsStatus').textContent = L('saved');
       setTimeout(() => { document.getElementById('settingsStatus').textContent = ''; }, 2000);
+      // Overlay stays open until *now* — the save is confirmed, so it's honest
+      // to close it (saveSettings no longer closes it optimistically).
+      closeDialog(document.getElementById('settingsOverlay'));
       break;
 
     case 'error':
       _finalizeActiveTyper();  // snap any in-flight narration to done first
       endTurnUI();
-      notify(msg.message, true);
-      addChatMessage(msg.message, 'system');
+      // Recoverable turn error → an inline retry card in the chat (not a
+      // vanishing toast) so the player can re-send their last action.
+      showRetryCard(msg.message);
       break;
 
     case 'auth_result':
+      // A reply arrived (ok or not) → release the auth button's lock either way;
+      // handleAuthResult renders the specific error text on failure.
+      resolveBusy('auth_result');
       handleAuthResult(msg);
       break;
 
@@ -1745,10 +1925,18 @@ function saveSettings() {
     predict_outcome: document.getElementById('chkPredictOutcome').checked,
   };
   _cachedFeatures = Object.assign({}, _cachedFeatures || {}, payload.features);
-  sendWS(payload);
-  _settingsSnapshot = null;  // Mark as saved so close doesn't revert
+  // Lock the SAVE button until the server confirms ('provider_saved') or the 10s
+  // watchdog fires. Do NOT close the overlay optimistically — it stays open so a
+  // silent failure surfaces as an inline note here rather than vanishing.
+  const btn = document.querySelector('#settingsOverlay .cyber-btn.accent');
+  const b = busy(btn, 'provider_saved');
   document.getElementById('settingsStatus').textContent = L('saving');
-  closeDialog(document.getElementById('settingsOverlay'));
+  if (!sendWS(payload)) {
+    b.fail();
+    document.getElementById('settingsStatus').textContent = '';
+    return;
+  }
+  _settingsSnapshot = null;  // Mark as saved so a later close doesn't revert
 }
 
 let _cachedUsage = null;
@@ -2346,7 +2534,7 @@ function chooseSuggestedAction(text) {
   _setPendingPlayer(addChatMessage(text, 'player'));
   input.value = '';
   disableInput();
-  sendWS({ action: 'player_input', text });
+  _sendPlayerInput(text);
 }
 
 function sendMessage() {
@@ -2378,7 +2566,66 @@ function sendMessage() {
   _setPendingPlayer(addChatMessage(text, 'player'));
   input.value = '';
   disableInput();
+  _sendPlayerInput(text);
+}
+
+// ================================================================
+// RETRY LAST ACTION — recoverable turn errors get an inline chat card
+// The last player_input is stashed on send and cleared on a successful
+// 'narrative'. When a turn-level {type:'error'} arrives, we render an inline
+// card (chat visual language, not a toast) carrying the error text plus a
+// bilingual "↻ Retry last action" button that re-sends the stored input.
+// ================================================================
+let _lastPlayerInput = null;   // most recent player command awaiting a reply
+
+/** Stash the command (for retry) and send it over the wire. */
+function _sendPlayerInput(text) {
+  _lastPlayerInput = text;
+  _dismissRetryCard();  // a fresh action supersedes any standing retry offer
   sendWS({ action: 'player_input', text });
+}
+
+let _retryCardEl = null;
+
+/** Render (or replace) the inline retry card at the end of the chat log. */
+function showRetryCard(message) {
+  _dismissRetryCard();
+  const container = document.getElementById('chatMessages');
+  if (!container) return;
+  const card = document.createElement('div');
+  card.className = 'chat-msg retry-card';
+  card.setAttribute('role', 'alert');
+  const canRetry = !!_lastPlayerInput;
+  const btnHtml = canRetry
+    ? `<button class="cyber-btn retry-card-btn" onclick="retryLastAction()">` +
+      `<span class="cyber-btn-text">${esc(L('retry_last_action'))}</span></button>`
+    : '';
+  card.innerHTML =
+    `<div class="msg-prefix">${esc(L('chat_system'))}</div>` +
+    `<div class="msg-content">${esc(message || '')}</div>` +
+    btnHtml;
+  container.appendChild(card);
+  _retryCardEl = card;
+  card.scrollIntoView({ behavior: prefersReducedMotion ? 'auto' : 'smooth', block: 'start' });
+  playBeep(400, 0.04);
+}
+
+/** Remove the standing retry card, if any. */
+function _dismissRetryCard() {
+  if (_retryCardEl && _retryCardEl.parentNode) _retryCardEl.parentNode.removeChild(_retryCardEl);
+  _retryCardEl = null;
+}
+
+/** Re-send the stored last player command (from the retry card button). */
+function retryLastAction() {
+  const text = _lastPlayerInput;
+  if (!text) { _dismissRetryCard(); return; }
+  if (!wsOpen()) { showReconnectingNotice(); return; }
+  _dismissRetryCard();
+  clearSuggestedActions();
+  _setPendingPlayer(addChatMessage(text, 'player'));
+  disableInput();
+  _sendPlayerInput(text);
 }
 
 // ----------------------------------------------------------------------------
@@ -2557,7 +2804,12 @@ function saveGame() {
   requestAnimationFrame(() => { try { el.select(); } catch (_) {} });
   playBeep(1000, 0.04);
 }
-function confirmSave() { sendWS({ action: 'save_game', save_name: document.getElementById('saveName').value.trim() || _defaultSaveName() }); }
+function confirmSave() {
+  const name = document.getElementById('saveName').value.trim() || _defaultSaveName();
+  const btn = document.querySelector('#saveDialog .cyber-btn.accent');
+  const b = busy(btn, 'saved');           // released by the 'saved' reply / 10s timeout
+  if (!sendWS({ action: 'save_game', save_name: name })) { b.fail(); }
+}
 function closeSaveDialog() { closeDialog(document.getElementById('saveDialog')); }
 
 function showGameOver(ending, narrative, deathCause) {

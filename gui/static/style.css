@@ -1032,6 +1032,95 @@ html, body {
   word-wrap: break-word;
 }
 
+/* ================================================================
+   ERROR-RECOVERY UX (wave 2c)
+   ================================================================ */
+
+/* Recoverable turn error → inline retry card. Reuses the .chat-msg system
+   visual language (yellow rail) but adds a retry affordance below the text. */
+.chat-msg.retry-card {
+  padding-left: var(--sp-4);
+  border-left: 2px solid var(--red);
+}
+.chat-msg.retry-card .msg-prefix {
+  color: var(--red);
+  font-family: var(--font-display);
+  font-size: 11px;
+  letter-spacing: 2px;
+  margin-bottom: var(--sp-1);
+}
+.chat-msg.retry-card .msg-content {
+  color: var(--red);
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+/* Compact retry button — smaller than the full-width cyber-btn used in menus. */
+.retry-card-btn {
+  margin-top: var(--sp-3);
+  min-width: 0;
+  padding: var(--sp-2) var(--sp-4);
+  font-size: 12px;
+  letter-spacing: 2px;
+}
+
+/* In-flight button lock: dim + wait cursor while the WS round-trip is pending. */
+.cyber-btn.is-busy {
+  opacity: 0.7;
+  cursor: progress;
+}
+.cyber-btn.is-busy:active { transform: none; }
+
+/* Inline spinner glyph injected before the button label while busy. */
+.busy-spinner {
+  display: inline-block;
+  width: 0.85em;
+  height: 0.85em;
+  margin-right: var(--sp-2);
+  vertical-align: -0.1em;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: busy-spin 0.7s linear infinite;
+}
+@keyframes busy-spin { to { transform: rotate(360deg); } }
+
+/* "didn't confirm — try again" note placed beside a button after a timeout. */
+.busy-note {
+  margin-top: var(--sp-2);
+  color: var(--red);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 1px;
+}
+
+/* Persistent connection-degraded chip above the input bar. Distinct from the
+   transient toast stack — it stays until the link is confirmed healthy. */
+.conn-chip {
+  display: none;
+  margin: 0 var(--sp-3) var(--sp-2);
+  padding: var(--sp-1) var(--sp-3);
+  align-self: flex-start;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 1px;
+  color: var(--yellow);
+  background: var(--bg-input);
+  border: 1px solid var(--yellow);
+  border-radius: var(--r-1);
+  box-shadow: inset 0 0 8px rgba(255, 191, 0, 0.12);
+}
+.conn-chip.visible { display: inline-block; }
+.conn-chip.pulsing { animation: conn-chip-pulse 1.4s ease-in-out infinite; }
+@keyframes conn-chip-pulse {
+  0%, 100% { opacity: 1; box-shadow: inset 0 0 8px rgba(255, 191, 0, 0.12); }
+  50% { opacity: 0.55; box-shadow: inset 0 0 14px rgba(255, 191, 0, 0.28); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .busy-spinner { animation: none; }
+  .conn-chip.pulsing { animation: none; }
+}
+
 /* Typing animation for agent messages */
 .chat-msg .msg-content.typing {
   overflow: hidden;
