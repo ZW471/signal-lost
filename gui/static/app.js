@@ -226,6 +226,7 @@ const LABELS = {
     settings_usage_title: '// USAGE TRACKING', label_show_tokens: 'Show token usage in conversation',
     no_usage_data: 'No usage data yet',
     settings_audio_title: '// AUDIO', label_music_volume: 'MUSIC VOLUME',
+    label_sfx_volume: 'SFX VOLUME',
     settings_gameplay_title: '// GAMEPLAY',
     label_suggested_actions: 'Suggest actions each turn',
     label_predict_outcome: 'Pre-compute suggested actions (instant replies, extra LLM calls)',
@@ -307,8 +308,24 @@ const LABELS = {
     companion_intro: 'A quiet channel opens behind your left ear. Ask what you like, or just think out loud — this stays in your head. Nothing said here touches the world.',
     companion_error: 'Static. The link drops for a moment — try again.',
     companion_no_session: 'The implant has nothing to hold onto yet. Begin a session first.',
+    companion_timeout: 'The signal fades to silence — no answer came back. Try again.',
+    companion_offline: 'The main link is down. Reconnect to the city before the implant can reach it.',
     // Boot
     boot_sub: '// NEURAL INTERFACE v3.7.1',
+    // Input history + verb autocomplete + shortcut cheat-sheet (wave 3b)
+    verb_look: 'look', verb_go: 'go', verb_talk: 'talk', verb_examine: 'examine',
+    verb_use: 'use', verb_verify: 'verify', verb_hack: 'hack', verb_hide: 'hide',
+    shortcuts_title: '// SHORTCUTS',
+    shortcut_actions: 'Trigger suggested action',
+    shortcut_traces: 'Open TRACE panel',
+    shortcut_panels: 'Switch info panel',
+    shortcut_focus_input: 'Focus command input',
+    shortcut_save: 'Save game',
+    shortcut_skip: 'Skip / finish narration',
+    shortcut_history: 'Previous / next command',
+    shortcut_complete: 'Complete verb suggestion',
+    shortcut_cheatsheet: 'Show this cheat-sheet',
+    shortcut_close_dialog: 'Close dialog / menu',
   },
   zh: {
     tab_identity: '身份', tab_knowledge: '知识', tab_traces: '痕迹',
@@ -406,6 +423,7 @@ const LABELS = {
     settings_usage_title: '// 用量追踪', label_show_tokens: '在对话中显示令牌用量',
     no_usage_data: '暂无用量数据',
     settings_audio_title: '// 音频', label_music_volume: '音乐音量',
+    label_sfx_volume: '音效音量',
     settings_gameplay_title: '// 玩法',
     label_suggested_actions: '每回合推荐行动',
     label_predict_outcome: '预计算推荐行动（点击即时响应，但会增加 LLM 调用）',
@@ -486,8 +504,24 @@ const LABELS = {
     companion_intro: '左耳后方，一道安静的信道接通了。想问什么都行，或只是自言自语——这只停留在你的脑海里，不会影响外面的世界。',
     companion_error: '一阵杂讯，链接短暂中断——再试一次。',
     companion_no_session: '植入体还没有可依凭的记忆，请先开始一局游戏。',
+    companion_timeout: '信号渐渐归于沉寂——没有回应传回。请再试一次。',
+    companion_offline: '主链路已中断。请先重新连接城市，植入体才能接入。',
     // Boot
     boot_sub: '// 神经接口 v3.7.1',
+    // Input history + verb autocomplete + shortcut cheat-sheet (wave 3b)
+    verb_look: '查看', verb_go: '前往', verb_talk: '交谈', verb_examine: '检查',
+    verb_use: '使用', verb_verify: '核实', verb_hack: '入侵', verb_hide: '躲藏',
+    shortcuts_title: '// 快捷键',
+    shortcut_actions: '触发推荐行动',
+    shortcut_traces: '打开痕迹面板',
+    shortcut_panels: '切换信息面板',
+    shortcut_focus_input: '聚焦指令输入框',
+    shortcut_save: '保存游戏',
+    shortcut_skip: '跳过／完成叙述',
+    shortcut_history: '上一条／下一条指令',
+    shortcut_complete: '补全动词建议',
+    shortcut_cheatsheet: '显示此快捷键表',
+    shortcut_close_dialog: '关闭对话框／菜单',
   },
 };
 
@@ -589,6 +623,11 @@ function setLanguage(lang) {
   document.querySelectorAll('.retry-card-btn .cyber-btn-text').forEach(b => { b.textContent = L('retry_last_action'); });
   // Implant companion chrome (sets titles/placeholders — not data-i18n-able)
   applyCompanionLanguage();
+  // Input-history verb chips (wave 3b): drop the stale-language build so the
+  // next focus/input re-renders localized chips; refresh a visible cheat-sheet.
+  const _verbRow = document.getElementById('verbChips');
+  if (_verbRow) { _verbRow.dataset.built = ''; const ci = document.getElementById('chatInput'); if (ci && typeof _updateVerbChips === 'function') _updateVerbChips(ci); }
+  if (typeof _renderShortcutSheet === 'function') _renderShortcutSheet();
   // Wait ticker: if mid-cycle, re-render its current line in the new language;
   // otherwise fall back to the resting label. (.thinking-text is a live ticker,
   // .thinkingHint is static so data-i18n could own it, but it shares this block.)
@@ -806,21 +845,14 @@ if (!prefersReducedMotion) {
   setInterval(() => { if (Math.random() < 0.15) triggerGlitch(); }, 5000);
 }
 
-let audioCtx = null;
-try {
-  const AudioCtx = window.AudioContext || window.webkitAudioContext;
-  if (AudioCtx) audioCtx = new AudioCtx();
-} catch (e) { audioCtx = null; }
-function playBeep(freq = 880, duration = 0.05, volume = 0.03) {
-  if (!audioCtx) return;
-  try {
-    const osc = audioCtx.createOscillator(), gain = audioCtx.createGain();
-    osc.type = 'square'; osc.frequency.value = freq;
-    gain.gain.value = volume;
-    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
-    osc.connect(gain); gain.connect(audioCtx.destination);
-    osc.start(); osc.stop(audioCtx.currentTime + duration);
-  } catch (e) {}
+// SFX now live on ONE bus inside MusicEngine (single mute state + persisted
+// SFX-volume slider). playBeep is a thin category-tagged shim over
+// MusicEngine.sfx so every existing call site keeps working; the bus itself
+// honours mute, so the scattered `_musicMuted()` guards around beeps are gone.
+//   category: 'ui' (default) | 'ambient' | 'discovery'
+function playBeep(freq = 880, duration = 0.05, volume = 0.03, category = 'ui') {
+  if (typeof MusicEngine === 'undefined' || typeof MusicEngine.sfx !== 'function') return;
+  MusicEngine.sfx(freq, duration, volume, category);
 }
 
 // ================================================================
@@ -1449,8 +1481,51 @@ function showKicked() {
 let companionWS = null, companionWSTimer = null;
 let companionOpen = false;
 let companionPending = false;       // an answer is in flight
-let companionHistory = [];          // [{role:'user'|'implant', content}], in-memory only
+let companionHistory = [];          // [{role:'user'|'implant', content}]
 let companionIntroShown = false;
+let _companionReplyTimer = null;    // 30s no-answer watchdog
+
+// Companion transcript persistence (wave 3b). The aside used to live only in
+// memory and vanish on reload; it now round-trips through localStorage (rolling
+// ~40 entries) so a refresh doesn't erase the side-channel. Still wiped on a
+// NEW session (resetCompanion) since it's session-scoped context.
+const _COMPANION_HISTORY_KEY = 'signal_lost_companion_history';
+const _COMPANION_HISTORY_MAX = 40;
+const COMPANION_REPLY_TIMEOUT_MS = 30000;
+
+function _saveCompanionHistory() {
+  try {
+    localStorage.setItem(_COMPANION_HISTORY_KEY,
+      JSON.stringify(companionHistory.slice(-_COMPANION_HISTORY_MAX)));
+  } catch (e) {}
+}
+function _loadCompanionHistory() {
+  try {
+    const raw = localStorage.getItem(_COMPANION_HISTORY_KEY);
+    if (!raw) return [];
+    const arr = JSON.parse(raw);
+    if (!Array.isArray(arr)) return [];
+    return arr.filter(m => m && typeof m.content === 'string' &&
+      (m.role === 'user' || m.role === 'implant')).slice(-_COMPANION_HISTORY_MAX);
+  } catch (e) { return []; }
+}
+function _clearCompanionHistoryStore() {
+  try { localStorage.removeItem(_COMPANION_HISTORY_KEY); } catch (e) {}
+}
+
+/** Restore a persisted transcript into the panel (called on load). */
+function restoreCompanionHistory() {
+  companionHistory = _loadCompanionHistory();
+  if (!companionHistory.length) return;
+  const box = document.getElementById('companionMessages');
+  if (box) {
+    box.innerHTML = '';
+    for (const m of companionHistory) {
+      addCompanionMessage(m.content, m.role === 'user' ? 'user' : 'implant');
+    }
+  }
+  companionIntroShown = true;   // don't replay the intro over restored history
+}
 
 function connectCompanionWS() {
   const protocol = location.protocol === 'https:' ? 'wss' : 'ws';
@@ -1468,14 +1543,30 @@ function connectCompanionWS() {
 /** Wipe the aside transcript — called when a new session begins. */
 function resetCompanion() {
   companionHistory = [];
+  _clearCompanionHistoryStore();   // session-scoped → drop the persisted copy too
   companionIntroShown = false;
   companionPending = false;
+  _clearCompanionReplyTimer();
   const box = document.getElementById('companionMessages');
   if (box) box.innerHTML = '';
   hideCompanionThinking();
   const send = document.getElementById('companionSend');
   if (send) send.disabled = false;
   if (companionOpen) closeCompanion();
+}
+
+/** Cancel the pending 30s reply watchdog, if armed. */
+function _clearCompanionReplyTimer() {
+  if (_companionReplyTimer) { clearTimeout(_companionReplyTimer); _companionReplyTimer = null; }
+}
+
+/** Re-enable the composer and hide the thinking indicator (shared teardown). */
+function _companionResetPending() {
+  companionPending = false;
+  _clearCompanionReplyTimer();
+  hideCompanionThinking();
+  const send = document.getElementById('companionSend');
+  if (send) send.disabled = false;
 }
 
 function toggleCompanion() { companionOpen ? closeCompanion() : openCompanion(); }
@@ -1538,12 +1629,23 @@ function sendCompanionMessage() {
   const text = input.value.trim();
   if (!text) return;
 
+  // Gate on MAIN-socket health: the companion runs its own socket, but its
+  // answers depend on the live game session the main link owns. wsOpen() is the
+  // single source of truth for link health (shared with sendMessage/retry), so
+  // if the city link is down we surface the bilingual offline line and hold the
+  // question rather than firing into a dead session.
+  if (!wsOpen()) {
+    addCompanionMessage(L('companion_offline'), 'error');
+    return;
+  }
+
   // Send only PRIOR turns as context (server caps too); the new question is
   // passed separately, so slice before pushing to avoid duplicating it.
   const history = companionHistory.slice(-8);
 
   addCompanionMessage(text, 'user');
   companionHistory.push({ role: 'user', content: text });
+  _saveCompanionHistory();
   input.value = '';
   companionPending = true;
   const send = document.getElementById('companionSend');
@@ -1552,19 +1654,24 @@ function sendCompanionMessage() {
 
   if (companionWS && companionWS.readyState === WebSocket.OPEN) {
     companionWS.send(JSON.stringify({ action: 'ask', text, history, token: authToken }));
+    // Arm the 30s no-answer watchdog: if no reply lands, restore the composer
+    // and drop a bilingual retry line so the panel never strands "listening…".
+    _clearCompanionReplyTimer();
+    _companionReplyTimer = setTimeout(() => {
+      _companionReplyTimer = null;
+      if (!companionPending) return;
+      _companionResetPending();
+      addCompanionMessage(L('companion_timeout'), 'error');
+    }, COMPANION_REPLY_TIMEOUT_MS);
   } else {
-    hideCompanionThinking();
-    companionPending = false;
-    if (send) send.disabled = false;
+    _companionResetPending();
     addCompanionMessage(L('companion_error'), 'error');
   }
 }
 
 function handleCompanionReply(msg) {
-  hideCompanionThinking();
-  companionPending = false;
-  const send = document.getElementById('companionSend');
-  if (send) send.disabled = false;
+  // A reply landed → cancel the watchdog and re-enable the composer.
+  _companionResetPending();
   if (msg.error) {
     addCompanionMessage(msg.code === 'no_session' ? L('companion_no_session') : L('companion_error'), 'error');
     return;
@@ -1572,6 +1679,7 @@ function handleCompanionReply(msg) {
   const text = (msg.text || '').trim() || L('companion_error');
   addCompanionMessage(text, 'implant');
   companionHistory.push({ role: 'implant', content: text });
+  _saveCompanionHistory();
 }
 
 /** Refresh the companion's static chrome when the UI language changes. */
@@ -1841,9 +1949,16 @@ function openSettings() {
   const vol = MusicEngine.getVolume();
   document.getElementById('inputMusicVolume').value = vol;
   document.getElementById('musicVolValue').textContent = Math.round(vol * 100) + '%';
+  // Sync SFX volume slider (separate persisted channel)
+  const sfxVol = MusicEngine.getSfxVolume();
+  const sfxSlider = document.getElementById('inputSfxVolume');
+  if (sfxSlider) sfxSlider.value = sfxVol;
+  const sfxValEl = document.getElementById('sfxVolValue');
+  if (sfxValEl) sfxValEl.textContent = Math.round(sfxVol * 100) + '%';
   // Snapshot ALL form state so cancel can restore
   _settingsSnapshot = {
     volume: vol,
+    sfxVolume: sfxVol,
     provider: document.getElementById('selectProvider').value,
     model: document.getElementById('inputModel').value,
     temperature: document.getElementById('inputTemp').value,
@@ -1881,6 +1996,7 @@ function _closeSettingsInternal() {
   // Restore to pre-open state (cancel = discard all unsaved changes)
   if (_settingsSnapshot) {
     MusicEngine.setVolume(_settingsSnapshot.volume);
+    if (_settingsSnapshot.sfxVolume != null) MusicEngine.setSfxVolume(_settingsSnapshot.sfxVolume);
     document.getElementById('selectProvider').value = _settingsSnapshot.provider;
     document.getElementById('inputModel').value = _settingsSnapshot.model;
     document.getElementById('inputTemp').value = _settingsSnapshot.temperature;
@@ -2193,12 +2309,13 @@ function playDiscoveryCeremony(msg) {
   const layer = Math.min(5, Math.max(1, Number(msg && msg.layer) || 1));
   const layerName = _discoveryLayerName(msg);
 
-  // Two-tone unlock cue (reuses playBeep; honours the music-mute flag like the
-  // decrypt lock-in does). Deeper layers ring a touch lower + longer.
-  if (!_musicMuted()) {
+  // Two-tone unlock cue via the shared SFX bus (discovery category); the bus
+  // honours the single mute state, so no per-call mute check is needed here.
+  // Deeper layers ring a touch lower + longer.
+  {
     const base = 760 - (layer - 1) * 40;
-    playBeep(base, 0.07, 0.025);
-    setTimeout(() => { if (!_musicMuted()) playBeep(base + 320, 0.09, 0.03); }, 110);
+    playBeep(base, 0.07, 0.025, 'discovery');
+    setTimeout(() => playBeep(base + 320, 0.09, 0.03, 'discovery'), 110);
   }
 
   const banner = document.createElement('div');
@@ -2391,8 +2508,8 @@ function addTypingMessage(text, role = 'agent', usage = null, elapsedSeconds = n
       if (container.scrollHeight - container.scrollTop - container.clientHeight < 200) {
         container.scrollTop = container.scrollHeight;
       }
-      // Decrypt/typing beeps respect the music mute flag.
-      if (Math.random() < 0.05 && !_musicMuted()) playBeep(600 + Math.random() * 400, 0.02, 0.01);
+      // Decrypt/typing chatter — the SFX bus honours mute for us.
+      if (Math.random() < 0.05) playBeep(600 + Math.random() * 400, 0.02, 0.01, 'ambient');
       timer = setTimeout(typeNext, interval);
     } else {
       finalize();
@@ -2558,11 +2675,199 @@ function chooseSuggestedAction(text) {
   });
   discoveryEls = [];
 
+  _pushHistory(text);   // a chosen suggestion is a committed command too
   resetPredictions();  // player committed → the current suggestions are spent
   _setPendingPlayer(addChatMessage(text, 'player'));
   input.value = '';
   disableInput();
   _sendPlayerInput(text);
+}
+
+// ================================================================
+// INPUT HISTORY + VERB AUTOCOMPLETE (wave 3b)
+//
+// ArrowUp/Down cycles previously-sent commands (last 50, persisted). On an
+// EMPTY input, a subtle row of curated bilingual verb chips appears; Tab
+// completes the current ghost suggestion. All motion stays terminal-quiet.
+// Arrows are never hijacked while a dialog is open or mid-IME-composition
+// (中文 input via e.isComposing), so composing a candidate isn't disturbed.
+// ================================================================
+const _HISTORY_KEY = 'signal_lost_input_history';
+const _HISTORY_MAX = 50;
+let sentHistory = [];         // oldest → newest; capped at _HISTORY_MAX
+let _historyCursor = -1;      // -1 = live (typing); 0..n-1 = browsing history
+let _historyDraft = '';       // the live draft stashed when browsing begins
+let _ghostVerb = '';          // current ghost-completed verb, or '' if none
+
+/** Curated verbs (localized via LABELS). These are the ghost/chip candidates. */
+const _VERB_KEYS = [
+  'verb_look', 'verb_go', 'verb_talk', 'verb_examine',
+  'verb_use', 'verb_verify', 'verb_hack', 'verb_hide',
+];
+function _verbList() { return _VERB_KEYS.map(k => L(k)); }
+
+function _loadHistory() {
+  try {
+    const raw = localStorage.getItem(_HISTORY_KEY);
+    if (!raw) return;
+    const arr = JSON.parse(raw);
+    if (Array.isArray(arr)) sentHistory = arr.filter(x => typeof x === 'string').slice(-_HISTORY_MAX);
+  } catch (e) { sentHistory = []; }
+}
+function _saveHistory() {
+  try { localStorage.setItem(_HISTORY_KEY, JSON.stringify(sentHistory.slice(-_HISTORY_MAX))); } catch (e) {}
+}
+/** Record a committed command (dedup consecutive repeats) and reset the cursor. */
+function _pushHistory(text) {
+  const t = (text || '').trim();
+  if (!t) return;
+  if (sentHistory[sentHistory.length - 1] !== t) {
+    sentHistory.push(t);
+    if (sentHistory.length > _HISTORY_MAX) sentHistory = sentHistory.slice(-_HISTORY_MAX);
+    _saveHistory();
+  }
+  _historyCursor = -1;
+  _historyDraft = '';
+}
+
+/** True when a modal dialog is open (arrows/keys must not be hijacked). */
+function _anyDialogOpen() { return _dialogStack.length > 0; }
+
+/** Move through history. dir = -1 (older, ArrowUp) or +1 (newer, ArrowDown). */
+function _historyStep(input, dir) {
+  if (!sentHistory.length) return;
+  if (_historyCursor === -1) {
+    // Entering history from the live draft — stash it so ArrowDown can return.
+    if (dir > 0) return;                    // ArrowDown on live draft: nothing newer
+    _historyDraft = input.value;
+    _historyCursor = sentHistory.length - 1;
+  } else {
+    _historyCursor += dir;
+  }
+  if (_historyCursor >= sentHistory.length) {
+    // Past the newest entry — restore the live draft.
+    _historyCursor = -1;
+    input.value = _historyDraft;
+  } else {
+    if (_historyCursor < 0) _historyCursor = 0;   // clamp at oldest
+    input.value = sentHistory[_historyCursor];
+  }
+  _clearVerbGhost(input);
+  // Put the caret at the end so the recalled line is ready to edit/send.
+  const end = input.value.length;
+  try { input.setSelectionRange(end, end); } catch (e) {}
+}
+
+// ---- Verb ghost suggestion + chips (empty-input affordance) ----
+
+/** Longest verb whose start matches the typed token (case-insensitive), else ''. */
+function _verbMatch(value) {
+  const v = (value || '').trim();
+  if (!v || /\s/.test(v)) return '';         // only suggest on a bare first token
+  const lower = v.toLowerCase();
+  for (const verb of _verbList()) {
+    const vl = verb.toLowerCase();
+    if (vl.length > v.length && vl.startsWith(lower)) return verb;
+  }
+  return '';
+}
+
+function _ghostEl() { return document.getElementById('inputGhost'); }
+
+/** Paint the ghost completion (dim tail) behind the input, or clear it. */
+function _updateVerbGhost(input) {
+  const ghost = _ghostEl();
+  if (!ghost) return;
+  const match = _verbMatch(input.value);
+  _ghostVerb = match;
+  if (match) {
+    // Show the typed prefix as invisible spacer + the dim remaining tail.
+    ghost.innerHTML = `<span class="ghost-typed">${esc(input.value)}</span>` +
+                      `<span class="ghost-tail">${esc(match.slice(input.value.length))}</span>`;
+    ghost.classList.add('visible');
+  } else {
+    ghost.classList.remove('visible');
+    ghost.innerHTML = '';
+  }
+}
+function _clearVerbGhost(input) {
+  _ghostVerb = '';
+  const ghost = _ghostEl();
+  if (ghost) { ghost.classList.remove('visible'); ghost.innerHTML = ''; }
+}
+
+/** Tab accepts the ghost: fill the verb + a trailing space, ready for an object. */
+function _acceptVerbGhost(input) {
+  if (!_ghostVerb) return false;
+  input.value = _ghostVerb + ' ';
+  _clearVerbGhost(input);
+  const end = input.value.length;
+  try { input.setSelectionRange(end, end); } catch (e) {}
+  _updateVerbChips(input);
+  return true;
+}
+
+/** Render / hide the verb-chip row. Chips show only on an EMPTY, focused input
+ *  so they never clutter the terminal while the player is typing. */
+function _updateVerbChips(input) {
+  const row = document.getElementById('verbChips');
+  if (!row) return;
+  const empty = !input.value;
+  const focused = document.activeElement === input;
+  if (!empty || !focused || input.disabled) {
+    row.classList.remove('visible');
+    row.setAttribute('aria-hidden', 'true');
+    return;
+  }
+  if (!row.dataset.built || row.dataset.lang !== currentLang) {
+    row.innerHTML = _verbList().map(v =>
+      `<button type="button" class="verb-chip" tabindex="-1" ` +
+      `onmousedown="event.preventDefault()" onclick="applyVerbChip('${esc(v)}')">${esc(v)}</button>`
+    ).join('');
+    row.dataset.built = '1';
+    row.dataset.lang = currentLang;
+  }
+  row.classList.add('visible');
+  row.setAttribute('aria-hidden', 'false');
+}
+
+/** Clicking a chip drops the verb + space into the input and re-focuses it. */
+function applyVerbChip(verb) {
+  const input = document.getElementById('chatInput');
+  if (!input || input.disabled) return;
+  input.value = verb + ' ';
+  input.focus();
+  const end = input.value.length;
+  try { input.setSelectionRange(end, end); } catch (e) {}
+  _clearVerbGhost(input);
+  _updateVerbChips(input);
+}
+
+/** Wire the chat input: history nav, ghost completion, chip visibility. */
+function _initInputHistory() {
+  const input = document.getElementById('chatInput');
+  if (!input) return;
+  _loadHistory();
+
+  input.addEventListener('keydown', (e) => {
+    // Never hijack while a dialog is up or mid-IME-composition (中文 candidates).
+    if (_anyDialogOpen() || e.isComposing || e.keyCode === 229) return;
+    if (e.key === 'ArrowUp') { e.preventDefault(); _historyStep(input, -1); _updateVerbChips(input); return; }
+    if (e.key === 'ArrowDown') { e.preventDefault(); _historyStep(input, +1); _updateVerbChips(input); return; }
+    if (e.key === 'Tab' && _ghostVerb) { if (_acceptVerbGhost(input)) e.preventDefault(); return; }
+  });
+
+  // Typing resets the history cursor to the live line and refreshes the ghost.
+  input.addEventListener('input', () => {
+    _historyCursor = -1;
+    _updateVerbGhost(input);
+    _updateVerbChips(input);
+  });
+  input.addEventListener('focus', () => { _updateVerbChips(input); _updateVerbGhost(input); });
+  input.addEventListener('blur', () => {
+    // Defer so a chip's mousedown-click can land before we hide the row.
+    setTimeout(() => { _updateVerbChips(input); }, 120);
+  });
 }
 
 function sendMessage() {
@@ -2575,6 +2880,9 @@ function sendMessage() {
   // text in the box, surface a bilingual "reconnecting…" line, and leave the
   // input enabled so the player can resend once the link is back.
   if (!wsOpen()) { showReconnectingNotice(); return; }
+
+  _pushHistory(text);
+  _clearVerbGhost(input);
 
   // Remove resume system message on first player input
   if (isFirstInput && resumeMessageEl) {
@@ -2593,6 +2901,7 @@ function sendMessage() {
   resetPredictions();  // player committed → the current suggestions are spent
   _setPendingPlayer(addChatMessage(text, 'player'));
   input.value = '';
+  _updateVerbChips(input);   // input cleared → drop the chip row while disabled
   disableInput();
   _sendPlayerInput(text);
 }
@@ -2703,17 +3012,11 @@ function _stopThinkingTicker() {
   _thinkingLineIdx = 0;
 }
 
-/** True when the music engine is currently muted (safe if MusicEngine absent). */
-function _musicMuted() {
-  return typeof MusicEngine !== 'undefined' && typeof MusicEngine.isMuted === 'function' && MusicEngine.isMuted();
-}
-
 function _startAmbient() {
   _stopAmbient();
   _ambientTimer = setInterval(() => {
-    // Honour the music mute toggle.
-    if (_musicMuted()) return;
-    if (Math.random() < 0.5) playBeep(150 + Math.random() * 130, 0.05 + Math.random() * 0.05, 0.006);
+    // The SFX bus honours the single mute state — no per-tick check needed.
+    if (Math.random() < 0.5) playBeep(150 + Math.random() * 130, 0.05 + Math.random() * 0.05, 0.006, 'ambient');
   }, 650);
 }
 function _stopAmbient() {
@@ -2734,11 +3037,9 @@ const _DECRYPT_GLYPHS = '▓▒░#@%&/\\|<>=+*01';
  *  skip/supersede fires inside the ~300ms window. */
 function _decryptReveal(msg, contentEl, done) {
   msg.classList.add('decrypting');
-  // Decrypt lock-in beeps respect the music mute flag.
-  if (!_musicMuted()) {
-    playBeep(420, 0.05, 0.02);
-    setTimeout(() => { if (!_musicMuted()) playBeep(900, 0.06, 0.02); }, 90); // two-tone lock-in
-  }
+  // Decrypt lock-in two-tone via the shared SFX bus (it honours mute).
+  playBeep(420, 0.05, 0.02, 'ambient');
+  setTimeout(() => playBeep(900, 0.06, 0.02, 'ambient'), 90); // two-tone lock-in
   const width = 14;
   let frames = 0;
   const t = setInterval(() => {
@@ -4385,6 +4686,47 @@ function _topDialog() {
   return _dialogStack.length ? _dialogStack[_dialogStack.length - 1] : null;
 }
 
+// ================================================================
+// SHORTCUT CHEAT-SHEET (wave 3b)
+// A '?' on an empty input (with no dialog open) documents the existing
+// bindings. Built through the shared openDialog() manager; all rows are
+// keyed via LABELS so the sheet is fully bilingual. Additive: it documents
+// bindings that already exist — it introduces none.
+// ================================================================
+const _SHORTCUT_ROWS = [
+  { keys: ['1', '–', '9'], label: 'shortcut_actions' },
+  { keys: ['t'], label: 'shortcut_focus_input' },
+  { keys: ['↑', '↓'], label: 'shortcut_history' },
+  { keys: ['Tab'], label: 'shortcut_complete' },
+  { keys: ['Space'], label: 'shortcut_skip' },
+  { keys: ['Ctrl', '+', 'S'], label: 'shortcut_save' },
+  { keys: ['?'], label: 'shortcut_cheatsheet' },
+  { keys: ['Esc'], label: 'shortcut_close_dialog' },
+];
+
+/** (Re)build the cheat-sheet body from LABELS in the current language. */
+function _renderShortcutSheet() {
+  const body = document.getElementById('shortcutSheetBody');
+  if (!body) return;
+  body.innerHTML = _SHORTCUT_ROWS.map(row => {
+    const keys = row.keys.map(k => `<kbd class="shortcut-key">${esc(k)}</kbd>`).join('');
+    return `<div class="shortcut-row">` +
+           `<span class="shortcut-keys">${keys}</span>` +
+           `<span class="shortcut-desc">${esc(L(row.label))}</span>` +
+           `</div>`;
+  }).join('');
+}
+
+function openShortcutSheet() {
+  const el = document.getElementById('shortcutSheet');
+  if (!el) return;
+  const titleEl = document.getElementById('shortcutSheetTitle');
+  if (titleEl) titleEl.textContent = L('shortcuts_title');
+  _renderShortcutSheet();
+  openDialog(el);
+}
+function closeShortcutSheet() { closeDialog(document.getElementById('shortcutSheet')); }
+
 /** Trap Tab / Shift+Tab within the topmost dialog card. */
 function _dialogTrapTab(e) {
   const top = _topDialog();
@@ -4460,6 +4802,14 @@ document.addEventListener('keydown', (e) => {
   }
   if (e.key === 't' && !isInput) { document.getElementById('chatInput').focus(); e.preventDefault(); }
   if (e.key === 's' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); saveGame(); }
+  // '?' opens the shortcut cheat-sheet — allowed either outside any field, or
+  // while focused in the EMPTY chat input (so it doesn't hijack typed '?'). No
+  // dialog is open here (step (3) already returned), matching the spec.
+  if (e.key === '?' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+    const chat = document.getElementById('chatInput');
+    const inEmptyChat = active === chat && chat && !chat.value;
+    if (!isInput || inEmptyChat) { e.preventDefault(); openShortcutSheet(); }
+  }
 });
 
 // ================================================================
@@ -4478,12 +4828,15 @@ window.addEventListener('load', () => {
   authToken = localStorage.getItem(AUTH_TOKEN_KEY) || null;
   if (authToken) currentUser = localStorage.getItem(AUTH_USER_KEY) || null;
   renderAccountWidget();
+  _initInputHistory();   // wire input history nav + verb autocomplete
+  restoreCompanionHistory();   // repaint any persisted companion transcript
   runBootSequence();
 });
 
 // Start music on first user interaction (browsers require gesture for AudioContext)
 function _initMusicOnce() {
-  if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+  // Resume the shared SFX AudioContext on the first user gesture (autoplay).
+  if (typeof MusicEngine !== 'undefined' && typeof MusicEngine.resumeSfx === 'function') MusicEngine.resumeSfx();
   // Only play menu music if we're on a menu screen; skip if already in-game
   const onMenu = ['menuScreen', 'bootScreen', 'newGameScreen', 'loadGameScreen']
     .some(id => { const el = document.getElementById(id); return el && el.classList.contains('active'); });

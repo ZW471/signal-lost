@@ -1324,6 +1324,85 @@ html, body {
   cursor: not-allowed;
 }
 
+/* ---- Verb-autocomplete ghost overlay (wave 3b) ----
+   A dim completion tail rendered behind the input text. The wrap stretches
+   like the input used to (flex:1); the input sits transparent on top so the
+   ghost shows through. Kept subtle so it never fights the terminal look. */
+.chat-input-wrap {
+  position: relative;
+  flex: 1;
+  display: flex;
+}
+.chat-input-wrap .chat-input {
+  position: relative;
+  flex: 1;
+  background: transparent;
+  z-index: 1;
+}
+/* Restore the input's own surface as a sibling backdrop so transparency on the
+   field doesn't expose the panel behind it. */
+.chat-input-wrap::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  pointer-events: none;
+}
+.chat-input-wrap:focus-within::before {
+  border-color: var(--cyan);
+  box-shadow: 0 0 10px rgba(0, 255, 245, 0.1);
+}
+.input-ghost {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: none;
+  align-items: center;
+  padding: 10px 14px;
+  font-family: var(--font-mono);
+  font-size: 14px;
+  white-space: pre;
+  overflow: hidden;
+  pointer-events: none;
+}
+.input-ghost.visible { display: flex; }
+.input-ghost .ghost-typed { color: transparent; }
+.input-ghost .ghost-tail { color: var(--text-dim); }
+
+/* ---- Curated verb chips (wave 3b) ----
+   A quiet row above the input, shown only on an empty focused field. */
+.verb-chips {
+  display: none;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  padding: 0 var(--sp-4) var(--sp-2);
+  background: var(--bg-panel);
+}
+.verb-chips.visible { display: flex; }
+.verb-chip {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.5px;
+  color: var(--cyan-dim);
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--r-1);
+  padding: var(--sp-1) var(--sp-2);
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.verb-chip:hover,
+.verb-chip:focus-visible {
+  color: var(--cyan);
+  border-color: var(--cyan);
+  box-shadow: inset 0 0 8px rgba(0, 255, 245, 0.12);
+}
+@media (prefers-reduced-motion: reduce) {
+  .verb-chip { transition: none; }
+}
+
 .send-btn {
   display: inline-flex;
   align-items: center;
@@ -2061,6 +2140,45 @@ mark.search-hl {
 
 /* Action row pinned under the (scrolling) body. */
 .dialog-actions { flex-shrink: 0; }
+
+/* ---- Shortcut cheat-sheet (wave 3b) ----
+   A keyed reference list inside the shared .dialog card. Rows pair a group of
+   <kbd> chips with a localized description. */
+.shortcut-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+.shortcut-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  padding: var(--sp-1) 0;
+  border-bottom: 1px solid var(--border);
+}
+.shortcut-row:last-child { border-bottom: none; }
+.shortcut-keys {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+  flex: 0 0 auto;
+  min-width: 96px;
+}
+.shortcut-key {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--cyan);
+  background: var(--bg-input);
+  border: 1px solid var(--cyan-dim);
+  border-radius: var(--r-1);
+  padding: 1px var(--sp-2);
+  box-shadow: inset 0 0 6px rgba(0, 255, 245, 0.08);
+}
+.shortcut-desc {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--text-muted);
+}
 
 .game-over-container {
   text-align: center;

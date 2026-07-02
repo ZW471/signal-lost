@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, viewport-fit=cover">
   <title>SIGNAL LOST</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='4' fill='%230a0a0f'/><text x='16' y='22' text-anchor='middle' font-size='18' fill='%2300ff88'>S</text></svg>">
-  <link rel="stylesheet" href="/static/style.css?v=w3a">
+  <link rel="stylesheet" href="/static/style.css?v=w3b">
   <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;400;500;600;700&family=Noto+Sans+SC:wght@300;400;500;700&display=swap" rel="stylesheet">
 </head>
 <body>
@@ -229,6 +229,8 @@
           <span class="thinking-hint" id="thinkingHint"></span>
         </div>
         <div class="suggested-actions" id="suggestedActions" aria-label="Suggested actions"></div>
+        <!-- Curated bilingual verb chips — shown only on an empty, focused input -->
+        <div class="verb-chips" id="verbChips" aria-hidden="true"></div>
         <div class="chat-input-container">
           <button class="chat-neural-btn" id="chatNeuralBtn" onclick="toggleCompanion()" title="Neural Link" aria-label="Open neural link">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -239,7 +241,11 @@
             </svg>
           </button>
           <div class="input-prefix">▶</div>
-          <input type="text" class="chat-input" id="chatInput" placeholder="What do you do?" autocomplete="off" onkeydown="if(event.key==='Enter')sendMessage()">
+          <div class="chat-input-wrap">
+            <!-- Ghost completion layer: dim verb tail behind the input text -->
+            <div class="input-ghost" id="inputGhost" aria-hidden="true"></div>
+            <input type="text" class="chat-input" id="chatInput" placeholder="What do you do?" data-i18n-placeholder="chat_placeholder" autocomplete="off" onkeydown="if(event.key==='Enter')sendMessage()">
+          </div>
           <button class="send-btn" onclick="sendMessage()">⟩</button>
         </div>
       </div>
@@ -423,6 +429,23 @@
     </div>
   </div>
 
+  <!-- ========== SHORTCUT CHEAT-SHEET ========== -->
+  <div id="shortcutSheet" class="overlay" style="display:none">
+    <div class="save-dialog dialog" role="dialog" aria-modal="true" aria-labelledby="shortcutSheetTitle">
+      <div class="dialog-header">
+        <h3 class="config-title" id="shortcutSheetTitle" data-i18n="shortcuts_title">// SHORTCUTS</h3>
+      </div>
+      <div class="dialog-body">
+        <div class="shortcut-list" id="shortcutSheetBody"></div>
+      </div>
+      <div class="dialog-actions form-actions">
+        <button class="cyber-btn" onclick="closeShortcutSheet()">
+          <span class="cyber-btn-text" data-i18n="btn_close">CLOSE</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- ========== SETTINGS OVERLAY ========== -->
   <div id="settingsOverlay" class="overlay" style="display:none">
     <div class="settings-dialog dialog" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
@@ -488,6 +511,13 @@
           <div class="slider-container">
             <input type="range" class="cyber-slider" id="inputMusicVolume" min="0" max="1" step="0.05" value="0.35" oninput="MusicEngine.setVolume(parseFloat(this.value)); document.getElementById('musicVolValue').textContent = Math.round(this.value * 100) + '%'">
             <span class="slider-value" id="musicVolValue">35%</span>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="cyber-label" data-i18n="label_sfx_volume">SFX VOLUME</label>
+          <div class="slider-container">
+            <input type="range" class="cyber-slider" id="inputSfxVolume" min="0" max="1" step="0.05" value="1" oninput="MusicEngine.setSfxVolume(parseFloat(this.value)); document.getElementById('sfxVolValue').textContent = Math.round(this.value * 100) + '%'">
+            <span class="slider-value" id="sfxVolValue">100%</span>
           </div>
         </div>
         <h4 class="config-subtitle" id="gameplaySectionTitle" data-i18n="settings_gameplay_title">// GAMEPLAY</h4>
@@ -595,7 +625,7 @@
        lane so the two no longer collide. -->
   <div id="toastStack" class="toast-stack" aria-live="polite" aria-relevant="additions"></div>
 
-  <script src="/static/music.js?v=w3a"></script>
-  <script src="/static/app.js?v=w3a"></script>
+  <script src="/static/music.js?v=w3b"></script>
+  <script src="/static/app.js?v=w3b"></script>
 </body>
 </html>

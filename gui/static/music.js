@@ -9,7 +9,26 @@
 const MusicEngine = (() => {
   const FADE_MS = 5000;
   const FADE_STEP = 50;  // ms per step
-  let volume = 0.35;
+
+  // ----------------------------------------------------------------
+  // Persisted volumes (signal_lost_* key pattern). Music previously reset to
+  // 0.35 on every reload because nothing was persisted — both music and sfx
+  // volume now round-trip through localStorage and are applied on boot.
+  // ----------------------------------------------------------------
+  const LS_MUSIC_VOL = 'signal_lost_music_volume';
+  const LS_SFX_VOL = 'signal_lost_sfx_volume';
+  function _loadVol(key, fallback) {
+    try {
+      const raw = localStorage.getItem(key);
+      if (raw === null) return fallback;
+      const v = parseFloat(raw);
+      return (isFinite(v) && v >= 0 && v <= 1) ? v : fallback;
+    } catch (e) { return fallback; }
+  }
+  function _saveVol(key, v) { try { localStorage.setItem(key, String(v)); } catch (e) {} }
+
+  let volume = _loadVol(LS_MUSIC_VOL, 0.35);
+  let sfxVolume = _loadVol(LS_SFX_VOL, 1.0);
   let muted = false;
   let currentAudio = null;   // currently playing Audio element
   let currentName = null;
@@ -216,6 +235,7 @@ const MusicEngine = (() => {
 
   function setVolume(v) {
     volume = Math.max(0, Math.min(1, v));
+    _saveVol(LS_MUSIC_VOL, volume);
     if (currentAudio && !muted) {
       currentAudio.volume = volume;
     }
@@ -231,6 +251,64 @@ const MusicEngine = (() => {
 
   function isMuted() { return muted; }
   function getVolume() { return volume; }
+
+  // ----------------------------------------------------------------
+  // Unified SFX bus
+  //
+  // Every non-music beep in the app (typewriter/decrypt chatter, ambient
+  // hiss, UI clicks, the discovery ceremony two-tone) now routes through
+  // sfx(freq, dur, vol, category). ONE mute state (the existing music mute)
+  // silences everything, so scattered per-call mute checks are gone. The
+  // per-call `vol` is the caller's relative loudness; it is scaled by the
+  // user's persisted SFX-volume slider before hitting the destination.
+  // Categories (ambient/ui/discovery) are advisory for now — they let future
+  // per-category mixing land without touching call sites.
+  // ----------------------------------------------------------------
+  let _sfxCtx = null;
+  function _sfxAudioCtx() {
+    if (_sfxCtx) return _sfxCtx;
+    try {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      if (Ctx) _sfxCtx = new Ctx();
+    } catch (e) { _sfxCtx = null; }
+    return _sfxCtx;
+  }
+
+  function setSfxVolume(v) {
+    sfxVolume = Math.max(0, Math.min(1, v));
+    _saveVol(LS_SFX_VOL, sfxVolume);
+  }
+  function getSfxVolume() { return sfxVolume; }
+
+  /** Fire a short beep through the shared SFX bus.
+   *  Honours the single mute state and the persisted SFX-volume slider.
+   *  @param {number} freq     oscillator frequency (Hz)
+   *  @param {number} dur      duration (seconds)
+   *  @param {number} vol      caller's relative volume (0-1), pre-scale
+   *  @param {string} category 'ambient' | 'ui' | 'discovery' (advisory) */
+  function sfx(freq = 880, dur = 0.05, vol = 0.03, category = 'ui') {
+    if (muted) return;                       // one mute state for music + sfx
+    const gainScale = sfxVolume;
+    if (gainScale <= 0) return;
+    const ctx = _sfxAudioCtx();
+    if (!ctx) return;
+    if (ctx.state === 'suspended') { try { ctx.resume(); } catch (e) {} }
+    try {
+      const osc = ctx.createOscillator(), gain = ctx.createGain();
+      osc.type = 'square';
+      osc.frequency.value = freq;
+      gain.gain.value = Math.max(0.0001, vol * gainScale);
+      gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + dur);
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.start(); osc.stop(ctx.currentTime + dur);
+    } catch (e) {}
+  }
+
+  /** Resume the SFX AudioContext on a user gesture (autoplay policy). */
+  function resumeSfx() {
+    const ctx = _sfxAudioCtx();
+    if (ctx && ctx.state === 'suspended') { try { ctx.resume(); } catch (e) {} }
+  }
 
   /** Preload all tracks */
   function preloadAll() {
@@ -378,6 +456,10 @@ const MusicEngine = (() => {
     stopAll,
     setVolume,
     getVolume,
+    setSfxVolume,
+    getSfxVolume,
+    sfx,
+    resumeSfx,
     toggleMute,
     isMuted,
     preloadAll,
