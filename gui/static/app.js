@@ -1502,6 +1502,8 @@ function doLogout() {
   localStorage.removeItem(AUTH_USER_KEY);
   cachedSessions = [];
   cachedSaves = [];
+  const _resumeBtn = document.getElementById('btnResumeGame');
+  if (_resumeBtn) _resumeBtn.style.display = 'none';
   // Wipe the previous player's game data so nothing leaks into the next sign-in
   // (e.g. a language change on the menu re-renders panels from cachedSession).
   cachedSession = null;
@@ -1836,6 +1838,11 @@ function handleServerMessage(msg) {
       renderAccountWidget();
 
       cachedSessions = msg.sessions || [];
+      // A live in-progress session gets a RESUME entry on the menu — without it
+      // the whole resume path is unreachable and mid-game players who closed
+      // the tab could only recover via an explicit save.
+      const resumeBtn = document.getElementById('btnResumeGame');
+      if (resumeBtn) resumeBtn.style.display = cachedSessions.length > 0 ? '' : 'none';
       if (msg.saves && msg.saves.length > 0) {
         document.getElementById('btnLoadGame').style.display = '';
         cachedSaves = msg.saves;
