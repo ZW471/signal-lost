@@ -17,7 +17,7 @@
   --bg-input: #12121c;
   --border: #1a1a2e;
   --border-glow: #00fff520;
-  --divider: #ffffff14;
+  --divider: #ffffff08;
   --text: #c0c0d0;
   --text-dim: #606080;
   --text-muted: #cccccc;
@@ -3128,10 +3128,6 @@ mark.search-hl {
   .status-item-location,
   .status-item-clock { display: none; }
   .hud-gauge { width: 56px; }
-
-  /* Keep truncation tight on narrow phones even in 中文 (CJK gets a little
-     more than Latin, but not the desktop 280px). */
-  html[lang="zh"] .status-value.truncate { max-width: 120px; }
 }
 
 /* ================================================================

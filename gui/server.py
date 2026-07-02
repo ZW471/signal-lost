@@ -612,6 +612,19 @@ async def websocket_endpoint(ws: WebSocket):
                     ),
                 })
                 continue
+            # A syntactically-valid but non-object frame (e.g. `5`, `true`,
+            # `"hi"`, `[]`, `null`) parses fine but has no .get — guard it so a
+            # stray scalar/array frame can't AttributeError out of the loop and
+            # tear down the whole connection.
+            if not isinstance(msg, dict):
+                await ws.send_json({
+                    "type": "error",
+                    "message": (
+                        "Bad request — the message could not be read. / "
+                        "请求无效——无法读取该消息。"
+                    ),
+                })
+                continue
             action = msg.get("action")
 
             # -------------------- Auth: register / login --------------------

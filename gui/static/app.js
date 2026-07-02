@@ -51,13 +51,18 @@ const ALERT_THRESHOLDS = [
   { threshold: 50,  effect: 'Sector 7 lockdown, Chrome Heights restricted',      effect_zh: '第七区封锁，镀金台限制出入' },
   { threshold: 75,  effect: 'NEXUS raids Undercroft, Neon Row restricted',       effect_zh: 'NEXUS突袭底渊，霓虹街限制出入' },
   { threshold: 90,  effect: 'Full manhunt, only The Sprawl is safe',             effect_zh: '全城搜捕，仅蔓城尚属安全' },
-  { threshold: 100, effect: 'Capture — funneled to Order ending or death',       effect_zh: '被捕——走向秩序结局或死亡' },
+  // In-world phrasing only — do NOT name ending/branch outcomes here (that would
+  // leak meta-information the narrative never states). Softened from game_data's
+  // 'Capture — funneled to Order ending or death'.
+  { threshold: 100, effect: 'Capture is all but certain',                        effect_zh: '被捕几乎无可避免' },
 ];
 const DECAY_THRESHOLDS = [
   { threshold: 25,  effect: 'Echo manifestations weaker',      effect_zh: '回响显现减弱' },
   { threshold: 50,  effect: 'Signal artifacts lose potency',   effect_zh: '信号遗物失去效力' },
-  { threshold: 75,  effect: 'Good endings much harder',        effect_zh: '好结局变得极其困难' },
-  { threshold: 100, effect: 'Good endings impossible',         effect_zh: '好结局已不可能' },
+  // In-world phrasing only — do NOT name ending outcomes ('good endings') here.
+  // Softened from game_data's 'Good endings much harder' / 'impossible'.
+  { threshold: 75,  effect: 'The signal frays past recovery',  effect_zh: '信号残缺，几近无法复原' },
+  { threshold: 100, effect: 'The signal is all but lost',      effect_zh: '信号近乎彻底湮灭' },
 ];
 
 // Tick positions (%) for the banded mini-gauges and the cyan→yellow→orange→red ramp.
@@ -1998,6 +2003,7 @@ function addTypingMessage(text, role = 'agent', usage = null, elapsedSeconds = n
   let timer = null;         // setTimeout handle for the next type step
   let skipHintTimer = null; // delay handle for the '▸ skip' affordance
   let skipHintEl = null;    // '▸ skip' affordance, added ~800ms into long type-outs
+  let decryptTimer = null;  // setInterval handle for the decrypt scramble (agent role)
   let done = false;
 
   // Stash the full text + a skip() handle on the element so a click can finalize.
@@ -2013,6 +2019,10 @@ function addTypingMessage(text, role = 'agent', usage = null, elapsedSeconds = n
     done = true;
     if (timer) { clearTimeout(timer); timer = null; }
     if (skipHintTimer) { clearTimeout(skipHintTimer); }
+    // Kill the in-flight decrypt scramble too — otherwise its next tick (and its
+    // frame-6 `contentEl.textContent = ''`) would clobber the committed markdown
+    // to blank when a skip/supersede fires inside the ~300ms decrypt window.
+    if (decryptTimer) { clearInterval(decryptTimer); decryptTimer = null; }
     _removeSkipHint();
     contentEl.classList.remove('typing');
     msg.classList.remove('skippable');
@@ -2082,7 +2092,10 @@ function addTypingMessage(text, role = 'agent', usage = null, elapsedSeconds = n
   // resume/system messages type out plainly. Guard the callback against a skip
   // that fired during the ~300ms decrypt window.
   if (role === 'agent') {
-    _decryptReveal(msg, contentEl, () => { if (!done) typeNext(); });
+    decryptTimer = _decryptReveal(msg, contentEl, () => {
+      decryptTimer = null; // scramble finished on its own; nothing left to cancel
+      if (!done) typeNext();
+    });
   } else {
     typeNext();
   }
@@ -2289,7 +2302,9 @@ function _clearPendingPlayer() {
 }
 
 const _DECRYPT_GLYPHS = '▓▒░#@%&/\\|<>=+*01';
-/** Brief "signal locking in" scramble before an agent message types out. */
+/** Brief "signal locking in" scramble before an agent message types out.
+ *  Returns the setInterval id so the caller (finalize) can cancel it if a
+ *  skip/supersede fires inside the ~300ms window. */
 function _decryptReveal(msg, contentEl, done) {
   msg.classList.add('decrypting');
   // Decrypt lock-in beeps respect the music mute flag.
@@ -2310,6 +2325,7 @@ function _decryptReveal(msg, contentEl, done) {
       done();
     }
   }, 50);
+  return t;
 }
 
 // A turn can hang: the server may drop mid-turn, or emit a terminal message
@@ -2321,6 +2337,12 @@ const _WATCHDOG_MS = 90000;
 
 function _armWatchdog() {
   _clearWatchdog();
+  // Opening turn while the tutorial is still up: the real first scene is
+  // genuinely in flight and buffered until the tutorial is dismissed, and slow
+  // models can legitimately exceed the 90s deadline. Firing here would enable
+  // input behind the overlay and leave a bogus 'link went quiet' notice stuck
+  // above the opening scene. Don't watchdog the buffered first scene.
+  if (_firstSceneArmed) return;
   _turnWatchdog = setTimeout(() => {
     _turnWatchdog = null;
     endTurnUI();
@@ -3032,10 +3054,12 @@ function updateTracesPanel(traces) {
     const name = esc(L('trace_layer_' + num));
 
     if (num > deepest) {
-      // Sealed row: counts only. NEVER any '[???]' or trace names.
+      // Sealed row: counts only. NEVER the gated layer flavor name (that would
+      // spoil the plot twists) — render a neutral redacted placeholder instead,
+      // matching the descent gauge which leaves deeper layers unlabeled.
       html += `<div class="trace-band locked" style="--depth:${num}">
         <div class="trace-band-header">
-          <span class="trace-band-name locked-name">▓ ${name}</span>
+          <span class="trace-band-name locked-name">▓▓▓▓▓</span>
           <span class="trace-band-lock">[${esc(L('trace_locked'))}] ? / ${total}</span>
         </div>
       </div>`;
