@@ -245,6 +245,7 @@ const LABELS = {
     busy_no_confirm: "didn't confirm — try again",
     retry_last_action: '↻ Retry last action',
     conn_degraded: '// link degraded — reconnecting…',
+    error_generic: 'Something went wrong. Try again.',
     // Accounts / auth
     auth_title: '// ACCESS TERMINAL',
     auth_sign_in: 'SIGN IN', auth_register: 'REGISTER', auth_sign_out: 'SIGN OUT',
@@ -410,6 +411,7 @@ const LABELS = {
     busy_no_confirm: '未收到确认 —— 请重试',
     retry_last_action: '↻ 重试上一动作',
     conn_degraded: '// 链路降级 —— 正在重连…',
+    error_generic: '发生错误，请重试。',
     // Accounts / auth
     auth_title: '// 接入终端',
     auth_sign_in: '登录', auth_register: '注册', auth_sign_out: '退出登录',
@@ -972,7 +974,12 @@ function dismissToast(el) {
   if (el._timer) { clearTimeout(el._timer); el._timer = null; }
   el.classList.remove('toast-in');
   el.classList.add('toast-out');
+  // Registered on BOTH transitionend and a setTimeout fallback, so guard against
+  // running twice — otherwise one dismissal would drain two overflow slots.
+  let finished = false;
   const fin = () => {
+    if (finished) return;
+    finished = true;
     if (el.parentNode) el.parentNode.removeChild(el);
     if (_toastOverflow > 0) { _toastOverflow--; _renderToastOverflow(); }
   };
@@ -1198,6 +1205,23 @@ function resolveBusy(token) {
   if (ctrl) ctrl.done();
 }
 
+// Token of a dialog-scoped action (save / settings-save) awaiting its reply.
+// The server answers a *failed* save with a generic {type:'error'} frame that
+// carries no token, so we remember which dialog action is in flight and let the
+// 'error' handler release that button's lock (showing the inline note where the
+// user acted) instead of leaking it into the chat retry card and stranding the
+// spinner until the 10s watchdog. Cleared on the matching success reply.
+let _pendingDialogToken = null;
+/** Fail the pending dialog-scoped busy lock on error; true if one was handled. */
+function failPendingDialogAction() {
+  const token = _pendingDialogToken;
+  if (!token) return false;
+  _pendingDialogToken = null;
+  const ctrl = _busyByToken[token];
+  if (ctrl) ctrl.fail();  // restore the button + show the inline retry note in-place
+  return true;
+}
+
 /** Drop a bilingual "didn't confirm — try again" note right after the button. */
 function _showBusyNote(btn) {
   _clearBusyNote(btn);
@@ -1370,6 +1394,12 @@ function setAuthError(text) {
 }
 
 function submitAuth() {
+  // The Enter-key handlers are bound to the (never-disabled) input fields, so a
+  // second Enter can re-enter this before 'auth_result' lands. busy() only locks
+  // the button, so guard on it here — otherwise the keyboard path defeats the
+  // in-flight lock and fires a duplicate register/login frame.
+  const btn = document.querySelector('#authOverlay .cyber-btn.accent');
+  if (btn && btn.disabled) return;
   const username = (document.getElementById('authUsername').value || '').trim();
   const password = document.getElementById('authPassword').value || '';
   if (!username) { setAuthError(L('auth_err_username_required')); return; }
@@ -1378,7 +1408,6 @@ function submitAuth() {
   // Lock the submit button until 'auth_result' lands (or 10s elapses) so a
   // double-click can't fire duplicate register/login frames. Both tabs share
   // this one button, so this covers sign-in and register alike.
-  const btn = document.querySelector('#authOverlay .cyber-btn.accent');
   const b = busy(btn, 'auth_result');
   if (!sendWS({ action: authMode === 'register' ? 'register' : 'login', username, password })) { b.fail(); }
 }
@@ -1773,12 +1802,14 @@ function handleServerMessage(msg) {
       break;
 
     case 'saved':
+      _pendingDialogToken = null;
       resolveBusy('saved');           // release the SAVE button's in-flight lock
       notify(`${L('saved')}: ${msg.save_name}`);
       closeSaveDialog();
       break;
 
     case 'provider_saved':
+      _pendingDialogToken = null;
       resolveBusy('provider_saved');  // release the settings SAVE button
       notify(L('settings_saved'));
       if (msg.provider) prefillProviderSettings(msg.provider);
@@ -1792,6 +1823,15 @@ function handleServerMessage(msg) {
       break;
 
     case 'error':
+      // A save/settings-save failure also arrives as a generic {type:'error'}.
+      // Scope it to the dialog the user acted in: release that button's lock
+      // (inline "try again" note appears in place) and surface the message as a
+      // toast over the still-open modal — NOT the chat retry card, which sits
+      // behind the modal and could offer to re-send an unrelated game action.
+      if (failPendingDialogAction()) {
+        notify(msg.message || L('error_generic'), true);
+        break;
+      }
       _finalizeActiveTyper();  // snap any in-flight narration to done first
       endTurnUI();
       // Recoverable turn error → an inline retry card in the chat (not a
@@ -1953,8 +1993,10 @@ function saveSettings() {
   // silent failure surfaces as an inline note here rather than vanishing.
   const btn = document.querySelector('#settingsOverlay .cyber-btn.accent');
   const b = busy(btn, 'provider_saved');
+  _pendingDialogToken = 'provider_saved';  // let an 'error' reply unlock it in-place
   document.getElementById('settingsStatus').textContent = L('saving');
   if (!sendWS(payload)) {
+    _pendingDialogToken = null;
     b.fail();
     document.getElementById('settingsStatus').textContent = '';
     return;
@@ -2831,7 +2873,8 @@ function confirmSave() {
   const name = document.getElementById('saveName').value.trim() || _defaultSaveName();
   const btn = document.querySelector('#saveDialog .cyber-btn.accent');
   const b = busy(btn, 'saved');           // released by the 'saved' reply / 10s timeout
-  if (!sendWS({ action: 'save_game', save_name: name })) { b.fail(); }
+  _pendingDialogToken = 'saved';          // let an 'error' reply unlock it in-place
+  if (!sendWS({ action: 'save_game', save_name: name })) { _pendingDialogToken = null; b.fail(); }
 }
 function closeSaveDialog() { closeDialog(document.getElementById('saveDialog')); }
 

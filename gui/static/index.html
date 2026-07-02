@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, viewport-fit=cover">
   <title>SIGNAL LOST</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='4' fill='%230a0a0f'/><text x='16' y='22' text-anchor='middle' font-size='18' fill='%2300ff88'>S</text></svg>">
-  <link rel="stylesheet" href="/static/style.css?v=w2d">
+  <link rel="stylesheet" href="/static/style.css?v=w2fix">
   <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;400;500;600;700&family=Noto+Sans+SC:wght@300;400;500;700&display=swap" rel="stylesheet">
 </head>
 <body>
@@ -365,12 +365,18 @@
   <div id="gameOverOverlay" class="overlay" style="display:none">
     <div class="game-over-container dialog" role="dialog" aria-modal="true" aria-labelledby="gameOverTitle">
       <h1 class="game-over-title glitch-text" id="gameOverTitle" data-text="SIGNAL LOST">SIGNAL LOST</h1>
-      <div class="game-over-ending" id="gameOverEnding"></div>
-      <div class="game-over-narrative" id="gameOverNarrative"></div>
-      <button class="cyber-btn accent" onclick="location.reload()">
-        <span class="cyber-btn-text">RECONNECT</span>
-        <span class="cyber-btn-glitch"></span>
-      </button>
+      <!-- Ending + narrative scroll so a long death narrative on a short
+           viewport can never push RECONNECT (pinned below) off-screen. -->
+      <div class="dialog-body game-over-body">
+        <div class="game-over-ending" id="gameOverEnding"></div>
+        <div class="game-over-narrative" id="gameOverNarrative"></div>
+      </div>
+      <div class="dialog-actions">
+        <button class="cyber-btn accent" onclick="location.reload()">
+          <span class="cyber-btn-text">RECONNECT</span>
+          <span class="cyber-btn-glitch"></span>
+        </button>
+      </div>
     </div>
   </div>
 
@@ -589,7 +595,7 @@
        lane so the two no longer collide. -->
   <div id="toastStack" class="toast-stack" aria-live="polite" aria-relevant="additions"></div>
 
-  <script src="/static/music.js?v=w2d"></script>
-  <script src="/static/app.js?v=w2d"></script>
+  <script src="/static/music.js?v=w2fix"></script>
+  <script src="/static/app.js?v=w2fix"></script>
 </body>
 </html>

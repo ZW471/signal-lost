@@ -2054,8 +2054,15 @@ mark.search-hl {
 .game-over-narrative {
   color: var(--text);
   line-height: 1.8;
-  margin-bottom: 30px;
   white-space: pre-wrap;
+}
+
+/* Scroll region for ending + narrative; RECONNECT stays pinned below it so a
+   long death narrative on a short viewport can't push it off-screen. */
+.game-over-body { margin-bottom: 30px; }
+.game-over-container .dialog-actions {
+  display: flex;
+  justify-content: center;
 }
 
 /* Save / confirm dialog — width modifier over the shared .dialog card. */
@@ -2352,7 +2359,7 @@ mark.search-hl {
   position: fixed;
   top: 34%;
   left: 50%;
-  z-index: var(--z-overlay); /* above toasts + panels for the moment it holds */
+  z-index: calc(var(--z-overlay) - 1); /* above toasts/FAB/panels, but under real dialogs */
   display: flex;
   align-items: baseline;
   gap: var(--sp-3);
