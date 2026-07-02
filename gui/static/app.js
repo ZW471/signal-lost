@@ -268,6 +268,18 @@ const LABELS = {
     kicked_reload: 'RECONNECT',
     // Tutorial
     tutorial_step: 'STEP', tutorial_skip: 'SKIP', tutorial_next: 'NEXT', tutorial_finish: 'GOT IT',
+    // Empty-state teaching hints (second line under each .panel-empty).
+    // Spoiler-safe: they describe the loop, never undiscovered content.
+    empty_trace: 'No traces discovered yet.',
+    empty_trace_hint: 'Discoveries appear here, grouped by depth. ▓ = sealed truths.',
+    empty_know: 'Nothing learned yet.',
+    empty_know_hint: 'Rumors you verify become facts.',
+    empty_npc_hint: 'Contacts you meet — and how far they trust you.',
+    empty_area: 'No districts mapped yet.',
+    empty_area_hint: 'Districts unlock as you travel and earn access.',
+    empty_items_hint: 'Gear you pick up lives here — slots are limited.',
+    empty_world_hint: 'Alerts and shifts across the city surface here.',
+    empty_log_hint: 'A running recap of what you have done.',
     // Companion (implant side-channel Q&A)
     companion_title: 'NEURAL LINK',
     companion_tagline: '// private channel · changes nothing',
@@ -421,6 +433,17 @@ const LABELS = {
     kicked_reload: '重新连接',
     // Tutorial
     tutorial_step: '步骤', tutorial_skip: '跳过', tutorial_next: '下一步', tutorial_finish: '知道了',
+    // Empty-state teaching hints (second line under each .panel-empty).
+    empty_trace: '尚未发现任何痕迹。',
+    empty_trace_hint: '发现的痕迹按深度分层显示。▓ = 封存的真相。',
+    empty_know: '尚无所得。',
+    empty_know_hint: '你核实的传闻会成为事实。',
+    empty_npc_hint: '你遇见的联系人——以及他们对你的信任程度。',
+    empty_area: '尚未探明任何区域。',
+    empty_area_hint: '随着你的行动与取得权限，区域会逐步解锁。',
+    empty_items_hint: '拾取的装备会存放于此——槽位有限。',
+    empty_world_hint: '全城的警报与变动会在此浮现。',
+    empty_log_hint: '你所作所为的实时回顾。',
     // Companion (implant side-channel Q&A)
     companion_title: '神经链接',
     companion_tagline: '// 私密信道 · 不影响世界',
@@ -2923,12 +2946,20 @@ function nextTutorialStep() {
   playBeep(900, 0.02);
 }
 
+// Resolve the current step's target to the first VISIBLE match, so multi-selector
+// targets (e.g. the inline neural button on mobile vs. the floating FAB on
+// desktop) land on whichever element is actually shown. Returns null if the
+// target has no on-screen box (removed, hidden, or zero-size).
+function _resolveTutorialTarget(step) {
+  for (const el of document.querySelectorAll(step.target)) {
+    if (el.getClientRects().length) return el;
+  }
+  return null;
+}
+
 function showTutorialStep() {
   const steps = TUTORIAL_STEPS[currentLang] || TUTORIAL_STEPS.en;
   const step = steps[tutorialStep];
-  const overlay = document.getElementById('tutorialOverlay');
-  const highlight = document.getElementById('tutorialHighlight');
-  const tooltip = document.getElementById('tutorialTooltip');
   const textEl = document.getElementById('tutorialText');
   const indicator = document.getElementById('tutorialStepIndicator');
   const skipBtn = document.getElementById('tutorialSkip');
@@ -2940,13 +2971,41 @@ function showTutorialStep() {
     if (tabBtn) switchPanel(tabBtn);
   }
 
-  // Resolve to the first VISIBLE match so multi-selector targets (e.g. the
-  // inline neural button on mobile vs. the floating FAB on desktop) land on
-  // whichever element is actually shown.
-  let target = null;
-  for (const el of document.querySelectorAll(step.target)) {
-    if (el.getClientRects().length) { target = el; break; }
-  }
+  // If the highlighted element no longer exists (or is hidden), skip this step
+  // gracefully rather than pinning the box to a stale location.
+  const target = _resolveTutorialTarget(step);
+  if (!target) { nextTutorialStep(); return; }
+
+  // Set content (position is applied by _positionTutorialStep, which also runs
+  // on window resize/scroll while the tutorial is active).
+  const isLast = tutorialStep === steps.length - 1;
+  indicator.textContent = `${L('tutorial_step')} ${tutorialStep + 1} / ${steps.length}`;
+  textEl.innerHTML = step.text;
+  skipBtn.textContent = L('tutorial_skip');
+  nextBtn.textContent = isLast ? L('tutorial_finish') : L('tutorial_next');
+
+  // Replay the tooltip entrance animation for this step.
+  const tooltip = document.getElementById('tutorialTooltip');
+  tooltip.style.animation = 'none';
+  tooltip.offsetHeight; // force reflow
+  tooltip.style.animation = '';
+
+  _positionTutorialStep();
+}
+
+// Position the highlight box + tooltip against the current step's live target
+// geometry. Called on step entry AND on window resize/scroll/tab-switch so the
+// box tracks a target that moved. Guards a vanished target by advancing the step.
+function _positionTutorialStep() {
+  if (!tutorialActive) return;
+  const steps = TUTORIAL_STEPS[currentLang] || TUTORIAL_STEPS.en;
+  const step = steps[tutorialStep];
+  if (!step) return;
+
+  const highlight = document.getElementById('tutorialHighlight');
+  const tooltip = document.getElementById('tutorialTooltip');
+
+  const target = _resolveTutorialTarget(step);
   if (!target) { nextTutorialStep(); return; }
 
   const rect = target.getBoundingClientRect();
@@ -2956,18 +3015,6 @@ function showTutorialStep() {
   highlight.style.top = rect.top - 4 + 'px';
   highlight.style.width = rect.width + 8 + 'px';
   highlight.style.height = rect.height + 8 + 'px';
-
-  // Set content
-  const isLast = tutorialStep === steps.length - 1;
-  indicator.textContent = `${L('tutorial_step')} ${tutorialStep + 1} / ${steps.length}`;
-  textEl.innerHTML = step.text;
-  skipBtn.textContent = L('tutorial_skip');
-  nextBtn.textContent = isLast ? L('tutorial_finish') : L('tutorial_next');
-
-  // Position tooltip
-  tooltip.style.animation = 'none';
-  tooltip.offsetHeight; // force reflow
-  tooltip.style.animation = '';
 
   // Reset positioning
   tooltip.style.left = '';
@@ -2994,6 +3041,24 @@ function showTutorialStep() {
     tooltip.style.bottom = (window.innerHeight - rect.top + margin) + 'px';
   }
 }
+
+// Keep the highlight/tooltip glued to their target when the viewport changes
+// under a live tutorial: window resize, or scrolling inside any panel that the
+// highlighted element rides in. rAF-throttled so a scroll storm coalesces into
+// one layout pass. Registered once; the tutorialActive guard makes it a no-op
+// otherwise. Scroll uses capture:true to catch inner scroll containers (the
+// info-panel body), which don't bubble scroll events.
+let _tutorialRepositionQueued = false;
+function _scheduleTutorialReposition() {
+  if (!tutorialActive || _tutorialRepositionQueued) return;
+  _tutorialRepositionQueued = true;
+  requestAnimationFrame(() => {
+    _tutorialRepositionQueued = false;
+    _positionTutorialStep();
+  });
+}
+window.addEventListener('resize', _scheduleTutorialReposition);
+window.addEventListener('scroll', _scheduleTutorialReposition, { capture: true, passive: true });
 
 // ================================================================
 // RESIZE HANDLE
@@ -3057,6 +3122,9 @@ function switchPanel(btn) {
   if (btn.dataset.panel === 'traces') btn.classList.remove('trace-pulse');
   document.getElementById('panel-' + btn.dataset.panel).classList.add('active');
   playBeep(900, 0.02);
+  // A tab switch can move the highlighted tutorial target (a panel tab or its
+  // content) — re-glue the highlight box to its new geometry.
+  _scheduleTutorialReposition();
 }
 
 // ---------- MOBILE INFO-PANEL DRAWER ----------
@@ -3127,6 +3195,15 @@ document.addEventListener('click', (e) => {
   const wrap = document.querySelector('.nav-menu-wrap');
   if (wrap && !wrap.contains(e.target)) closeNavMenu();
 });
+
+// Two-line teaching empty state: bare line (already localized/escaped upstream)
+// plus a spoiler-safe hint that teaches the loop. Both strings route through L().
+// `mainKey` may be a pre-resolved string or a label key; `hintKey` is a label key.
+function panelEmptyHint(mainKey, hintKey) {
+  const main = (mainKey && LABELS.en[mainKey]) ? L(mainKey) : (mainKey || '');
+  return `<div class="panel-empty">${esc(main)}`
+       + `<span class="panel-empty-hint">${esc(L(hintKey))}</span></div>`;
+}
 
 function updateAllPanels(session) {
   cachedSession = session;
@@ -3325,6 +3402,14 @@ function updateKnowledgePanel(knowledge) {
     { key: 'connections', lkey: 'connections', color: '', prefix: '\u{1F517}' },
   ];
 
+  // Whole-panel teaching empty: when nothing has been learned in any section,
+  // lead with a single two-line hint that teaches the loop before the (compact)
+  // per-section "None discovered" rows.
+  const totalKnown = sections.reduce((n, sec) => n + ((k[sec.key] || []).length), 0);
+  if (totalKnown === 0) {
+    html += panelEmptyHint('empty_know', 'empty_know_hint');
+  }
+
   for (const sec of sections) {
     const items = k[sec.key] || [];
     html += `<div class="panel-section"><div class="panel-section-title">${L(sec.lkey)} (${items.length})</div>`;
@@ -3457,7 +3542,7 @@ function updateTracesPanel(traces) {
   </div>`;
 
   if (discovered.length === 0 && deepest === 0) {
-    html += `<div class="panel-empty">${esc(L('no_traces'))}</div>`;
+    html += panelEmptyHint('empty_trace', 'empty_trace_hint');
     document.getElementById('panel-traces-body').innerHTML = html;
     applyPanelSearch('traces');
     return;
@@ -3694,6 +3779,11 @@ function updateInventoryPanel(inventory) {
     </div>
     <div class="panel-section"><div class="panel-section-title">${L('items')}</div>`;
 
+  // Teaching hint above the slot grid when the pack is empty.
+  if (items.length === 0) {
+    html += `<div class="panel-empty-lead panel-empty-hint">${esc(L('empty_items_hint'))}</div>`;
+  }
+
   // Render all slots. Items are stored without a stable `slot` field, so render
   // them by position; an item's display name may be under `name` or `item`.
   const slotCount = Math.max(maxSlots, items.length);
@@ -3835,7 +3925,7 @@ function updateNetworkPanel(npcs) {
   let html = `<div class="panel-section"><div class="panel-section-title">${L('npc_tracker')} (${npcList.length})</div>`;
 
   if (npcList.length === 0) {
-    html += `<div class="panel-empty">${L('no_npcs')}</div>`;
+    html += panelEmptyHint('no_npcs', 'empty_npc_hint');
   } else {
     for (const npc of npcList) {
       const trustLevel = extractEnglishKey(npc.trust_level || npc.trust || '').toLowerCase();
@@ -3929,7 +4019,11 @@ function updateWorldPanel(worldState) {
 
   // District access
   const districts = w.district_access || [];
-  if (districts.length > 0) {
+  if (districts.length === 0) {
+    html += `<div class="panel-section"><div class="panel-section-title">${L('district_access')}</div>`
+          + panelEmptyHint('empty_area', 'empty_area_hint')
+          + `</div>`;
+  } else {
     html += `<div class="panel-section"><div class="panel-section-title">${L('district_access')}</div>`;
     for (const d of districts) {
       const statusLower = (d.status || '').toLowerCase();
@@ -3969,7 +4063,7 @@ function updateWorldPanel(worldState) {
     html += `</div>`;
   }
 
-  if (!html) html = `<div class="panel-empty">${L('world_nominal')}</div>`;
+  if (!html) html = panelEmptyHint('world_nominal', 'empty_world_hint');
   document.getElementById('panel-world').innerHTML = html;
 }
 
@@ -3982,7 +4076,7 @@ function updateLogPanel(log) {
   let html = `<div class="panel-section"><div class="panel-section-title">${L('session_log')} (${entries.length})</div>`;
 
   if (entries.length === 0) {
-    html += `<div class="panel-empty">${L('no_log')}</div>`;
+    html += panelEmptyHint('no_log', 'empty_log_hint');
   } else {
     for (let i = entries.length - 1; i >= 0; i--) {
       const entry = entries[i];

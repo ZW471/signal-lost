@@ -278,7 +278,7 @@ html, body {
 .logo-sub {
   font-family: var(--font-mono);
   font-size: 14px;
-  color: var(--text-dim);
+  color: var(--text-muted);
   margin-top: 8px;
   letter-spacing: 3px;
 }
@@ -400,7 +400,7 @@ html, body {
   text-align: center;
   background: var(--bg-input);
   border: 1px solid var(--border);
-  color: var(--text-dim);
+  color: var(--text-muted);
   cursor: pointer;
   font-family: var(--font-mono);
   letter-spacing: 1px;
@@ -416,7 +416,7 @@ html, body {
 .menu-footer {
   margin-top: 20px;
   font-size: 12px;
-  color: var(--text-dim);
+  color: var(--text-muted);
   letter-spacing: 3px;
 }
 .github-link {
@@ -506,7 +506,7 @@ html, body {
   position: absolute;
   top: 4px; right: 8px;
   font-size: 10px;
-  color: var(--text-dim);
+  color: var(--text-muted);
   font-family: var(--font-mono);
   letter-spacing: 0;
   z-index: 1;
@@ -593,7 +593,7 @@ html, body {
   display: block;
   font-family: var(--font-display);
   font-size: 11px;
-  color: var(--text-dim);
+  color: var(--text-muted);
   letter-spacing: 3px;
   margin-bottom: 6px;
 }
@@ -686,7 +686,7 @@ html, body {
 .select-desc {
   display: block;
   font-size: 11px;
-  color: var(--text-dim);
+  color: var(--text-muted);
   margin-top: 2px;
 }
 
@@ -770,7 +770,7 @@ html, body {
 
 .save-entry .save-info {
   font-size: 12px;
-  color: var(--text-dim);
+  color: var(--text-muted);
 }
 
 /* ================================================================
@@ -824,7 +824,7 @@ html, body {
   display: block;
   font-family: var(--font-display);
   font-size: 9px;
-  color: var(--text-dim);
+  color: var(--text-muted);
   letter-spacing: 2px;
 }
 
@@ -899,7 +899,7 @@ html, body {
   font-size: 11px;
   line-height: 1.35;
   letter-spacing: 0.3px;
-  color: var(--text-dim);
+  color: var(--text-muted);
 }
 
 .status-btn {
@@ -1175,7 +1175,7 @@ html, body {
   font-family: var(--font-mono);
   font-size: 0.68rem;
   letter-spacing: 1px;
-  color: var(--text-dim);
+  color: var(--text-muted);
   opacity: 0;
   transition: opacity 0.4s ease;
   user-select: none;
@@ -1202,7 +1202,7 @@ html, body {
   flex-direction: column;
   align-items: flex-start;
   gap: 6px;
-  color: var(--text-dim);
+  color: var(--text-muted);
 }
 
 .thinking-row {
@@ -1453,7 +1453,7 @@ html, body {
   font-family: var(--font-display);
   font-size: 11px;
   letter-spacing: 2px;
-  color: var(--text-dim);
+  color: var(--text-muted);
   background: transparent;
   border: none;
   border-bottom: 2px solid transparent;
@@ -1575,7 +1575,7 @@ mark.search-hl {
 
 /* "No matches" placeholder shown when a search filters everything out */
 .search-no-results {
-  color: var(--text-dim);
+  color: var(--text-muted);
   font-style: italic;
   padding: 12px 4px;
   font-size: 12.5px;
@@ -1603,7 +1603,7 @@ mark.search-hl {
 }
 
 .panel-key {
-  color: var(--text-dim);
+  color: var(--text-muted);
 }
 
 .panel-val {
@@ -1627,10 +1627,31 @@ mark.search-hl {
 }
 
 .panel-empty {
-  color: var(--text-dim);
+  color: var(--text-muted);
   font-style: italic;
   text-align: center;
   padding: 20px;
+}
+
+/* Second teaching line under an empty state: dimmer than the lead line but
+   still AA-readable (text-muted = 12.3:1 on the panel bg). Non-italic, smaller,
+   so it reads as a hint rather than the primary message. */
+.panel-empty-hint {
+  display: block;
+  margin-top: 6px;
+  font-style: normal;
+  font-size: 11px;
+  line-height: 1.4;
+  letter-spacing: 0.3px;
+  color: var(--text-muted);
+  opacity: 0.85;
+}
+
+/* Standalone teaching hint that leads a slot grid (inventory), where there is
+   no bare .panel-empty line above it. */
+.panel-empty-lead {
+  text-align: center;
+  padding: 8px 20px 14px;
 }
 
 /* ================================================================
@@ -1658,7 +1679,7 @@ mark.search-hl {
   font-family: var(--font-display);
   font-size: 10px;
   letter-spacing: 2px;
-  color: var(--text-dim);
+  color: var(--text-muted);
   flex: 0 0 auto;
 }
 .descent-track {
@@ -1734,13 +1755,13 @@ mark.search-hl {
 .trace-band-count {
   font-family: var(--font-mono);
   font-size: 11px;
-  color: var(--text-dim);
+  color: var(--text-muted);
 }
 .trace-band-lock {
   font-family: var(--font-mono);
   font-size: 11px;
   letter-spacing: 1px;
-  color: var(--text-dim);
+  color: var(--text-muted);
 }
 
 /* ---- Segmented per-band progress bar (mirrors HUD banded-gauge language) ---- */
@@ -1841,7 +1862,7 @@ mark.search-hl {
 .log-entry-turn {
   font-family: var(--font-display);
   font-size: 10px;
-  color: var(--text-dim);
+  color: var(--text-muted);
   letter-spacing: 1px;
 }
 
@@ -1924,7 +1945,7 @@ mark.search-hl {
   padding: 6px 16px;
   border: 1px solid var(--border);
   background: var(--bg-input);
-  color: var(--text-dim);
+  color: var(--text-muted);
   cursor: pointer;
   transition: all 0.2s ease;
   pointer-events: auto;
@@ -2083,7 +2104,7 @@ mark.search-hl {
   padding: 9px 14px;
   background: var(--bg-panel);
   border: 1px solid var(--border);
-  color: var(--text-dim);
+  color: var(--text-muted);
   font-family: var(--font-mono);
   font-size: 12px;
   letter-spacing: 1px;
@@ -2181,7 +2202,7 @@ mark.search-hl {
   padding: 10px 0;
   background: var(--bg-input);
   border: 1px solid var(--border);
-  color: var(--text-dim);
+  color: var(--text-muted);
   font-family: var(--font-mono);
   font-size: 12px;
   letter-spacing: 2px;
@@ -2304,7 +2325,7 @@ mark.search-hl {
   font-family: var(--font-mono);
   font-size: 10px;
   letter-spacing: 1px;
-  color: var(--text-dim);
+  color: var(--text-muted);
   background: var(--bg-panel);
   border: 1px solid var(--divider);
   border-radius: 999px;
@@ -2814,15 +2835,15 @@ mark.search-hl {
 
 .msg-tokens {
   font-size: 10px;
-  color: var(--text-dim);
-  opacity: 0.5;
+  color: var(--text-muted);
+  opacity: 0.7;
   margin-top: 4px;
   font-family: var(--font-mono);
 }
 .conv-tokens {
   font-size: 10px;
-  color: var(--text-dim);
-  opacity: 0.5;
+  color: var(--text-muted);
+  opacity: 0.7;
   margin-left: auto;
   font-family: var(--font-mono);
 }
@@ -3273,7 +3294,7 @@ mark.search-hl {
   font-family: var(--font-mono);
   font-size: 10px;
   letter-spacing: 0.5px;
-  color: var(--text-dim);
+  color: var(--text-muted);
   margin-top: 2px;
 }
 
@@ -3341,7 +3362,7 @@ mark.search-hl {
   border-left: 2px solid var(--text-dim);
 }
 .companion-msg.system .companion-msg-prefix { color: var(--text-dim); }
-.companion-msg.system .companion-msg-body { color: var(--text-dim); font-style: italic; }
+.companion-msg.system .companion-msg-body { color: var(--text-muted); font-style: italic; }
 
 .companion-msg.error {
   padding-left: 12px;
@@ -3355,7 +3376,7 @@ mark.search-hl {
   align-items: center;
   gap: 10px;
   padding: 4px 16px 8px;
-  color: var(--text-dim);
+  color: var(--text-muted);
 }
 
 .companion-thinking-text {
