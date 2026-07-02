@@ -24,7 +24,6 @@ from __future__ import annotations
 import asyncio
 import json
 import os
-import re
 import shutil
 import sys
 import threading
@@ -388,6 +387,69 @@ def _safe_name(name: str) -> str | None:
     return name
 
 
+_ORIGIN_MARKER = ".origin"
+
+
+def _resolve_new_session_dir(session_root: str, original_name: str) -> str | None:
+    """Pick a collision-free session directory for a NEW game whose display name
+    is *original_name*.
+
+    ``_safe_name`` collapses distinct display names to the same path component
+    (e.g. ``Neo!`` and ``Neo?`` → ``Neo_``). If we naively reused the sanitized
+    name we'd silently overwrite another game's save. So:
+
+    - Sanitize via ``_safe_name`` (rejecting empty / all-symbol names → None).
+    - If the sanitized dir is free, take it and record the original name.
+    - If it exists AND was created for the SAME original name, reuse it.
+    - Otherwise suffix ``-2``, ``-3``… until a free (or same-origin) slot is found.
+
+    Returns an absolute session dir path, or None if the name can't be made safe
+    or carries no alphanumeric content (empty / all-symbol → junk dir).
+    """
+    base = _safe_name(original_name)
+    if base is None:
+        return None
+    # Reject names with no alphanumeric content (e.g. "   ", "!!!") so we never
+    # create junk / all-symbol session dirs. (str.isalnum handles Unicode too, so
+    # Chinese display names pass.)
+    if not any(ch.isalnum() for ch in base):
+        return None
+
+    def _origin_of(path: str) -> str | None:
+        marker = os.path.join(path, _ORIGIN_MARKER)
+        try:
+            with open(marker, "r", encoding="utf-8") as f:
+                return f.read()
+        except OSError:
+            return None
+
+    candidate = base
+    n = 1
+    while True:
+        path = os.path.join(session_root, candidate)
+        if not os.path.exists(path):
+            return path
+        # Directory exists — reuse only if it belongs to the same display name.
+        # (Legacy dirs with no marker are treated as same-origin so we don't
+        # orphan pre-existing saves.)
+        origin = _origin_of(path)
+        if origin is None or origin == original_name:
+            return path
+        n += 1
+        candidate = f"{base}-{n}"
+
+
+def _write_origin_marker(session_dir: str, original_name: str) -> None:
+    """Record the display name a session dir was created for, so a later
+    ``_resolve_new_session_dir`` can distinguish a collision (different display
+    name sanitizing to the same path) from a legitimate reuse."""
+    try:
+        with open(os.path.join(session_dir, _ORIGIN_MARKER), "w", encoding="utf-8") as f:
+            f.write(original_name)
+    except OSError:
+        pass
+
+
 # --- Autosave (per-user) --------------------------------------------------
 AUTOSAVE_PREFIX = "autosave_"
 AUTOSAVE_INTERVAL = 5   # turns
@@ -536,7 +598,20 @@ async def websocket_endpoint(ws: WebSocket):
     try:
         while True:
             raw = await ws.receive_text()
-            msg = json.loads(raw)
+            try:
+                msg = json.loads(raw)
+            except (json.JSONDecodeError, TypeError):
+                # One malformed frame must not kill the whole connection: reply
+                # with a generic bilingual error and keep the receive loop alive
+                # (mirrors the companion channel's per-frame guard).
+                await ws.send_json({
+                    "type": "error",
+                    "message": (
+                        "Bad request — the message could not be read. / "
+                        "请求无效——无法读取该消息。"
+                    ),
+                })
+                continue
             action = msg.get("action")
 
             # -------------------- Auth: register / login --------------------
@@ -649,8 +724,19 @@ async def websocket_endpoint(ws: WebSocket):
     except WebSocketDisconnect:
         _on_disconnect(sess, ws)
     except Exception as e:
+        # Log the real error + traceback server-side only; never leak raw
+        # exception text to the browser.
+        import logging
+        import traceback
+        traceback.print_exc()
+        logging.getLogger(__name__).warning("websocket loop error: %s", e)
         try:
-            await ws.send_json({"type": "error", "message": str(e)})
+            await ws.send_json({
+                "type": "error",
+                "message": (
+                    "Something went wrong on the server. / 服务器发生了错误。"
+                ),
+            })
         except Exception:
             pass
 
@@ -674,9 +760,18 @@ async def _handle_new_game(ws: WebSocket, sess: PlayerSession, msg: dict):
     diff = config.get("difficulty", "standard")
 
     save_name = config.get("save_name", config.get("alias", "Unknown"))
-    save_name = re.sub(r"[^\w\-]", "_", save_name)
     os.makedirs(sess.session_root, exist_ok=True)
-    sess.session_dir = os.path.join(sess.session_root, save_name)
+    session_dir = _resolve_new_session_dir(sess.session_root, save_name)
+    if session_dir is None:
+        await ws.send_json({
+            "type": "error",
+            "message": (
+                "Invalid save name — please use letters or numbers. / "
+                "存档名无效——请使用字母或数字。"
+            ),
+        })
+        return
+    sess.session_dir = session_dir
 
     create_new_session(
         session_dir=sess.session_dir,
@@ -686,6 +781,9 @@ async def _handle_new_game(ws: WebSocket, sess: PlayerSession, msg: dict):
         difficulty=diff,
         language=lang,
     )
+    # create_new_session rmtree's the dir, so (re)stamp the origin marker after
+    # it so future new-game collision checks can tell this game's display name.
+    _write_origin_marker(sess.session_dir, save_name)
 
     sess.graph = _get_graph()
     sess.game_state = initial_state(sess.session_dir)
@@ -1100,6 +1198,34 @@ def _try_serve_cached(sess: PlayerSession, text: str) -> dict | None:
 # Turn execution
 # ---------------------------------------------------------------------------
 
+def _ws_connected(ws: WebSocket) -> bool:
+    """Best-effort check that *ws* is still open before we try to send on it."""
+    try:
+        from starlette.websockets import WebSocketState
+        return (ws.client_state == WebSocketState.CONNECTED
+                and ws.application_state == WebSocketState.CONNECTED)
+    except Exception:
+        # If the state enum isn't available for any reason, assume connected and
+        # let the guarded send catch a failure.
+        return True
+
+
+async def _safe_send(ws: WebSocket, payload: dict) -> bool:
+    """Send *payload* on *ws*, swallowing failures from a dead/closing socket.
+
+    Returns True if the send succeeded, False otherwise — so a dead socket can
+    never crash the turn finalizer (a raw send would bubble up into the WS loop's
+    outer handler and tear down the connection).
+    """
+    if not _ws_connected(ws):
+        return False
+    try:
+        await ws.send_json(payload)
+        return True
+    except Exception:
+        return False
+
+
 async def _finish_turn(sess: PlayerSession, ws: WebSocket, result: dict, mode: str,
                        turn_start: float) -> None:
     """Send a completed turn's result to the client and schedule follow-ups."""
@@ -1109,6 +1235,10 @@ async def _finish_turn(sess: PlayerSession, ws: WebSocket, result: dict, mode: s
     # kicked, or disconnected mid-turn), drop the result: don't write to a dead
     # socket or reactivate a torn-down scheduler / prediction for a stale session.
     if sess.ws is not ws or _sessions_by_user.get(sess.username) is not sess:
+        return
+    # A dead-but-still-registered socket (e.g. cached fast-path where the client
+    # went away between frames) must not crash the finalizer — bail before send.
+    if not _ws_connected(ws):
         return
 
     narrative = result.get("narrative", "")
@@ -1127,7 +1257,7 @@ async def _finish_turn(sess: PlayerSession, ws: WebSocket, result: dict, mode: s
     if elapsed is None:
         elapsed = round(_time.time() - turn_start, 1)
 
-    await ws.send_json({
+    if not await _safe_send(ws, {
         "type": "narrative",
         "text": narrative,
         "game_over": game_over,
@@ -1141,10 +1271,12 @@ async def _finish_turn(sess: PlayerSession, ws: WebSocket, result: dict, mode: s
             "total": turn_usage.get("total_tokens", 0),
             "cost": round(turn_usage.get("cost", 0), 6),
         } if turn_usage.get("total_tokens") else None,
-    })
+    }):
+        # Socket died on the primary send — nothing more to deliver.
+        return
 
     for d in result.get("discovery_notifications", []) or []:
-        await ws.send_json({
+        await _safe_send(ws, {
             "type": "discovery",
             "trace_id": d["trace_id"],
             "layer": d["layer"],
@@ -1153,7 +1285,7 @@ async def _finish_turn(sess: PlayerSession, ws: WebSocket, result: dict, mode: s
         })
 
     for kn in result.get("knowledge_notifications", []) or []:
-        await ws.send_json({
+        await _safe_send(ws, {
             "type": "knowledge_added",
             "entry_type": kn.get("entry_type", "fact"),
         })
@@ -1162,9 +1294,9 @@ async def _finish_turn(sess: PlayerSession, ws: WebSocket, result: dict, mode: s
     # the player sees how Integrity / NEXUS Alert / Fragment Decay moved this turn.
     for note in result.get("system_notices", []) or []:
         if note:
-            await ws.send_json({"type": "system_notice", "text": note})
+            await _safe_send(ws, {"type": "system_notice", "text": note})
 
-    await ws.send_json({
+    await _safe_send(ws, {
         "type": "session_update",
         "session": _get_session_data(sess),
     })
@@ -1179,7 +1311,7 @@ async def _finish_turn(sess: PlayerSession, ws: WebSocket, result: dict, mode: s
             pass
 
     if game_over:
-        await ws.send_json({
+        await _safe_send(ws, {
             "type": "game_over",
             "ending": ending,
             "death_cause": result.get("death_cause"),
