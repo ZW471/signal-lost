@@ -297,6 +297,12 @@ const LABELS = {
     reconnecting_inline: '// link dropped — reconnecting… your input is held',
     link_quiet: '// the link went quiet — no reply came back. Retry your last action?',
     skip_hint: '▸ skip',
+    // Accessible names for icon-only / decorative-labelled controls (wave 5b)
+    send_action: 'Send',
+    chat_log_label: 'Narration transcript',
+    bg_icon_street_runner: 'Street Runner',
+    bg_icon_corporate_exile: 'Corporate Exile',
+    bg_icon_netrunner: 'Netrunner',
     // Error-recovery UX (wave 2c)
     busy_no_confirm: "didn't confirm — try again",
     retry_last_action: '↻ Retry last action',
@@ -504,6 +510,12 @@ const LABELS = {
     reconnecting_inline: '// 链路中断 —— 正在重连…你的输入已保留',
     link_quiet: '// 链路陷入沉默 —— 没有收到回应。重试上一步操作？',
     skip_hint: '▸ 跳过',
+    // Accessible names for icon-only / decorative-labelled controls (wave 5b)
+    send_action: '发送',
+    chat_log_label: '叙事记录',
+    bg_icon_street_runner: '街头行者',
+    bg_icon_corporate_exile: '企业流亡者',
+    bg_icon_netrunner: '网行者',
     // Error-recovery UX (wave 2c)
     busy_no_confirm: '未收到确认 —— 请重试',
     retry_last_action: '↻ 重试上一动作',
@@ -647,6 +659,14 @@ function applyStaticI18n(root) {
   scope.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
     const key = el.dataset.i18nPlaceholder;
     if (key) el.placeholder = L(key);
+  });
+  // [data-i18n-aria] sets the aria-label from LABELS — for icon-only buttons and
+  // decorative-but-labelled SVGs (send, companion-send, background-picker icons,
+  // the chat log region) whose accessible name isn't visible text. Bilingual by
+  // construction; setLanguage() re-runs applyStaticI18n() so it re-localizes.
+  scope.querySelectorAll('[data-i18n-aria]').forEach(el => {
+    const key = el.dataset.i18nAria;
+    if (key) el.setAttribute('aria-label', L(key));
   });
 }
 
@@ -2704,16 +2724,82 @@ function addChatMessage(text, role = 'agent') {
 
 /** Render a SAFE markdown subset (bold, italic, inline code, bullets, line
  *  breaks). HTML is escaped first so narration can never inject markup. */
-function renderMarkdown(text) {
-  let h = String(text || '')
-    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-  // bullet lines: "- foo" / "* foo" / "• foo" -> • foo
-  h = h.replace(/^[\t ]*[-*•]\s+(.*)$/gm, '<span class="md-li">• $1</span>');
-  h = h.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>');   // **bold**
-  h = h.replace(/`([^`\n]+)`/g, '<code>$1</code>');             // `code`
-  h = h.replace(/(^|[^*\w])\*([^*\n]+)\*(?=[^*\w]|$)/g, '$1<em>$2</em>'); // *italic*
-  h = h.replace(/\n/g, '<br>');
-  return h;
+// XSS-hardened narration renderer. LLM narration is untrusted text, so we build
+// real DOM nodes (createElement + textContent) instead of assembling an HTML
+// string — no innerHTML on the narration path, so a `<script>`, `<img onerror>`
+// or any other markup in the narration can never become live DOM. The output is
+// byte-for-byte the same visual subset the old string builder produced:
+//   • "- foo" / "* foo" / "• foo" line  → <span class="md-li">• foo</span>
+//   • **bold**                          → <strong>
+//   • `code`                            → <code>
+//   • *italic*                          → <em>
+//   • newline                           → <br>
+// The whole-line bullet rule wins over inline rules (matching the old gm regex
+// that fired on the full line before the inline passes).
+const _MD_BULLET_RE = /^[\t ]*[-*•]\s+(.*)$/;
+
+/** Parse one line's inline markup (**bold** / `code` / *italic*) into DOM nodes,
+ *  appended to `parent`. Text that isn't markup lands as plain text nodes. Only
+ *  the narrow strong/em/code allowlist is ever created — never arbitrary tags. */
+function _appendInlineMarkdown(parent, line) {
+  // Single tokenizer pass so we never rescan already-emitted markup (the old
+  // sequential .replace()s could re-match, but the net allowlist is identical).
+  // Order matters: `code` and **bold** bind before single-* italic.
+  const re = /\*\*([^*\n]+)\*\*|`([^`\n]+)`|(^|[^*\w])\*([^*\n]+)\*(?=[^*\w]|$)/g;
+  let last = 0, m;
+  while ((m = re.exec(line)) !== null) {
+    if (m[1] !== undefined) {
+      // **bold** — recurse so `code`/*italic* nested inside still render as
+      // formatting (the old sequential passes matched inside emitted <strong>).
+      if (m.index > last) parent.appendChild(document.createTextNode(line.slice(last, m.index)));
+      const strong = document.createElement('strong');
+      _appendInlineMarkdown(strong, m[1]);
+      parent.appendChild(strong);
+      last = re.lastIndex;
+    } else if (m[2] !== undefined) {
+      // `code` — literal contents (textContent only). Code spans never carry
+      // sub-formatting; this is the one intentional divergence from the old
+      // string builder (which incorrectly let *italic* leak inside a code span).
+      if (m.index > last) parent.appendChild(document.createTextNode(line.slice(last, m.index)));
+      const code = document.createElement('code');
+      code.textContent = m[2];
+      parent.appendChild(code);
+      last = re.lastIndex;
+    } else if (m[4] !== undefined) {
+      // *italic* — group 3 is the required leading boundary char, kept verbatim.
+      // Recurse so `code` nested inside an emphasis still renders.
+      const lead = m[3] || '';
+      const emStart = m.index + lead.length;
+      if (emStart > last) parent.appendChild(document.createTextNode(line.slice(last, emStart)));
+      const em = document.createElement('em');
+      _appendInlineMarkdown(em, m[4]);
+      parent.appendChild(em);
+      last = re.lastIndex;
+    }
+  }
+  if (last < line.length) parent.appendChild(document.createTextNode(line.slice(last)));
+}
+
+/** Render the safe markdown subset of `text` into `container` as DOM nodes,
+ *  replacing whatever it held. No innerHTML — untrusted narration stays inert. */
+function renderMarkdownInto(container, text) {
+  container.textContent = '';
+  const src = String(text || '');
+  const lines = src.split('\n');
+  lines.forEach((line, idx) => {
+    if (idx > 0) container.appendChild(document.createElement('br'));
+    const bullet = _MD_BULLET_RE.exec(line);
+    if (bullet) {
+      // Whole-line bullet: "• " + inline-parsed remainder, inside .md-li.
+      const span = document.createElement('span');
+      span.className = 'md-li';
+      span.appendChild(document.createTextNode('• '));
+      _appendInlineMarkdown(span, bullet[1]);
+      container.appendChild(span);
+    } else {
+      _appendInlineMarkdown(container, line);
+    }
+  });
 }
 
 // The narrative is fully interactive the instant it hits the DOM — the
@@ -2773,7 +2859,15 @@ function addTypingMessage(text, role = 'agent', usage = null, elapsedSeconds = n
     contentEl.classList.remove('typing');
     msg.classList.remove('skippable');
     // Re-render with the safe markdown subset so **bold**/lists/`code` render.
-    contentEl.innerHTML = renderMarkdown(text);
+    // DOM-node build (no innerHTML) — untrusted narration can never inject markup.
+    renderMarkdownInto(contentEl, text);
+    // Screen-reader announce: write the COMPLETE message text into the polite,
+    // visually-hidden live region exactly once (finalize is guarded by `done`, so
+    // it runs once per message). This is why chatMessages itself carries no
+    // aria-live — the typewriter's per-char mutations would otherwise be announced
+    // as a fragment storm. aria-atomic on the region reads the whole text cleanly.
+    const _live = document.getElementById('chatLiveRegion');
+    if (_live) _live.textContent = text;
     // Build info line: time always shown, tokens optional
     const infoParts = [];
     if (elapsedSeconds != null) infoParts.push(`${elapsedSeconds}s`);
@@ -4467,8 +4561,7 @@ function updateDistrictPanel(location) {
     if (imgEntry) {
       const cap = currentLang === 'zh' && imgEntry.name_zh ? imgEntry.name_zh : imgEntry.name;
       html += `<div class="location-image-frame">
-        <img class="location-image" src="${LOCATION_IMG_BASE}${esc(imgEntry.file)}" alt="${esc(cap)}" loading="lazy"
-             onerror="this.closest('.location-image-frame').style.display='none'">
+        <img class="location-image" src="${LOCATION_IMG_BASE}${esc(imgEntry.file)}" alt="${esc(cap)}" loading="lazy">
         <div class="location-image-caption">${esc(cap)}</div>
       </div>`;
     }
@@ -4504,7 +4597,16 @@ function updateDistrictPanel(location) {
     }
     html += `</div>`;
   }
-  document.getElementById('panel-district').innerHTML = html;
+  const districtEl = document.getElementById('panel-district');
+  districtEl.innerHTML = html;
+  // Image fallback wired via addEventListener (no inline onerror attribute): if
+  // the location art 404s, hide its frame. Untrusted src can't run script here.
+  districtEl.querySelectorAll('.location-image').forEach(img => {
+    img.addEventListener('error', function () {
+      const frame = this.closest('.location-image-frame');
+      if (frame) frame.style.display = 'none';
+    });
+  });
 }
 
 // ---------- INVENTORY PANEL (matches TUI InventoryPanel — 6 slots, icons) ----------
@@ -4636,8 +4738,10 @@ function npcAvatarId(npc) {
 function npcAvatarImg(npc) {
   const id = npcAvatarId(npc);
   const fb = `${AVATAR_BASE}${AVATAR_ERR}.png`;
+  // Carry the fallback src on a data-attr; the error handler is bound via
+  // addEventListener after the panel HTML is inserted (no inline onerror attr).
   return `<img class="npc-avatar" src="${AVATAR_BASE}${id}.png" alt="" loading="lazy" `
-       + `onerror="this.onerror=null;this.src='${fb}'">`;
+       + `data-fallback="${esc(fb)}">`;
 }
 
 // Collapse duplicate NPC entries (the engine occasionally promotes the same
@@ -4754,7 +4858,17 @@ function updateNetworkPanel(npcs) {
     }
   }
   html += `</div>`;
-  document.getElementById('panel-network').innerHTML = html;
+  const netEl = document.getElementById('panel-network');
+  netEl.innerHTML = html;
+  // Avatar fallback wired via addEventListener (no inline onerror attribute): on
+  // a missing avatar PNG, swap to the fallback once. Detach after firing so a
+  // broken fallback can't loop (mirrors the old onerror=null guard).
+  netEl.querySelectorAll('.npc-avatar[data-fallback]').forEach(img => {
+    img.addEventListener('error', function onAvatarError() {
+      this.removeEventListener('error', onAvatarError);
+      this.src = this.dataset.fallback;
+    });
+  });
 }
 
 function extractEnglishKey(val) {

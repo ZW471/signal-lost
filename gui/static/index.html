@@ -5,10 +5,23 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, viewport-fit=cover">
   <title>SIGNAL LOST</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='4' fill='%230a0a0f'/><text x='16' y='22' text-anchor='middle' font-size='18' fill='%2300ff88'>S</text></svg>">
-  <link rel="stylesheet" href="/static/style.css?v=w5a">
+  <link rel="stylesheet" href="/static/style.css?v=w5b">
   <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;400;500;600;700&family=Noto+Sans+SC:wght@300;400;500;700&display=swap" rel="stylesheet">
 </head>
 <body>
+  <!-- Shared SVG symbols. The neural-link brain icon is used in two places (the
+       inline chat button and the floating companion FAB); defining it once as a
+       <symbol> and referencing it via <use> removes the duplicated markup. -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+    <symbol id="icon-neural" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+      <!-- Two hemispheres form the brain; a central fold + a synapse node give it the neural-implant feel -->
+      <path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z"/>
+      <path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z"/>
+      <path d="M15 13a4.5 4.5 0 0 1-3-4 4.5 4.5 0 0 1-3 4"/>
+      <circle cx="12" cy="6.6" r="0.85" fill="currentColor" stroke="none"/>
+    </symbol>
+  </svg>
+
   <!-- Scanline overlay -->
   <div class="scanlines"></div>
 
@@ -99,17 +112,37 @@
           <label class="cyber-label" data-i18n="label_background">BACKGROUND</label>
           <div class="cyber-select-group">
             <button class="cyber-select active" data-bg="street_runner" onclick="selectBg(this)">
-              <span class="select-icon">⚡</span>
+              <span class="select-icon">
+                <!-- Street Runner → lightning bolt (themed, replaces ⚡) -->
+                <svg viewBox="0 0 24 24" role="img" data-i18n-aria="bg_icon_street_runner" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M13 2 4 14h6l-1 8 9-12h-6l1-8Z"/>
+                </svg>
+              </span>
               <span class="select-name">Street Runner</span>
               <span class="select-desc">街头行者</span>
             </button>
             <button class="cyber-select" data-bg="corporate_exile" onclick="selectBg(this)">
-              <span class="select-icon">🏢</span>
+              <span class="select-icon">
+                <!-- Corporate Exile → corporate tower (themed, replaces 🏢) -->
+                <svg viewBox="0 0 24 24" role="img" data-i18n-aria="bg_icon_corporate_exile" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M5 21V5a1 1 0 0 1 1-1h8a1 1 0 0 1 1 1v16"/>
+                  <path d="M15 9h3a1 1 0 0 1 1 1v11"/>
+                  <path d="M3 21h18"/>
+                  <path d="M8 8h0M11 8h0M8 12h0M11 12h0M8 16h0M11 16h0"/>
+                </svg>
+              </span>
               <span class="select-name">Corporate Exile</span>
               <span class="select-desc">企业流亡者</span>
             </button>
             <button class="cyber-select" data-bg="netrunner" onclick="selectBg(this)">
-              <span class="select-icon">🔌</span>
+              <span class="select-icon">
+                <!-- Netrunner → jack/plug (themed, replaces 🔌) -->
+                <svg viewBox="0 0 24 24" role="img" data-i18n-aria="bg_icon_netrunner" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M9 2v4M15 2v4"/>
+                  <path d="M7 6h10v4a5 5 0 0 1-10 0V6Z"/>
+                  <path d="M12 15v4a2 2 0 0 0 2 2h3"/>
+                </svg>
+              </span>
               <span class="select-name">Netrunner</span>
               <span class="select-desc">网行者</span>
             </button>
@@ -218,7 +251,15 @@
     <div class="game-layout" id="gameLayout">
       <!-- Chat panel (left) -->
       <div class="chat-panel" id="chatPanel">
-        <div class="chat-messages" id="chatMessages"></div>
+        <!-- role="log" marks the narration transcript as a live log region. We do
+             NOT put aria-live here: the typewriter mutates each message char-by-
+             char (textContent), which a polite live region would announce as a
+             storm of partial fragments. Instead the visually-hidden #chatLiveRegion
+             below is the single polite announcer — finalize() writes each message's
+             COMPLETE text into it exactly once, so screen readers hear the final
+             narration once per message with no double-announce. -->
+        <div class="chat-messages" id="chatMessages" role="log" data-i18n-aria="chat_log_label"></div>
+        <div id="chatLiveRegion" class="sr-only" aria-live="polite" aria-atomic="true"></div>
         <div class="thinking-indicator" id="thinkingIndicator" style="display:none">
           <div class="thinking-row">
             <div class="thinking-dots">
@@ -233,12 +274,7 @@
         <div class="verb-chips" id="verbChips" aria-hidden="true"></div>
         <div class="chat-input-container">
           <button class="chat-neural-btn" id="chatNeuralBtn" onclick="toggleCompanion()" title="Neural Link" aria-label="Open neural link">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z"/>
-              <path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z"/>
-              <path d="M15 13a4.5 4.5 0 0 1-3-4 4.5 4.5 0 0 1-3 4"/>
-              <circle cx="12" cy="6.6" r="0.85" fill="currentColor" stroke="none"/>
-            </svg>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-neural"/></svg>
           </button>
           <div class="input-prefix">▶</div>
           <div class="chat-input-wrap">
@@ -246,7 +282,7 @@
             <div class="input-ghost" id="inputGhost" aria-hidden="true"></div>
             <input type="text" class="chat-input" id="chatInput" placeholder="What do you do?" data-i18n-placeholder="chat_placeholder" autocomplete="off" onkeydown="if(event.key==='Enter')sendMessage()">
           </div>
-          <button class="send-btn" onclick="sendMessage()">⟩</button>
+          <button class="send-btn" onclick="sendMessage()" data-i18n-aria="send_action" title="Send">⟩</button>
         </div>
       </div>
 
@@ -332,13 +368,7 @@
     <!-- A private inner channel to the neural implant. Read-only: nothing said
          here touches the world, and the transcript is never saved. -->
     <button class="companion-fab" id="companionFab" onclick="toggleCompanion()" title="Neural Link" aria-label="Open neural link">
-      <svg class="companion-fab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <!-- Two hemispheres form the brain; a central fold + a synapse node give it the neural-implant feel -->
-        <path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z"/>
-        <path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z"/>
-        <path d="M15 13a4.5 4.5 0 0 1-3-4 4.5 4.5 0 0 1-3 4"/>
-        <circle cx="12" cy="6.6" r="0.85" fill="currentColor" stroke="none"/>
-      </svg>
+      <svg class="companion-fab-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-neural"/></svg>
       <span class="companion-fab-pulse"></span>
     </button>
 
@@ -361,7 +391,7 @@
       <div class="companion-input-row">
         <div class="companion-input-prefix">▶</div>
         <input type="text" class="companion-input" id="companionInput" placeholder="Ask, or think out loud…" autocomplete="off" maxlength="500" onkeydown="if(event.key==='Enter')sendCompanionMessage()">
-        <button class="companion-send" id="companionSend" onclick="sendCompanionMessage()" title="Send">⟩</button>
+        <button class="companion-send" id="companionSend" onclick="sendCompanionMessage()" data-i18n-aria="send_action" title="Send">⟩</button>
       </div>
     </div>
   </div>
@@ -637,7 +667,7 @@
        lane so the two no longer collide. -->
   <div id="toastStack" class="toast-stack" aria-live="polite" aria-relevant="additions"></div>
 
-  <script src="/static/music.js?v=w5a"></script>
-  <script src="/static/app.js?v=w5a"></script>
+  <script src="/static/music.js?v=w5b"></script>
+  <script src="/static/app.js?v=w5b"></script>
 </body>
 </html>
