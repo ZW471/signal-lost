@@ -1984,10 +1984,10 @@ _AMBIENT_REASON_FALLBACK: dict[tuple[str, str], dict] = {
         "zh": "针对你的搜查稍稍缓和"},
     ("integrity", "up"): {
         "en": "your neural link steadies",
-        "zh": "你的神经连接趋于稳定"},
+        "zh": "你的神经链路趋于稳定"},
     ("integrity", "down"): {
         "en": "the strain frays your neural link",
-        "zh": "压力侵蚀着你的神经连接"},
+        "zh": "压力侵蚀着你的神经链路"},
     ("decay", "up"): {
         "en": "the Signal frays a little further",
         "zh": "信号进一步衰减"},
@@ -2738,7 +2738,7 @@ async def _run_turn(sess: PlayerSession, ws: WebSocket, player_input: str | None
         # language and keep the input usable so they can retry the turn.
         lang = _session_language(sess.session_dir) if sess and sess.session_dir else "en"
         in_fiction = (
-            "信号一阵刺啦——干扰扭曲了连接。深吸一口气，再试一次。"
+            "信号一阵刺啦——干扰扭曲了链路。深吸一口气，再试一次。"
             if lang == "zh" else
             "The Signal stutters — interference scrambles the link for a moment. "
             "Steady yourself and try that again."
