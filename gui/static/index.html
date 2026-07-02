@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, viewport-fit=cover">
   <title>SIGNAL LOST</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='4' fill='%230a0a0f'/><text x='16' y='22' text-anchor='middle' font-size='18' fill='%2300ff88'>S</text></svg>">
-  <link rel="stylesheet" href="/static/style.css?v=w4fix">
+  <link rel="stylesheet" href="/static/style.css?v=w5a">
   <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;400;500;600;700&family=Noto+Sans+SC:wght@300;400;500;700&display=swap" rel="stylesheet">
 </head>
 <body>
@@ -263,20 +263,25 @@
           <span class="info-panels-drawer-title" data-i18n="data_panels">// DATA PANELS</span>
           <button class="info-panels-close" onclick="closeInfoPanels()" title="Close panels" aria-label="Close info panels">✕</button>
         </div>
+        <!-- WAVE 5a IA regroup: 9 equal-weight tabs → 7 grouped tabs. Hot tabs
+             (KNOW/TRACE/NPC/WORLD) lead; ID+INV fold into CHARACTER (two
+             sections); LOC folds into WORLD (sections); LOG/CONV stay. Each tab's
+             data-panel still names an existing .panel container so every
+             updateXPanel keeps rendering into a live element, and the old
+             per-panel containers (#panel-identity / #panel-inventory /
+             #panel-district) are preserved nested inside the merged panels so
+             their renderers, the tutorial targets and 1–9 shortcuts all resolve. -->
         <div class="panel-tabs">
-          <button class="panel-tab active" data-panel="identity" onclick="switchPanel(this)" data-i18n="tab_identity">ID</button>
-          <button class="panel-tab" data-panel="knowledge" onclick="switchPanel(this)" data-i18n="tab_knowledge">KNOW</button>
+          <button class="panel-tab active" data-panel="knowledge" onclick="switchPanel(this)" data-i18n="tab_knowledge">KNOW</button>
           <button class="panel-tab" data-panel="traces" onclick="switchPanel(this)" data-i18n="tab_traces">TRACE</button>
-          <button class="panel-tab" data-panel="district" onclick="switchPanel(this)" data-i18n="tab_district">LOC</button>
-          <button class="panel-tab" data-panel="inventory" onclick="switchPanel(this)" data-i18n="tab_inventory">INV</button>
           <button class="panel-tab" data-panel="network" onclick="switchPanel(this)" data-i18n="tab_network">NPC</button>
           <button class="panel-tab" data-panel="world" onclick="switchPanel(this)" data-i18n="tab_world">WORLD</button>
+          <button class="panel-tab" data-panel="character" onclick="switchPanel(this)" data-i18n="tab_character">CHAR</button>
           <button class="panel-tab" data-panel="log" onclick="switchPanel(this)" data-i18n="tab_log">LOG</button>
           <button class="panel-tab" data-panel="conversation" onclick="switchPanel(this)" data-i18n="tab_conversation">CONV</button>
         </div>
         <div class="panel-content" id="panelContent">
-          <div class="panel active" id="panel-identity"></div>
-          <div class="panel has-search" id="panel-knowledge">
+          <div class="panel active has-search" id="panel-knowledge">
             <div class="panel-search">
               <span class="panel-search-icon">⌕</span>
               <input type="text" class="panel-search-input" id="search-knowledge" placeholder="Search…" data-i18n-placeholder="search_placeholder" autocomplete="off" oninput="onPanelSearch('knowledge')">
@@ -292,10 +297,17 @@
             </div>
             <div class="panel-body" id="panel-traces-body"></div>
           </div>
-          <div class="panel" id="panel-district"></div>
-          <div class="panel" id="panel-inventory"></div>
           <div class="panel" id="panel-network"></div>
-          <div class="panel" id="panel-world"></div>
+          <!-- WORLD tab = world state + district (LOC) sections in one scroll. -->
+          <div class="panel" id="panel-world">
+            <div id="panel-world-state"></div>
+            <div id="panel-district"></div>
+          </div>
+          <!-- CHARACTER tab = identity (ID) + inventory (INV) sections. -->
+          <div class="panel" id="panel-character">
+            <div id="panel-identity"></div>
+            <div id="panel-inventory"></div>
+          </div>
           <div class="panel has-search" id="panel-log">
             <div class="panel-search">
               <span class="panel-search-icon">⌕</span>
@@ -625,7 +637,7 @@
        lane so the two no longer collide. -->
   <div id="toastStack" class="toast-stack" aria-live="polite" aria-relevant="additions"></div>
 
-  <script src="/static/music.js?v=w4fix"></script>
-  <script src="/static/app.js?v=w4fix"></script>
+  <script src="/static/music.js?v=w5a"></script>
+  <script src="/static/app.js?v=w5a"></script>
 </body>
 </html>

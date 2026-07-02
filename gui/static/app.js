@@ -26,6 +26,35 @@ const TRUST_COLORS = {
   cautious_ally: 'cyan', trusted: 'green', devoted: 'green',
 };
 
+// ----------------------------------------------------------------
+// NPC TRUST BANDS (wave 5a NPC-panel redesign)
+// The assignment's 5-step meter (hostile / wary / neutral / cautious_ally /
+// ally) mapped onto the engine's canonical 6 trust levels from
+// engine/game_data.py (hostile · suspicious · neutral · cautious_ally ·
+// trusted · devoted). We render 5 banded segments (banded-gauge visual language
+// from the wave-1 HUD) and light up the reached band. suspicious→wary and
+// trusted/devoted→ally collapse the 6 engine levels into the 5 display bands.
+//   step: 1-based band index (which segment lights). color: CSS var for the fill.
+// The VISIBLE label is always the localized trust from the payload (via
+// localizeData('trust_level', …)) — these are only the gauge geometry/colour.
+// ----------------------------------------------------------------
+const TRUST_BANDS = {
+  hostile:       { step: 1, color: 'var(--red)' },
+  suspicious:    { step: 2, color: 'var(--orange)' },
+  wary:          { step: 2, color: 'var(--orange)' },  // display alias for suspicious
+  neutral:       { step: 3, color: 'var(--yellow)' },
+  cautious_ally: { step: 4, color: 'var(--cyan)' },
+  trusted:       { step: 5, color: 'var(--green)' },
+  devoted:       { step: 5, color: 'var(--green-bright)' },
+  ally:          { step: 5, color: 'var(--green)' },   // display alias for trusted
+};
+const TRUST_BAND_COUNT = 5;
+// Ordinal rank for client-side trust-change diffing (higher = more trust).
+const TRUST_RANK = {
+  hostile: 0, suspicious: 1, wary: 1, neutral: 2,
+  cautious_ally: 3, trusted: 4, ally: 4, devoted: 5,
+};
+
 const TAG_COLORS = {
   movement: 'cyan', dialogue: 'yellow', discovery: 'green',
   danger: 'red', signal: 'magenta', system: '', trade: 'yellow',
@@ -118,6 +147,7 @@ const LABELS = {
     tab_identity: 'ID', tab_knowledge: 'KNOW', tab_traces: 'TRACE',
     tab_district: 'LOC', tab_inventory: 'INV', tab_network: 'NPC',
     tab_world: 'WORLD', tab_log: 'LOG', tab_conversation: 'CONV',
+    tab_character: 'CHAR',
     // Identity
     identity: 'IDENTITY', name: 'Name', alias: 'Alias', background: 'Background',
     status: 'STATUS', integrity: 'Integrity', credits: 'Credits',
@@ -214,6 +244,12 @@ const LABELS = {
     load_title: '// LOAD SAVED SESSION',
     resume_title: '// RESUME SESSION',
     no_saves: 'No saved games found.',
+    // Save cards (wave 5a save-management UX)
+    save_autosave: 'AUTOSAVE',
+    save_manual: 'SAVE',
+    save_delete: 'Delete',
+    save_delete_soon: 'Delete is coming soon',
+    save_captured: 'captured',
     // Save dialog
     save_title: '// SAVE SESSION', label_save_name: 'SAVE NAME',
     btn_save: 'SAVE', btn_cancel: 'CANCEL',
@@ -334,6 +370,7 @@ const LABELS = {
     tab_identity: '身份', tab_knowledge: '知识', tab_traces: '痕迹',
     tab_district: '区域', tab_inventory: '物品', tab_network: '人脉',
     tab_world: '世界', tab_log: '日志', tab_conversation: '对话',
+    tab_character: '角色',
     identity: '身份', name: '姓名', alias: '化名', background: '背景',
     status: '状态', integrity: '完整性', credits: '信用点',
     neural_implant: '神经植入体', disguise: '伪装', turn: '回合', time: '时间',
@@ -414,6 +451,12 @@ const LABELS = {
     load_title: '// 载入存档',
     resume_title: '// 继续游戏',
     no_saves: '未找到存档。',
+    // Save cards (wave 5a save-management UX)
+    save_autosave: '自动存档',
+    save_manual: '存档',
+    save_delete: '删除',
+    save_delete_soon: '删除功能即将推出',
+    save_captured: '记录于',
     // Save dialog
     save_title: '// 保存游戏', label_save_name: '存档名称',
     btn_save: '保存', btn_cancel: '取消',
@@ -1421,7 +1464,9 @@ function doLogout() {
   cachedSession = null;
   clearChat();
   resetCompanion();
-  ['identity', 'district', 'inventory', 'network', 'world'].forEach(p => {
+  // WAVE 5a: clear the merged/renamed panel sub-containers too (identity +
+  // inventory live inside CHARACTER; world-state + district live inside WORLD).
+  ['identity', 'inventory', 'district', 'world-state', 'network'].forEach(p => {
     const el = document.getElementById('panel-' + p); if (el) el.innerHTML = '';
   });
   ['knowledge', 'traces', 'log', 'conversation'].forEach(p => {
@@ -2223,22 +2268,81 @@ function showNewGame() {
   switchScreen('newGameScreen'); playBeep(1000, 0.04);
 }
 
+// ----------------------------------------------------------------------------
+// SAVE / SESSION METADATA CARDS (wave 5a save-management UX)
+// The server's _list_saves / list_active_sessions send only { name,
+// player_name, turn } (+ alias/background for sessions). No mtime, day, or
+// location is in the payload today, so we render ONLY what exists: name, player,
+// turn, and an AUTOSAVE / SAVE class badge (autosaves are recognizable by the
+// `autosave_` name prefix the server writes). Autosave names embed a capture
+// clock (autosave_T030_181127 → 18:11:27), so we surface that as a "captured
+// HH:MM" hint — the closest to a timestamp the payload allows. True relative
+// timestamps ("2h ago") and day/location need the server to expose mtime/day/
+// location on each entry (see summary: needed server changes).
+// ----------------------------------------------------------------------------
+
+const _AUTOSAVE_RE = /^autosave_(?:T(\d+))?_?(\d{2})(\d{2})(\d{2})/i;
+
+/** Parse an autosave name into { turn?, time } if it matches the server's
+ *  autosave naming (autosave_T<turn>_<HHMMSS>), else null. */
+function _parseAutosaveName(name) {
+  const m = _AUTOSAVE_RE.exec(String(name || ''));
+  if (!m) return null;
+  return { turn: m[1] ? parseInt(m[1], 10) : null, time: `${m[2]}:${m[3]}` };
+}
+
+/** Build one metadata card. `onOpen` is the click handler; `deletable` shows the
+ *  (currently disabled) delete affordance for real saves. Returns an element. */
+function _renderSaveCard(entry, onOpen, deletable) {
+  const isAuto = /^autosave_/i.test(entry.name || '');
+  const auto = isAuto ? _parseAutosaveName(entry.name) : null;
+  const el = document.createElement('div');
+  el.className = 'save-entry save-card' + (isAuto ? ' is-autosave' : '');
+
+  const badge = `<span class="save-badge ${isAuto ? 'autosave' : 'manual'}">`
+    + `${esc(L(isAuto ? 'save_autosave' : 'save_manual'))}</span>`;
+
+  // Meta line: player + turn, then (autosave only) the embedded capture clock.
+  const turnVal = (entry.turn != null && entry.turn !== '') ? entry.turn : '?';
+  let meta = `${esc(entry.player_name || '')} · ${esc(L('turn'))} ${esc(String(turnVal))}`;
+  if (auto && auto.time) meta += ` · ${esc(L('save_captured'))} ${esc(auto.time)}`;
+
+  // Delete button: the delete_save WS action isn't in this wave's server scope,
+  // so render it DISABLED with a bilingual coming-soon tooltip (see summary).
+  const deleteBtn = deletable
+    ? `<button class="save-delete-btn" disabled aria-disabled="true" `
+      + `title="${esc(L('save_delete_soon'))}" aria-label="${esc(L('save_delete'))}">✕</button>`
+    : '';
+
+  el.innerHTML = `
+    <div class="save-card-main">
+      <div class="save-card-head">${badge}<span class="save-name">${esc(entry.name)}</span></div>
+      <div class="save-info">${meta}</div>
+    </div>
+    <div class="save-card-actions">
+      ${deleteBtn}
+      <span class="save-open" aria-hidden="true">⟩</span>
+    </div>`;
+
+  // Open on card click, but never when the (future) delete control is hit.
+  el.addEventListener('click', (e) => {
+    if (e.target.closest('.save-delete-btn')) return;
+    onOpen();
+  });
+  return el;
+}
+
 function showLoadGame() {
   if (!requireAuth('loadgame')) return;
   const list = document.getElementById('savesList');
+  const loadTitle = document.querySelector('#loadGameScreen .config-title');
+  if (loadTitle) loadTitle.textContent = L('load_title');
   list.innerHTML = '';
   if (cachedSaves.length === 0) {
     list.innerHTML = `<div class="panel-empty">${L('no_saves')}</div>`;
   } else {
     cachedSaves.forEach(save => {
-      const el = document.createElement('div');
-      el.className = 'save-entry';
-      const turnLabel = L('turn');
-      el.innerHTML = `<div><div class="save-name">${esc(save.name)}</div>
-        <div class="save-info">${esc(save.player_name)} — ${turnLabel} ${save.turn}</div></div>
-        <div style="color:var(--cyan)">⟩</div>`;
-      el.onclick = () => loadGame(save.name);
-      list.appendChild(el);
+      list.appendChild(_renderSaveCard(save, () => loadGame(save.name), true));
     });
   }
   switchScreen('loadGameScreen');
@@ -2292,14 +2396,8 @@ function showResumeSessionPicker() {
   const loadTitle = document.querySelector('#loadGameScreen .config-title');
   if (loadTitle) loadTitle.textContent = L('resume_title');
   cachedSessions.forEach(sess => {
-    const el = document.createElement('div');
-    el.className = 'save-entry';
-    const turnLabel = L('turn');
-    el.innerHTML = `<div><div class="save-name">${esc(sess.name)}</div>
-      <div class="save-info">${esc(sess.player_name)} — ${turnLabel} ${sess.turn}</div></div>
-      <div style="color:var(--cyan)">⟩</div>`;
-    el.onclick = () => resumeGame(sess.name);
-    list.appendChild(el);
+    // Active sessions aren't deletable from here — resume-only cards.
+    list.appendChild(_renderSaveCard(sess, () => resumeGame(sess.name), false));
   });
   switchScreen('loadGameScreen');
 }
@@ -3486,13 +3584,11 @@ const TUTORIAL_STEPS = {
   en: [
     { target: '#chatPanel', text: 'This is the <b>Command Terminal</b>. Type actions here to interact with the world — talk to NPCs, investigate locations, hack systems, or anything you can imagine.', pos: 'right' },
     { target: '.info-panels', text: 'This is the <b>Info Panel</b>. It tracks everything about your character and the world. Use the tabs above to switch views.', pos: 'left' },
-    { target: '[data-panel="identity"]', text: '<b>ID</b> — Your identity card. Shows your name, background, integrity (health), credits, and status effects.', pos: 'below', activateTab: 'identity' },
     { target: '[data-panel="knowledge"]', text: '<b>KNOW</b> — Everything you\'ve learned: facts, rumors, evidence, theories, and connections between them.', pos: 'below', activateTab: 'knowledge' },
     { target: '[data-panel="traces"]', text: '<b>TRACE</b> — Fragments of truth you\'ve uncovered. The deeper you dig, the more you\'ll find.', pos: 'below', activateTab: 'traces' },
-    { target: '[data-panel="district"]', text: '<b>LOC</b> — Your current location, danger level, signal strength, nearby exits, and points of interest.', pos: 'below', activateTab: 'district' },
-    { target: '[data-panel="inventory"]', text: '<b>INV</b> — Items you\'re carrying. Limited slots, so choose wisely.', pos: 'below', activateTab: 'inventory' },
-    { target: '[data-panel="network"]', text: '<b>NPC</b> — People you\'ve met. Track their faction, trust level, location, and quests.', pos: 'below', activateTab: 'network' },
-    { target: '[data-panel="world"]', text: '<b>WORLD</b> — Global state: NEXUS alert level, fragment decay, and district access status.', pos: 'below', activateTab: 'world' },
+    { target: '[data-panel="network"]', text: '<b>NPC</b> — People you\'ve met. Track their faction, trust level, and last-known location.', pos: 'below', activateTab: 'network' },
+    { target: '[data-panel="world"]', text: '<b>WORLD</b> — The city around you: NEXUS alert, signal coherence, district access — and your current location, exits, and points of interest.', pos: 'below', activateTab: 'world' },
+    { target: '[data-panel="character"]', text: '<b>CHARACTER</b> — You: name, background, integrity (health), credits, status effects — and the gear in your limited inventory slots.', pos: 'below', activateTab: 'character' },
     { target: '[data-panel="log"]', text: '<b>LOG</b> — Session log of key events: discoveries, encounters, and world changes. A quick recap of what happened.', pos: 'below', activateTab: 'log' },
     { target: '[data-panel="conversation"]', text: '<b>CONV</b> — Full conversation history. Scroll back through everything you and the system have said.', pos: 'below', activateTab: 'conversation' },
     { target: '#chatNeuralBtn, #companionFab', text: '<b>NEURAL LINK</b> — Tap your implant anytime to ask questions or just think out loud. It only knows what you already know — no spoilers — and nothing you say here touches the world or gets saved. It won\'t interrupt the game.', pos: 'above' },
@@ -3501,13 +3597,11 @@ const TUTORIAL_STEPS = {
   zh: [
     { target: '#chatPanel', text: '这是<b>命令终端</b>。在这里输入行动来与世界互动——与NPC对话、调查地点、入侵系统，或任何你能想象的事。', pos: 'right' },
     { target: '.info-panels', text: '这是<b>信息面板</b>。它追踪你角色和世界的一切信息。使用上方的标签切换视图。', pos: 'left' },
-    { target: '[data-panel="identity"]', text: '<b>身份</b> — 你的身份卡。显示姓名、背景、完整性（生命值）、信用点和状态效果。', pos: 'below', activateTab: 'identity' },
     { target: '[data-panel="knowledge"]', text: '<b>知识</b> — 你所了解的一切：事实、传闻、证据、推论以及它们之间的关联。', pos: 'below', activateTab: 'knowledge' },
     { target: '[data-panel="traces"]', text: '<b>痕迹</b> — 你发现的真相碎片。挖得越深，发现越多。', pos: 'below', activateTab: 'traces' },
-    { target: '[data-panel="district"]', text: '<b>区域</b> — 当前位置、危险等级、信号强度、附近出口和兴趣点。', pos: 'below', activateTab: 'district' },
-    { target: '[data-panel="inventory"]', text: '<b>物品</b> — 你携带的物品。槽位有限，请明智选择。', pos: 'below', activateTab: 'inventory' },
-    { target: '[data-panel="network"]', text: '<b>人脉</b> — 你遇到的人。追踪他们的阵营、信任度、位置和任务。', pos: 'below', activateTab: 'network' },
-    { target: '[data-panel="world"]', text: '<b>世界</b> — 全局状态：连结警报等级、碎片衰变和区域通行状况。', pos: 'below', activateTab: 'world' },
+    { target: '[data-panel="network"]', text: '<b>人脉</b> — 你遇到的人。追踪他们的阵营、信任度和最后已知位置。', pos: 'below', activateTab: 'network' },
+    { target: '[data-panel="world"]', text: '<b>世界</b> — 你周遭的城市：连结警报、信号一致性、区域通行——以及你的当前位置、出口和兴趣点。', pos: 'below', activateTab: 'world' },
+    { target: '[data-panel="character"]', text: '<b>角色</b> — 关于你：姓名、背景、完整性（生命值）、信用点、状态效果——以及有限物品槽中的装备。', pos: 'below', activateTab: 'character' },
     { target: '[data-panel="log"]', text: '<b>日志</b> — 关键事件记录：发现、遭遇和世界变化。快速回顾发生的一切。', pos: 'below', activateTab: 'log' },
     { target: '[data-panel="conversation"]', text: '<b>对话</b> — 完整对话记录。回顾你和系统之间的所有交流。', pos: 'below', activateTab: 'conversation' },
     { target: '#chatNeuralBtn, #companionFab', text: '<b>神经链接</b> — 随时点击植入体提问，或只是自言自语。它只知道你已知的事——不会剧透——你在这里说的一切都不会影响世界，也不会被保存。它也不会打断游戏进程。', pos: 'above' },
@@ -3526,9 +3620,10 @@ function startTutorial() {
 function endTutorial() {
   tutorialActive = false;
   document.getElementById('tutorialOverlay').style.display = 'none';
-  // Restore ID tab
-  const idTab = document.querySelector('[data-panel="identity"]');
-  if (idTab) switchPanel(idTab);
+  // Restore the default tab. WAVE 5a folded ID into CHARACTER, so land on the
+  // CHARACTER tab (falls back to the first tab if the layout changes again).
+  const homeTab = document.querySelector('[data-panel="character"]') || document.querySelector('.panel-tab');
+  if (homeTab) switchPanel(homeTab);
   playBeep(600, 0.03);
   _revealFirstScene();
 }
@@ -3820,8 +3915,33 @@ function panelEmptyHint(mainKey, hintKey) {
        + `<span class="panel-empty-hint">${esc(L(hintKey))}</span></div>`;
 }
 
+// WAVE 5a NPC panel: state_delta carries no trust, so we diff trust client-side
+// against the previous turn's snapshot. Capture the PRIOR npcs map here — before
+// cachedSession is overwritten — keyed by normalized name → trust rank, so
+// updateNetworkPanel can pulse the meters that moved. First paint has no prior
+// snapshot (null) → no spurious pulses.
+let _prevNpcTrust = null;
+function _snapshotNpcTrust(npcs) {
+  const list = (npcs && npcs.npcs) || [];
+  const map = {};
+  for (const npc of list) {
+    if (!npc || typeof npc !== 'object') continue;
+    const key = _avNorm(npc.name || npc.id || '').replace(/\s+/g, '');
+    if (!key) continue;
+    const lvl = extractEnglishKey(npc.trust_level || npc.trust || '').toLowerCase();
+    const rank = TRUST_RANK[lvl];
+    if (rank != null) map[key] = rank;  // last non-empty wins (mirrors dedup)
+  }
+  return map;
+}
+
 function updateAllPanels(session) {
+  // Snapshot the OUTGOING npc trust before cachedSession is replaced, so the NPC
+  // panel can diff this turn's trust against last turn's and pulse changes.
+  const priorNpcTrust = (cachedSession && cachedSession !== session)
+    ? _snapshotNpcTrust(cachedSession.npcs) : _prevNpcTrust;
   cachedSession = session;
+  _prevNpcTrust = priorNpcTrust;
   updateStatusBar(session);
   updateIdentityPanel(session.player);
   updateKnowledgePanel(session.knowledge);
@@ -4543,9 +4663,27 @@ function _dedupNpcList(list) {
   return [...seen.values()];
 }
 
+/** Render the 5-band trust gauge (banded-gauge visual language from the wave-1
+ *  HUD): 5 segments, the reached band + everything below it lit in the band
+ *  colour. `changed` adds a subtle pulse. The visible trust LABEL is rendered by
+ *  the caller from the payload; this is gauge geometry only. */
+function _npcTrustGauge(trustLevel, changed) {
+  const band = TRUST_BANDS[trustLevel];
+  const step = band ? band.step : 0;               // 0 = unknown level -> all dim
+  const color = band ? band.color : 'var(--text-dim)';
+  let segs = '';
+  for (let i = 1; i <= TRUST_BAND_COUNT; i++) {
+    const on = step > 0 && i <= step;
+    segs += `<span class="npc-trust-seg${on ? ' on' : ''}"${on ? ` style="--band-color:${color}"` : ''}></span>`;
+  }
+  return `<div class="npc-trust-gauge${changed ? ' trust-changed' : ''}" role="img" `
+       + `aria-label="${esc(L('trust'))}">${segs}</div>`;
+}
+
 function updateNetworkPanel(npcs) {
   const n = npcs || {};
   const npcList = _dedupNpcList(n.npcs || []);
+  const prevTrust = _prevNpcTrust;   // snapshot captured before cachedSession swap
 
   let html = `<div class="panel-section"><div class="panel-section-title">${L('npc_tracker')} (${npcList.length})</div>`;
 
@@ -4555,30 +4693,60 @@ function updateNetworkPanel(npcs) {
     for (const npc of npcList) {
       const trustLevel = extractEnglishKey(npc.trust_level || npc.trust || '').toLowerCase();
       const trustCls = TRUST_COLORS[trustLevel] || '';
-      const factionKey = extractEnglishKey(npc.faction || '').toLowerCase();
+      // Spoiler gating: mask the faction until it's actually known. The payload
+      // sends 'unknown' (or omits faction) while gated, and identity_revealed
+      // (when present) governs whether the player has pinned the person down. We
+      // render EXACTLY what the server sends -- masked stays masked, no guessing.
+      const factionRaw = npc.faction || '';
+      const factionKey = extractEnglishKey(factionRaw).toLowerCase();
+      const factionMasked = !factionRaw || factionKey === 'unknown'
+        || npc.identity_revealed === false;
       const factionCls = FACTION_COLORS[factionKey] || '';
       const trustDisplay = localizeData('trust_level', trustLevel);
 
-      const trustValues = { hostile: 1, suspicious: 3, neutral: 5, cautious_ally: 7, trusted: 9, devoted: 11 };
-      const trustVal = trustValues[trustLevel] || 5;
-      let trustBar = '';
-      for (let i = 0; i < 12; i++) {
-        trustBar += i < trustVal ? '\u2588' : '\u2591';
-      }
+      // "Met" vs merely "mentioned": the engine marks a real encounter with
+      // `encountered:true` and/or a `last_interaction_turn`. An entry carrying
+      // only a first_seen mention (no interaction) is a lead, not a contact -- it
+      // gets the dimmer ghost card. This is the only met/mentioned signal the
+      // payload distinguishes; absent both, treat it as met (legacy saves).
+      const isGhost = npc.encountered !== true
+        && npc.last_interaction_turn == null
+        && npc.first_seen_turn != null;
 
-      // Short identity the player has formed — may be inaccurate, gated to what
+      // Trust-change pulse: diff this turn's rank against last turn's snapshot.
+      const npcKey = _avNorm(npc.name || npc.id || '').replace(/\s+/g, '');
+      const nowRank = TRUST_RANK[trustLevel];
+      const prevRank = prevTrust ? prevTrust[npcKey] : undefined;
+      const trustChanged = !prefersReducedMotion && prevRank != null
+        && nowRank != null && nowRank !== prevRank;
+
+      // Short identity the player has formed -- may be inaccurate, gated to what
       // they've learned. Falls back to occupation/role for legacy saves that
       // predate the LLM-maintained `description` field.
       const npcIdentity = npc.description || npc.occupation || npc.role || '';
+      // Last-known location: the payload uses `last_seen` or `location` (both
+      // location strings); render whichever is present.
+      const lastLoc = npc.last_seen || npc.location || '';
 
-      html += `<div class="panel-list-item npc-entry">
+      // Faction badge: a real chip once known, a sealed "???" chip while masked
+      // (spoiler-safe -- never leaks the gated faction).
+      const factionBadge = factionMasked
+        ? `<span class="npc-faction-badge masked" title="${esc(L('faction'))}">???</span>`
+        : `<span class="npc-faction-badge ${factionCls}">${esc(factionRaw)}</span>`;
+
+      html += `<div class="panel-list-item npc-card${isGhost ? ' npc-ghost' : ''}">
         ${npcAvatarImg(npc)}
         <div class="npc-info">
-          <div><span class="cyan" style="font-weight:bold">${esc(npc.name || npc.id || 'Unknown')}</span></div>
+          <div class="npc-card-head">
+            <span class="npc-name cyan">${esc(npc.name || npc.id || 'Unknown')}</span>
+            ${factionBadge}
+          </div>
           ${npcIdentity ? `<div class="npc-identity">${esc(npcIdentity)}</div>` : ''}
-          ${npc.faction ? `<div class="dim">${L('faction')}: <span class="${factionCls}">${esc(npc.faction)}</span></div>` : ''}
-          <div>${L('trust')}: <span class="${trustCls}">${trustBar} ${esc(trustDisplay)}</span></div>
-          ${npc.location_last_seen ? `<div class="dim">${L('last_seen')}: ${esc(npc.location_last_seen)}</div>` : ''}
+          <div class="npc-trust-row">
+            ${_npcTrustGauge(trustLevel, trustChanged)}
+            <span class="npc-trust-label ${trustCls}">${esc(trustDisplay)}</span>
+          </div>
+          ${lastLoc ? `<div class="npc-lastloc dim">◉ ${esc(lastLoc)}</div>` : ''}
           ${npc.quest_status && npc.quest_status !== 'none' ? `<div class="dim">${L('quest')}: ${esc(Array.isArray(npc.quest_status) ? npc.quest_status.join(', ') : npc.quest_status)}</div>` : ''}
           ${npc.notes ? `<div class="dim">${esc(npc.notes)}</div>` : ''}
         </div>
@@ -4691,7 +4859,10 @@ function updateWorldPanel(worldState) {
   }
 
   if (!html) html = panelEmptyHint('world_nominal', 'empty_world_hint');
-  document.getElementById('panel-world').innerHTML = html;
+  // WAVE 5a: WORLD tab now hosts world-state (this) + a nested LOC/district
+  // section rendered separately by updateDistrictPanel. Write only into the
+  // world-state sub-container so the district block below it is preserved.
+  (document.getElementById('panel-world-state') || document.getElementById('panel-world')).innerHTML = html;
   // The innerHTML rewrite recreated the (hidden) reason hosts — refill them from
   // the standing meter-why store so a mid-turn repaint keeps the cause visible.
   _applyMeterReasons();
@@ -5022,7 +5193,9 @@ function _topDialog() {
 // bindings that already exist — it introduces none.
 // ================================================================
 const _SHORTCUT_ROWS = [
-  { keys: ['1', '–', '9'], label: 'shortcut_panels' },
+  // WAVE 5a: 7 grouped tabs now, so the panel-switch range is 1–7 (the handler
+  // still maps number→nth tab positionally via querySelectorAll('.panel-tab')).
+  { keys: ['1', '–', '7'], label: 'shortcut_panels' },
   { keys: ['t'], label: 'shortcut_focus_input' },
   { keys: ['↑', '↓'], label: 'shortcut_history' },
   { keys: ['Tab'], label: 'shortcut_complete' },
