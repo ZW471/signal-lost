@@ -1,9 +1,9 @@
 # Signal Lost — `fable-improvement` Campaign Report
 
 **Branch:** `fable-improvement` (branched from `main` @ `75fdc9e`)
-**Span:** 28 commits, 6 review-gated waves
-**Diff vs `main`:** 12 files changed, +6230 / −976 lines
-**Test status at close:** smoke 7/7, regression 17/17, good-ending reachability all-pass, `node --check gui/static/app.js` clean
+**Span:** 39 commits, 9 review-gated waves
+**Diff vs `main`:** 17 files changed, +8479 / −1055 lines
+**Test status at close:** smoke 7/7, regression 25/25, good-ending reachability all-pass, `node --check gui/static/app.js` clean, `import gui.server` clean
 
 This report is for the maintainer. It records what the campaign set out to do, what each wave shipped, the outcomes that were measured, the full list of bugs fixed, the known gaps that remain open, and how to run and test the result. No claims here are unmeasured; validation figures are cited to the artifact that produced them.
 
@@ -63,6 +63,22 @@ Each wave shipped feature commits followed by a `Wave N review fixes` commit (an
 ### Wave 6 — Reachability find + concurrency integration
 - `a67ee89` Menu RESUME button: expose the previously-**unreachable** resume path.
 - `4c53014` Wave 6 integration fixes (three cross-wave concurrency/lifecycle defects — see §4).
+
+### Wave 7 — Save management, backlog close-out
+- `47efb80` Rate-limit the implant image bilingually; give ambient meter moves a diegetic cause; add act-on-evidence trace unlocks (closes §5 items 2–4 from the wave-6 backlog).
+- `926042d` Save management: implement the `delete_save` WS action; expose save `mtime`/day/location; F2 ambient-decrement reasons (closes §5 item 1).
+- `558e9c8` Wave 7 review fixes.
+
+### Wave 8 — Resume starvation, disconnect leak, meta-progression
+- `380ac38` Fix resume/turn starvation behind the world-sim lock; player-turn priority on the account lock.
+- `5a17830` Server: per-account endings-discovered history + district-map data shape.
+- `3e65541` Frontend: endings gallery, unlocked-district constellation map, resume skeleton.
+- `229f1e4` Wave 8 review fixes (disconnect-cleanup leak + orphan-CLI reaper).
+
+### Wave 9 — Copy, code-health, QA
+- `d57e098` Bilingual copy pass (terminology coherence, tone, punctuation; `?v=` w8a→w9a).
+- `2abcf03` Code-health sweep (dead LABELS keys, dead JS/CSS/imports).
+- `a92c428` QA fixes (unknown-WS-action bilingual error ack).
 
 ---
 
@@ -130,20 +146,45 @@ Fixed across the earlier waves and their review gates:
 - **Cancelled-turn context leak** (`e22f928`): the rejected `HumanMessage` append on a pre-commit abort is now reverted so the rejected input no longer leaks into the next turn's LLM context (covers play and resume/blocked-input paths).
 - **Double-announce / typewriter fragment storm** (`e22f928`): `#chatMessages` uses a non-live `role="region"` landmark; a single visually-hidden `aria-live="polite"` mirror (`#chatLiveRegion`) is the only announcer.
 
-The internal review gates (`Wave N review fixes`) collectively closed a **28-item bug audit** across the six waves; the items above are the load-bearing ones. See the individual review-fix commit messages for the full per-wave list.
+### 4.6 Waves 8–9 (`558e9c8..HEAD`)
+
+**Resume/turn starvation behind the world-sim lock — root cause + player-priority locks (`380ac38`).** Live incident (`u18`, codex bypass): a resume delivered no narrative for 8+ minutes — no phase frames, no error, just silence. Root cause chain: Wave 6 made the turn lock **account-wide** and handed *the same lock* to `WorldSimScheduler`; a background sim tick that fired around the resume grabbed the lock first and held it through its own CLI LLM call (codex: up to 3×300s), while the resume turn queued behind it invisibly — phase frames are only emitted once the turn body already holds the lock, so the queued resume was mute. Fix — player-visible turns now take **priority** on the account lock:
+- Player turns / resume / load / new-game / cached-action clicks register in a per-account `_player_waiting` counter for their acquire+hold.
+- The scheduler gets a `_BackgroundSimLock` facade instead of the raw lock: it refuses to start a tick while a player turn is pending, try-acquires with a 0.25s timeout (contended → skip, the loop reschedules), and backs off if a player turn arrives mid-acquire.
+- A player turn that still finds the lock held (a tick already inside its LLM call cannot be preempted) immediately emits a `world` phase + bilingual "background simulation in progress" system notice instead of waiting in silence.
+- Prediction `_make_base` acquire is bounded (5s) so background speculation can never pin an executor thread behind a slow holder.
+- Verified: resume now runs the same phase-emitting path as a normal turn (the mid-turn frame reader is spawned for resume turns too); pinned by a stub-lock regression test ("Player turns take priority over world-sim on the account lock").
+
+**Disconnect-cleanup leak — session + scheduler survived an ordinary close (`229f1e4`).** On a plain client disconnect, a socket close racing a server send is swallowed inside `_safe_send`, leaving starlette's `application_state` = DISCONNECTED; the endpoint's next `receive_text()` then raised a bare `RuntimeError` (not `WebSocketDisconnect`), which fell into the generic error branch and **skipped `_on_disconnect()`** — leaking the `PlayerSession` registration (forcing a spurious `session_conflict` on reconnect) and the `WorldSimScheduler` thread. Fix: the WS loop now routes a `RuntimeError` on a no-longer-connected socket through `_on_disconnect()`; a `RuntimeError` on a live socket still hits the generic bilingual error path (extracted to `_report_ws_loop_error`). Companion fix in the same commit: orphaned `codex exec` / `claude -p` children survived server kill because `_run_cli_pg` starts them in their own session (`start_new_session`), so shutdown signals never reached them — added `tests/scripts/cli_process_registry.py` (every live CLI child registers on Popen, `kill_all()` SIGKILLs the remaining process groups on the FastAPI shutdown hook, with an `atexit` fallback for non-server embedders).
+
+**Endings gallery — meta-progression (`5a17830` server, `3e65541` client).** Server: each reached ending is persisted to `session/<uid>/endings_discovered.json`, once per distinct id (first-reach wins), atomic temp+`os.replace` in an executor thread, best-effort so it never breaks the `game_over` path. The `status` payload (and the `game_over` frame) gained `endings_discovered:[{id,name,name_zh,turn}]` resolved against `game_data.ENDINGS` for **reached designed endings only**, plus `endings_total`. The generic "death" failure state is stored but never occupies a named slot; no unreached ending id/name is ever shipped. Client: an ENDINGS menu entry opens a 3×3 grid — reached slots show the localized name + reached-on/turn with a depth-tinted glow, every other slot is a sealed `▓ ???` drawn from the count alone. On `game_over`, a newly-discovered ending shows a `◈ NEW ENDING RECORDED` line on the overlay. Spoiler-safety and corrupt-file self-heal are pinned by four new regression tests.
+
+**District constellation map (`5a17830` data, `3e65541` client).** No district adjacency/topology exists in engine data, so **no `district_map` field was fabricated** (that would leak invented topology) — instead the existing client-visible shape (`world_state.district_access` = unlocked `{name,name_zh,status,notes}`; sealed districts stay behind the hidden `_district_registry`, stripped by `_filter_hidden`) was documented and pinned by a regression test. The WORLD tab renders a compact SVG map of **unlocked districts only**, on a deterministic id-hash-seeded radial layout (stable across renders), current district pulse-ringed; clicking a non-current node prefills the composer with a bilingual travel phrase (never auto-sends). Absent/empty `district_access` leaves the rest of the WORLD tab untouched.
+
+**Code-health sweep (`2abcf03`).** Zero-behavior-change dead-code removal: 11 never-read `LABELS` keys (EN+ZH parity preserved at 304 each), `countDiscoveredTraces()` (no call sites), provably-dead CSS selectors (`.trust-*` superseded by `.npc-trust-*`, orphaned `.npc-entry` hover rules, etc.), and an unused `SETTINGS_DIR` import in `server.py`.
+
+**Bilingual copy pass (`d57e098`).** Terminology coherence + tone + punctuation over all user-facing copy (`app.js` LABELS + `server.py` strings), **values only, keys unchanged**: unified 中文 NEXUS to the Latin brand everywhere (the old 连结 renderings collided with the connection/link vocabulary); unified the neural-link channel-state term to 链路 (feature name 神经链接 preserved); dropped corporate 请 from imperative/terse strings to hold the in-world terminal voice; normalized chrome ellipsis to `…`. `?v=` bumped w8a→w9a.
+
+**QA fix (`a92c428`).** An unknown authed WS action now gets a bilingual error ack instead of silence — the game-action if/elif chain ended at `refresh` with no trailing `else`, so a well-formed frame with an unrecognized action fell off the end and the client hung waiting for a reply. Added a final `else` sending `{"type":"error","message":"Unknown action. / 未知操作。"}`; the loop continues as before.
+
+**Final test counts (Wave 9 close).** smoke **7/7**, regression **25/25**, `node --check gui/static/app.js` clean, `import gui.server` clean. (Regression grew from 17 → 25 across Waves 8–9: +4 endings/district-access fixtures in `5a17830`, +1 player-priority-lock fixture in `380ac38`, plus the Wave-7 trace/meter fixtures.)
+
+The internal review gates (`Wave N review fixes`) collectively closed the running bug audit across all nine waves; the items above are the load-bearing ones. See the individual review-fix commit messages for the full per-wave list.
 
 ---
 
 ## 5. Known gaps / backlog
 
-Carried forward, not addressed by this branch:
+**Closed since Wave 6:** items 1–4 below were the wave-6 open gaps; Wave 7 (`47efb80`, `926042d`) implemented `delete_save` + save `mtime`/day/location (item 1), attached diegetic causes to ambient meter decrements (item 2), rate-limited the implant image and added act-on-evidence trace unlocks (items 3–4). Item 6's map half shipped in Wave 8 (`3e65541`, unlocked-district constellation). They are retained here as the record of what was outstanding at the wave-6 close and what remains.
 
-1. **Save deletion is unimplemented (coming-soon stub).** The `delete_save` WS action is out of the wave-5 server scope. The frontend renders the delete button **disabled** with a bilingual coming-soon tooltip (`save_delete_soon` in `LABELS`; see `app.js` ~2388). The `save_deleted` client frame is reserved for whenever the parallel save-management track lands the server action. **Also:** `_list_saves` currently strips `mtime` before sending, so save cards can't show true relative timestamps ("2h ago") or richer metadata — expose `mtime` (+ day/location if available) to enable it.
-2. **Ambient meter decreases still ship without a cause.** Metric (b) is 100% EN / 86% 中文 only because passive/ambient decrements (a settle-down −1 alert with no player action) have nothing to attribute. Next step per the validation doc: attach a short default cause to ambient decrements ("the district's attention drifts elsewhere" / "热度稍稍散去") so no meter move is ever mute. The `game_data.py` "C5a" hook for a deterministic `ALERT_INCREASES` nudge on recurring investigative triggers is also still open.
-3. **"Implant/植入" is the lone over-used image.** Rain/neon are effectively solved, but implant runs 0.55–0.75/turn (it's the character's own body). It isn't named in the rate-limited-image clause. Next step: add it to the same "at most once every few turns" rule, and consider feeding the previous turn's opening image back to the resolver so it can actively avoid a repeat.
-4. **Trace cadence is keyword-luck and front-loaded.** Trace gain is 11/6/2/1 (EN); most discovery lands in the first 10 turns. The substring-keyword checker still false-fires early (`TRACE-L3-07`'s bare "level/深层"). Next steps: tighten the over-broad keyword lists (require `TRACE-L3-07` to co-occur with "sector 7 / lab / 实验室"); give the mid/late game a second, non-keyword discovery source (e.g. acting on verified evidence unlocks a gated trace).
+Still carried forward:
+
+1. ~~**Save deletion is unimplemented (coming-soon stub).**~~ *Closed in Wave 7 (`926042d`): `delete_save` WS action implemented; `_list_saves` now exposes `mtime` (+ day/location) so save cards show true relative timestamps.*
+2. ~~**Ambient meter decreases ship without a cause.**~~ *Closed in Wave 7 (`47efb80`): ambient decrements now carry a short default diegetic cause so no meter move is mute. The deterministic `ALERT_INCREASES` nudge on recurring investigative triggers landed in the same commit.*
+3. ~~**"Implant/植入" is the lone over-used image.**~~ *Closed in Wave 7 (`47efb80`): implant added to the "at most once every few turns" rate-limited-image clause.*
+4. **Trace cadence is keyword-luck and front-loaded.** *Partially closed in Wave 7 (`47efb80`): act-on-evidence unlocks add a non-keyword mid/late discovery source, and the over-broad `TRACE-L3-07` list now requires co-occurrence with sector-7/lab terms. Residual: the substring-keyword checker is still the primary channel and front-loads gain in the first ~10 turns.*
 5. **Streaming narrative** — narration is delivered per-turn as a completed block with a client-side typewriter, not token-streamed from the model. A true streaming path is a known stretch item, not implemented.
-6. **Map / codex panels** — no world-map or codex/lore browser panel; noted as a stretch, out of scope this branch.
+6. **Codex panel** — no codex/lore browser panel; noted as a stretch, out of scope this branch. (The world-**map** half shipped in Wave 8 as the unlocked-district constellation; a full topology/adjacency map is still out of scope, since no district adjacency exists in engine data.)
 
 ---
 
@@ -159,15 +200,17 @@ uv run tests/scripts/play_headless.py             # headless, for agentic testin
 
 # Tests — the docs-only change in this campaign's final commit must keep these green
 uv run tests/scenarios/smoke_test.py              # 7 tests, no LLM
-uv run tests/scenarios/regression.py              # 17 tests, no LLM (ending-correctness fixtures)
+uv run tests/scenarios/regression.py              # 25 tests, no LLM (ending-correctness + priority-lock + endings/district fixtures)
 uv run tests/scenarios/good_ending_reachability.py # no LLM
 uv run tests/scenarios/full_playthrough.py --turns 20  # needs a configured provider
 
 # After any gui/static/ edit:
 node --check gui/static/app.js
+# After any gui/server.py or engine/ edit:
+uv run python -c "import gui.server"
 ```
 
-Frontend cache-busting: every `gui/static/` asset URL in `index.html` carries `?v=<tag>`; all three (`style.css`, `music.js`, `app.js`) bump together on a frontend edit. Current tag: **`w6fix`**.
+Frontend cache-busting: every `gui/static/` asset URL in `index.html` carries `?v=<tag>`; all three (`style.css`, `music.js`, `app.js`) bump together on a frontend edit. Current tag: **`w9a`**.
 
 Provider config lives in `settings/provider.json`; OAuth CLI backends (`claude-code`, `codex`) use the single-call bypass, every API provider (incl. `openrouter`) runs the full 11-node LangGraph pipeline and must support tool calling.
 
@@ -176,18 +219,23 @@ Provider config lives in `settings/provider.json`; OAuth CLI backends (`claude-c
 ## 7. Files touched (vs `main`)
 
 ```
+CLAUDE.md                              41      OpenRouter/CLI-bypass provider notes
 engine/claude_code_engine.py           42
-engine/game_data.py                   354      endings/consent, traces, meter hooks
+engine/game_data.py                   517      endings/consent, traces, meter hooks, act-on-evidence unlocks
 engine/prompts.py                      13      anti-repetition + meter-causality + director-note directives
 engine/tools.py                       215      meter reason fields, tool wiring
-gui/server.py                         999      WS frames, cancel, account-wide locks, robustness
-gui/static/app.js                    3162      HUD, panels, i18n, managers, cancel/phase, XSS-hardened render
-gui/static/index.html                 452      7-tab IA, data-i18n, RESUME button, ?v= bumps
+gui/server.py                        1599      WS frames, cancel, priority account locks, disconnect cleanup, endings/district data, CLI reaper
+gui/static/app.js                    3653      HUD, panels, i18n, managers, cancel/phase, XSS-hardened render, endings gallery, district map
+gui/static/index.html                 508      7-tab IA, data-i18n, RESUME + ENDINGS entries, ?v= bumps
 gui/static/music.js                    84      unified SFX bus
-gui/static/style.css                 1632      HUD, gauges, dialogs, responsive
+gui/static/style.css                 1842      HUD, gauges, dialogs, responsive, gallery/map
+logs/fable_improvement_report.md      193      this report
 tests/scenarios/full_playthrough.py    36      transient-error retry classifier
-tests/scenarios/regression.py         209      ending-correctness + L3-reach fixtures
+tests/scenarios/regression.py         676      ending-correctness + L3-reach + priority-lock + endings/district fixtures
+tests/scripts/claude_llm.py            14      CLI process registration
+tests/scripts/cli_process_registry.py  79      orphan-CLI reaper
+tests/scripts/codex_llm.py             14      CLI process registration
 tests/scripts/play_headless_agent.py    8
 ```
 
-Total: 12 files, +6230 / −976.
+Total: 17 files, +8479 / −1055.
