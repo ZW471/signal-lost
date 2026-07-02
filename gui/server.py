@@ -488,7 +488,15 @@ def _meter_snapshot_from_data(data: dict) -> dict:
 
 
 def _list_saves(saves_root: str) -> list[dict]:
-    """List save games under *saves_root*, newest-first by mtime."""
+    """List save games under *saves_root*, newest-first by mtime.
+
+    Each entry carries ``mtime`` (epoch seconds) so the client can render a
+    relative timestamp ("2h ago"). ``day``/``location`` are added when cheaply
+    readable from the save's already-open player.json / a single location.json
+    read — never a full multi-file parse. All extras are best-effort: a missing
+    or malformed file just omits that field (defensive dict.get everywhere) so a
+    partial save still lists.
+    """
     saves = []
     if os.path.isdir(saves_root):
         for name in os.listdir(saves_root):
@@ -497,15 +505,27 @@ def _list_saves(saves_root: str) -> list[dict]:
                 player = _read_json(os.path.join(save_path, "player.json"))
                 player_file = os.path.join(save_path, "player.json")
                 mtime = os.path.getmtime(player_file) if os.path.isfile(player_file) else os.path.getmtime(save_path)
-                saves.append({
+                entry = {
                     "name": name,
                     "player_name": player.get("name", "Unknown"),
                     "turn": player.get("turn", "?"),
                     "mtime": mtime,
-                })
+                }
+                # In-fiction time-of-day period (player.json.time) is already in
+                # hand — surface it as "day" without an extra read.
+                day = player.get("time")
+                if day:
+                    entry["day"] = day
+                # One extra cheap read for a human-readable place ("area · district").
+                # Skipped silently if location.json is absent/unparseable.
+                loc = _read_json(os.path.join(save_path, "location.json"))
+                area = loc.get("area")
+                district = loc.get("district")
+                place = " · ".join(p for p in (area, district) if p)
+                if place:
+                    entry["location"] = place
+                saves.append(entry)
     saves.sort(key=lambda s: s["mtime"], reverse=True)
-    for s in saves:
-        del s["mtime"]
     return saves
 
 
@@ -899,6 +919,9 @@ async def websocket_endpoint(ws: WebSocket):
                 except Exception as e:
                     await ws.send_json({"type": "error", "message": f"Save failed: {e}"})
 
+            elif action == "delete_save":
+                await _handle_delete_save(ws, sess, msg)
+
             elif action == "cancel_turn":
                 # Mid-turn cancels are consumed by the turn's concurrent reader
                 # (_read_frames_during_turn) — this receive loop is suspended
@@ -1099,6 +1122,79 @@ async def _handle_load_game(ws: WebSocket, sess: PlayerSession, msg: dict):
 
     await _send_game_started(sess, ws, mode="resume")
     await _run_turn(sess, ws, mode="resume")
+
+
+async def _handle_delete_save(ws: WebSocket, sess: PlayerSession, msg: dict) -> None:
+    """Delete a save directory under the player's own ``saves/<uid>/`` namespace.
+
+    Hardened against path traversal and self-deletion:
+    * ``_safe_name`` collapses the client name to a single path component (no
+      ``..`` / separators), then we re-verify the resolved target is contained
+      inside ``sess.saves_root`` (belt-and-suspenders against symlink/edge cases).
+    * We REFUSE to delete a save whose resolved path is the player's ACTIVE
+      session directory (compared via ``os.path.realpath``), so a player can't
+      nuke the game they're currently in from under the running turn loop.
+
+    Replies ``{type:'save_deleted', save_name, saves:[...]}`` with a freshly
+    listed saves array; all errors are bilingual EN/中文.
+    """
+    save_name = _safe_name(msg.get("save_name", ""))
+    if not save_name:
+        await ws.send_json({
+            "type": "error",
+            "message": (
+                "Invalid save name. / 存档名无效。"
+            ),
+        })
+        return
+
+    saves_root = sess.saves_root
+    save_path = os.path.join(saves_root, save_name)
+
+    # Resolve real paths so a traversal / symlink can't escape saves_root.
+    real_root = os.path.realpath(saves_root)
+    real_save = os.path.realpath(save_path)
+    contained = (real_save == real_root  # never (root itself) but guard anyway
+                 or real_save.startswith(real_root + os.sep))
+    if not contained or not os.path.isdir(real_save):
+        await ws.send_json({
+            "type": "error",
+            "message": (
+                f"Save not found: {save_name} / 未找到存档：{save_name}"
+            ),
+        })
+        return
+
+    # Refuse to delete the currently-active session dir (compare resolved paths).
+    if sess.session_dir and os.path.realpath(sess.session_dir) == real_save:
+        await ws.send_json({
+            "type": "error",
+            "message": (
+                "Can't delete the game you're currently playing. / "
+                "无法删除你正在进行的游戏存档。"
+            ),
+        })
+        return
+
+    try:
+        await asyncio.to_thread(shutil.rmtree, real_save)
+    except Exception:
+        import logging
+        logging.getLogger(__name__).warning("delete_save failed for %r", save_name)
+        await ws.send_json({
+            "type": "error",
+            "message": (
+                "Delete failed — try again. / 删除失败——请重试。"
+            ),
+        })
+        return
+
+    saves = await asyncio.to_thread(_list_saves, saves_root)
+    await ws.send_json({
+        "type": "save_deleted",
+        "save_name": save_name,
+        "saves": saves,
+    })
 
 
 async def _try_autoresume(ws: WebSocket, sess: PlayerSession, msg: dict) -> bool:
@@ -1542,6 +1638,84 @@ async def _send_game_started(sess: PlayerSession, ws: WebSocket, mode: str = "ne
     await ws.send_json({"type": "game_started", "session": data, "mode": mode})
 
 
+# F2 — ambient meter-change reasons. When a meter MOVES this turn but the
+# resolver volunteered no in-world cause, the meter still changed for a reason;
+# surfacing "(rose|fell)" with no "why" reads as a bug to the player. So we
+# attach a generic AMBIENT default, keyed by (meter, direction).
+#
+# The design track is adding ambient variants to game_data's cause labels. We
+# read those defensively (getattr / dict.get with fallbacks) so this code works
+# whether or not their commit has landed: if game_data exposes an ambient label
+# set we prefer it, otherwise we fall back to the hardcoded bilingual defaults
+# below. Never a spoiler — these name only the meter and its direction, nothing
+# undiscovered.
+_AMBIENT_REASON_FALLBACK: dict[tuple[str, str], dict] = {
+    ("alert", "up"): {
+        "en": "the city's watch grows warier",
+        "zh": "城市的监控愈发警觉"},
+    ("alert", "down"): {
+        "en": "the heat around you cools a little",
+        "zh": "针对你的搜查稍稍缓和"},
+    ("integrity", "up"): {
+        "en": "your neural link steadies",
+        "zh": "你的神经连接趋于稳定"},
+    ("integrity", "down"): {
+        "en": "the strain frays your neural link",
+        "zh": "压力侵蚀着你的神经连接"},
+    ("decay", "up"): {
+        "en": "the Signal frays a little further",
+        "zh": "信号进一步衰减"},
+    ("decay", "down"): {
+        "en": "the Signal settles for now",
+        "zh": "信号暂时稳定下来"},
+}
+
+
+def _ambient_reason(meter: str, direction: str) -> dict | None:
+    """Return an ``{en, zh}`` ambient default for *meter* moving *direction*.
+
+    Reads game_data's ambient cause labels if the design track has added them
+    (tried under several plausible names), else falls back to the hardcoded map.
+    Fully defensive: any import/shape surprise degrades to the fallback (or None
+    if even that is missing), never raising into the turn finalizer."""
+    try:
+        from engine import game_data as _gd
+    except Exception:
+        _gd = None
+
+    if _gd is not None:
+        # The design track hasn't fixed a name yet; probe the plausible ones and
+        # accept the first that yields a bilingual {en|zh} dict for this key.
+        for attr in ("AMBIENT_CAUSE_LABELS", "AMBIENT_METER_REASONS",
+                     "METER_AMBIENT_LABELS", "AMBIENT_REASONS"):
+            table = getattr(_gd, attr, None)
+            if not isinstance(table, dict):
+                continue
+            # Accept whatever shape the track settles on, tried in order:
+            #   flat tuple key {(meter, dir): {...}}
+            #   flat string key {"meter_dir": {...}}
+            #   nested         {meter: {dir: {...}}}
+            cand = table.get((meter, direction)) or table.get(f"{meter}_{direction}")
+            if not isinstance(cand, dict):
+                nested = table.get(meter)
+                if isinstance(nested, dict):
+                    cand = nested.get(direction)
+            if isinstance(cand, dict) and (cand.get("en") or cand.get("zh")):
+                return {"en": cand.get("en") or cand.get("zh"),
+                        "zh": cand.get("zh") or cand.get("en")}
+        # Some tracks may fold ambient variants into the existing alert table
+        # under a reserved key (e.g. ALERT_CAUSE_LABELS["ambient_up"]).
+        if meter == "alert":
+            alert_tbl = getattr(_gd, "ALERT_CAUSE_LABELS", None)
+            if isinstance(alert_tbl, dict):
+                cand = alert_tbl.get(f"ambient_{direction}") or alert_tbl.get("ambient")
+                if isinstance(cand, dict) and (cand.get("en") or cand.get("zh")):
+                    return {"en": cand.get("en") or cand.get("zh"),
+                            "zh": cand.get("zh") or cand.get("en")}
+
+    return _AMBIENT_REASON_FALLBACK.get((meter, direction))
+
+
 def _build_state_delta(prev: dict | None, cur: dict,
                        reasons: dict | None = None) -> dict | None:
     """Repackage the meter/trace/knowledge diff between two snapshots as numbers.
@@ -1552,7 +1726,9 @@ def _build_state_delta(prev: dict | None, cur: dict,
     *reasons* (optional) carries the in-world cause the resolver gave for any meter
     that moved, as ``{alert?:{en,zh}, integrity?:{en,zh}, decay?:{en,zh}}``. Only
     reasons whose meter actually changed this turn are forwarded, so a stale/omitted
-    reason never mislabels a static meter."""
+    reason never mislabels a static meter. For a meter that moved but carries NO
+    supplied reason, we attach an AMBIENT default (see ``_ambient_reason``) so the
+    player always gets a "why" alongside the number."""
     if prev is None:
         return None
 
@@ -1571,21 +1747,35 @@ def _build_state_delta(prev: dict | None, cur: dict,
         "knowledge_added": knowledge_added,
     }
 
-    # Attach reasons only for meters that actually moved (guards against a reason
-    # the model supplied for a delta that got clamped to no-op).
-    if reasons:
-        out_reasons: dict = {}
-        _meter_key = {"alert": "nexus_alert", "integrity": "integrity", "decay": "fragment_decay"}
-        for meter, payload in reasons.items():
-            snap_key = _meter_key.get(meter)
-            if not snap_key or not isinstance(payload, dict):
-                continue
-            pair = delta[snap_key]
-            if pair["from"] != pair["to"] and (payload.get("en") or payload.get("zh")):
-                out_reasons[meter] = {"en": payload.get("en") or payload.get("zh"),
-                                      "zh": payload.get("zh") or payload.get("en")}
-        if out_reasons:
-            delta["reasons"] = out_reasons
+    # Attach a reason for every meter that actually MOVED this turn: the resolver's
+    # supplied cause when present, else an ambient default. A supplied reason for a
+    # meter that did NOT move is dropped (guards against a reason the model gave for
+    # a delta that got clamped to no-op).
+    reasons = reasons or {}
+    out_reasons: dict = {}
+    _meter_key = {"alert": "nexus_alert", "integrity": "integrity", "decay": "fragment_decay"}
+    for meter, snap_key in _meter_key.items():
+        pair = delta[snap_key]
+        frm, to = pair["from"], pair["to"]
+        if frm == to:
+            continue  # meter static this turn — no reason at all
+        payload = reasons.get(meter)
+        if isinstance(payload, dict) and (payload.get("en") or payload.get("zh")):
+            out_reasons[meter] = {"en": payload.get("en") or payload.get("zh"),
+                                  "zh": payload.get("zh") or payload.get("en")}
+            continue
+        # Moved but unexplained → ambient default, chosen by direction. A missing/
+        # non-numeric endpoint means we can't tell direction; skip rather than guess.
+        try:
+            direction = "up" if float(to) > float(frm) else "down"
+        except (TypeError, ValueError):
+            continue
+        ambient = _ambient_reason(meter, direction)
+        if ambient:
+            out_reasons[meter] = ambient
+
+    if out_reasons:
+        delta["reasons"] = out_reasons
 
     return delta
 

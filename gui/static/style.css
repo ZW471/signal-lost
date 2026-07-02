@@ -847,8 +847,8 @@ html, body {
 }
 .save-open { color: var(--cyan); font-size: 15px; }
 
-/* Delete button — DISABLED this wave (needs a delete_save WS action, out of
-   scope). Rendered visible-but-inert with a bilingual coming-soon tooltip. */
+/* Delete button — live (delete_save WS action). Opens a bilingual confirm
+   dialog; danger-tinted on hover/focus so the destructive action reads clearly. */
 .save-delete-btn {
   flex: 0 0 auto;
   width: 26px;
@@ -859,12 +859,23 @@ html, body {
   border-radius: var(--r-1);
   color: var(--text-dim);
   font-size: 13px;
-  cursor: not-allowed;
-  opacity: 0.5;
-  transition: color 0.15s ease, border-color 0.15s ease;
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
 }
-.save-delete-btn[disabled] { pointer-events: auto; }  /* keep the tooltip reachable */
-.save-delete-btn:hover { color: var(--text-muted); }
+.save-delete-btn:hover,
+.save-delete-btn:focus-visible {
+  color: var(--danger, #ff5c6c);
+  border-color: var(--danger, #ff5c6c);
+  background: rgba(255, 92, 108, 0.08);
+}
+
+/* The save name being deleted, echoed under the confirm prompt. */
+.save-delete-target {
+  color: var(--cyan);
+  font-family: var(--font-mono, monospace);
+  word-break: break-all;
+  margin-top: var(--sp-2);
+}
 
 /* ================================================================
    GAME SCREEN — STATUS BAR

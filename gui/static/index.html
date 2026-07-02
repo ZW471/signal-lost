@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, viewport-fit=cover">
   <title>SIGNAL LOST</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='4' fill='%230a0a0f'/><text x='16' y='22' text-anchor='middle' font-size='18' fill='%2300ff88'>S</text></svg>">
-  <link rel="stylesheet" href="/static/style.css?v=w6fix">
+  <link rel="stylesheet" href="/static/style.css?v=w7a">
   <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;400;500;600;700&family=Noto+Sans+SC:wght@300;400;500;700&display=swap" rel="stylesheet">
 </head>
 <body>
@@ -457,6 +457,27 @@
     </div>
   </div>
 
+  <!-- ========== CONFIRM DELETE SAVE DIALOG ========== -->
+  <div id="confirmDeleteDialog" class="overlay" style="display:none">
+    <div class="save-dialog dialog" role="dialog" aria-modal="true" aria-labelledby="confirmDeleteTitle">
+      <div class="dialog-header">
+        <h3 class="config-title" id="confirmDeleteTitle" data-i18n="save_delete_title">// DELETE SAVE?</h3>
+      </div>
+      <div class="dialog-body">
+        <p class="confirm-text" id="confirmDeleteText" data-i18n="save_delete_confirm">Delete this save permanently? This cannot be undone.</p>
+        <p class="confirm-text save-delete-target" id="confirmDeleteName"></p>
+      </div>
+      <div class="dialog-actions form-actions">
+        <button class="cyber-btn accent" id="confirmDeleteBtn" onclick="doDeleteSave()">
+          <span class="cyber-btn-text" data-i18n="btn_delete">DELETE</span>
+        </button>
+        <button class="cyber-btn" onclick="closeDeleteDialog()">
+          <span class="cyber-btn-text" data-i18n="btn_cancel">CANCEL</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- ========== SAVE DIALOG ========== -->
   <div id="saveDialog" class="overlay" style="display:none">
     <div class="save-dialog dialog" role="dialog" aria-modal="true" aria-labelledby="saveDialogTitle">
@@ -676,7 +697,7 @@
        lane so the two no longer collide. -->
   <div id="toastStack" class="toast-stack" aria-live="polite" aria-relevant="additions"></div>
 
-  <script src="/static/music.js?v=w6fix"></script>
-  <script src="/static/app.js?v=w6fix"></script>
+  <script src="/static/music.js?v=w7a"></script>
+  <script src="/static/app.js?v=w7a"></script>
 </body>
 </html>

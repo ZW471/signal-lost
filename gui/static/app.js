@@ -258,6 +258,16 @@ const LABELS = {
     save_delete: 'Delete',
     save_delete_soon: 'Delete is coming soon',
     save_captured: 'captured',
+    // Delete-save confirm + result
+    save_delete_title: '// DELETE SAVE?',
+    save_delete_confirm: 'Delete this save permanently? This cannot be undone.',
+    save_deleted: 'Save deleted',
+    btn_delete: 'DELETE',
+    // Relative timestamps (rendered from a save's mtime)
+    time_just_now: 'just now',
+    time_min_ago: 'm ago',
+    time_hour_ago: 'h ago',
+    time_day_ago: 'd ago',
     // Save dialog
     save_title: '// SAVE SESSION', label_save_name: 'SAVE NAME',
     btn_save: 'SAVE', btn_cancel: 'CANCEL',
@@ -479,6 +489,16 @@ const LABELS = {
     save_delete: '删除',
     save_delete_soon: '删除功能即将推出',
     save_captured: '记录于',
+    // Delete-save confirm + result
+    save_delete_title: '// 删除存档？',
+    save_delete_confirm: '永久删除此存档？此操作无法撤销。',
+    save_deleted: '存档已删除',
+    btn_delete: '删除',
+    // Relative timestamps (rendered from a save's mtime)
+    time_just_now: '刚刚',
+    time_min_ago: '分钟前',
+    time_hour_ago: '小时前',
+    time_day_ago: '天前',
     // Save dialog
     save_title: '// 保存游戏', label_save_name: '存档名称',
     btn_save: '保存', btn_cancel: '取消',
@@ -2028,6 +2048,28 @@ function handleServerMessage(msg) {
       closeDialog(document.getElementById('settingsOverlay'));
       break;
 
+    case 'save_deleted': {
+      _pendingDialogToken = null;
+      resolveBusy('save_deleted');    // release the DELETE button's in-flight lock
+      _pendingDeleteSave = null;
+      closeDialog(document.getElementById('confirmDeleteDialog'));
+      // Re-render the saves list straight from the authoritative payload.
+      cachedSaves = Array.isArray(msg.saves) ? msg.saves : [];
+      // The LOAD GAME menu button only shows while at least one save exists —
+      // hide it if that was the last save (mirrors the 'status' handler).
+      const loadBtn = document.getElementById('btnLoadGame');
+      if (loadBtn) loadBtn.style.display = cachedSaves.length > 0 ? '' : 'none';
+      // If the load screen is showing, repaint it in place. showLoadGame renders
+      // the empty-state ("no saves") when the list just emptied, so the player
+      // is never stranded on a stale card.
+      const loadScreen = document.getElementById('loadGameScreen');
+      if (loadScreen && loadScreen.classList.contains('active')) {
+        showLoadGame();
+      }
+      notify(`${L('save_deleted')}: ${msg.save_name || ''}`.trim());
+      break;
+    }
+
     case 'error':
       // A save/settings-save failure also arrives as a generic {type:'error'}.
       // Scope it to the dialog the user acted in: release that button's lock
@@ -2369,8 +2411,39 @@ function _parseAutosaveName(name) {
   return { turn: m[1] ? parseInt(m[1], 10) : null, time: `${m[2]}:${m[3]}` };
 }
 
-/** Build one metadata card. `onOpen` is the click handler; `deletable` shows the
- *  (currently disabled) delete affordance for real saves. Returns an element. */
+/** Format a save's `mtime` (epoch SECONDS) as a short bilingual relative
+ *  timestamp: "just now" / "5m ago" / "2h ago" / "3d ago" (EN) and
+ *  "刚刚"/"5分钟前"/"2小时前"/"3天前" (中文). Beyond 7 days it shows a locale
+ *  date instead. Returns '' for a missing/invalid mtime so the meta line simply
+ *  omits it. */
+function _relativeTime(mtime) {
+  const secs = Number(mtime);
+  if (!isFinite(secs) || secs <= 0) return '';
+  const now = Date.now() / 1000;
+  let diff = now - secs;
+  if (diff < 0) diff = 0;              // future clock skew → treat as now
+  const isZh = currentLang === 'zh';
+  if (diff < 60) return L('time_just_now');
+  const mins = Math.floor(diff / 60);
+  // The unit labels already carry the language-appropriate suffix
+  // ("m ago" / "分钟前"), so the same template works for both.
+  if (mins < 60) return `${mins}${L('time_min_ago')}`;
+  const hrs = Math.floor(diff / 3600);
+  if (hrs < 24) return `${hrs}${L('time_hour_ago')}`;
+  const days = Math.floor(diff / 86400);
+  if (days <= 7) return `${days}${L('time_day_ago')}`;
+  // Older than a week — an absolute date reads clearer than "37d ago".
+  try {
+    return new Date(secs * 1000).toLocaleDateString(isZh ? 'zh-CN' : undefined,
+      { year: 'numeric', month: 'short', day: 'numeric' });
+  } catch (_) {
+    return '';
+  }
+}
+
+/** Build one metadata card. `onOpen` is the click handler; `deletable` shows a
+ *  live delete affordance for real saves (NOT resume-session cards). Returns an
+ *  element. */
 function _renderSaveCard(entry, onOpen, deletable) {
   const isAuto = /^autosave_/i.test(entry.name || '');
   const auto = isAuto ? _parseAutosaveName(entry.name) : null;
@@ -2380,16 +2453,21 @@ function _renderSaveCard(entry, onOpen, deletable) {
   const badge = `<span class="save-badge ${isAuto ? 'autosave' : 'manual'}">`
     + `${esc(L(isAuto ? 'save_autosave' : 'save_manual'))}</span>`;
 
-  // Meta line: player + turn, then (autosave only) the embedded capture clock.
+  // Meta line: player + turn, then whichever timing/place hints the payload
+  // affords — a real relative timestamp from the server's `mtime` (preferred),
+  // the in-fiction location, or (autosave fallback) the name-embedded clock.
   const turnVal = (entry.turn != null && entry.turn !== '') ? entry.turn : '?';
   let meta = `${esc(entry.player_name || '')} · ${esc(L('turn'))} ${esc(String(turnVal))}`;
-  if (auto && auto.time) meta += ` · ${esc(L('save_captured'))} ${esc(auto.time)}`;
+  const rel = _relativeTime(entry.mtime);
+  if (rel) meta += ` · ${esc(rel)}`;
+  else if (auto && auto.time) meta += ` · ${esc(L('save_captured'))} ${esc(auto.time)}`;
+  if (entry.location) meta += ` · ${esc(entry.location)}`;
 
-  // Delete button: the delete_save WS action isn't in this wave's server scope,
-  // so render it DISABLED with a bilingual coming-soon tooltip (see summary).
+  // Live delete button — ONLY on real save cards (deletable). Resume-session
+  // cards pass deletable=false and never get one.
   const deleteBtn = deletable
-    ? `<button class="save-delete-btn" disabled aria-disabled="true" `
-      + `title="${esc(L('save_delete_soon'))}" aria-label="${esc(L('save_delete'))}">✕</button>`
+    ? `<button class="save-delete-btn" type="button" `
+      + `title="${esc(L('save_delete'))}" aria-label="${esc(L('save_delete'))}">✕</button>`
     : '';
 
   el.innerHTML = `
@@ -2402,9 +2480,14 @@ function _renderSaveCard(entry, onOpen, deletable) {
       <span class="save-open" aria-hidden="true">⟩</span>
     </div>`;
 
-  // Open on card click, but never when the (future) delete control is hit.
+  // Open on card click, but never when the delete control is hit (that opens the
+  // confirm dialog instead).
   el.addEventListener('click', (e) => {
-    if (e.target.closest('.save-delete-btn')) return;
+    if (e.target.closest('.save-delete-btn')) {
+      e.stopPropagation();
+      confirmDeleteSave(entry.name);
+      return;
+    }
     onOpen();
   });
   return el;
@@ -2424,6 +2507,43 @@ function showLoadGame() {
     });
   }
   switchScreen('loadGameScreen');
+}
+
+// ----------------------------------------------------------------------------
+// DELETE SAVE (wave 7 save-management UX)
+// A save card's ✕ opens a bilingual confirm dialog; confirming sends the
+// additive {action:'delete_save'} frame. The server replies {type:'save_deleted',
+// save_name, saves:[refreshed]} (re-rendered from the payload) or a generic
+// {type:'error'} (surfaced via the busy() inline-note pattern on the DELETE btn).
+// ----------------------------------------------------------------------------
+
+let _pendingDeleteSave = null;   // name awaiting confirm-dialog resolution
+
+function confirmDeleteSave(saveName) {
+  if (!saveName) return;
+  _pendingDeleteSave = saveName;
+  const nameEl = document.getElementById('confirmDeleteName');
+  if (nameEl) nameEl.textContent = saveName;
+  openDialog(document.getElementById('confirmDeleteDialog'),
+             { initialFocus: 'confirmDeleteBtn' });
+}
+
+function closeDeleteDialog() {
+  _pendingDeleteSave = null;
+  closeDialog(document.getElementById('confirmDeleteDialog'));
+}
+
+function doDeleteSave() {
+  const name = _pendingDeleteSave;
+  if (!name) { closeDeleteDialog(); return; }
+  const btn = document.getElementById('confirmDeleteBtn');
+  // Lock the DELETE button until the server confirms. The server answers a
+  // FAILED delete with a generic {type:'error'} (no token), so route that
+  // through _pendingDialogToken like save/settings do — the 'error' handler
+  // releases this same lock and shows the inline retry note in place.
+  const ctrl = busy(btn, 'save_deleted');
+  _pendingDialogToken = 'save_deleted';
+  sendWS({ action: 'delete_save', save_name: name });
 }
 
 function selectBg(btn) {
