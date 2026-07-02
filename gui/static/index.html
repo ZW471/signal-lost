@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, viewport-fit=cover">
   <title>SIGNAL LOST</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='4' fill='%230a0a0f'/><text x='16' y='22' text-anchor='middle' font-size='18' fill='%2300ff88'>S</text></svg>">
-  <link rel="stylesheet" href="/static/style.css?v=w7a">
+  <link rel="stylesheet" href="/static/style.css?v=w8a">
   <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;400;500;600;700&family=Noto+Sans+SC:wght@300;400;500;700&display=swap" rel="stylesheet">
 </head>
 <body>
@@ -72,6 +72,11 @@
           <span class="cyber-btn-text" data-i18n="menu_settings">SETTINGS</span>
           <span class="cyber-btn-glitch"></span>
           <span class="cyber-btn-tag">04</span>
+        </button>
+        <button class="cyber-btn" id="btnEndings" onclick="openEndingsGallery()">
+          <span class="cyber-btn-text" data-i18n="menu_endings">ENDINGS</span>
+          <span class="cyber-btn-glitch"></span>
+          <span class="cyber-btn-tag">05</span>
         </button>
       </div>
       <div class="menu-lang">
@@ -343,8 +348,12 @@
             <div class="panel-body" id="panel-traces-body"></div>
           </div>
           <div class="panel" id="panel-network"></div>
-          <!-- WORLD tab = world state + district (LOC) sections in one scroll. -->
+          <!-- WORLD tab = district constellation map + world state + district
+               (LOC) sections in one scroll. The map sits above world-state and
+               is rendered separately (updateDistrictMap) so a world-state repaint
+               never wipes it. -->
           <div class="panel" id="panel-world">
+            <div id="panel-district-map"></div>
             <div id="panel-world-state"></div>
             <div id="panel-district"></div>
           </div>
@@ -514,6 +523,32 @@
         <button class="cyber-btn" onclick="closeShortcutSheet()">
           <span class="cyber-btn-text" data-i18n="btn_close">CLOSE</span>
         </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== ENDINGS GALLERY ========== -->
+  <!-- Meta-progression: a 3x3 grid of the nine designed endings. Reached ones
+       (from the status payload's spoiler-safe endings_discovered) show their
+       localized name + reached-on info; every other slot is sealed '▓ ???' — no
+       id, no hint, count only. -->
+  <div id="endingsOverlay" class="overlay" style="display:none">
+    <div class="endings-dialog dialog" role="dialog" aria-modal="true" aria-labelledby="endingsTitle">
+      <div class="dialog-header">
+        <h3 class="config-title" id="endingsTitle" data-i18n="endings_title">// ENDINGS ARCHIVE</h3>
+      </div>
+      <div class="dialog-body">
+        <div class="endings-grid" id="endingsGrid" role="list"></div>
+      </div>
+      <div class="dialog-actions">
+        <div class="endings-footer">
+          <span class="endings-counter" id="endingsCounter"></span>
+        </div>
+        <div class="form-actions">
+          <button class="cyber-btn" onclick="closeEndingsGallery()">
+            <span class="cyber-btn-text" data-i18n="btn_close">CLOSE</span>
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -697,7 +732,7 @@
        lane so the two no longer collide. -->
   <div id="toastStack" class="toast-stack" aria-live="polite" aria-relevant="additions"></div>
 
-  <script src="/static/music.js?v=w7a"></script>
-  <script src="/static/app.js?v=w7a"></script>
+  <script src="/static/music.js?v=w8a"></script>
+  <script src="/static/app.js?v=w8a"></script>
 </body>
 </html>

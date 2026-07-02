@@ -4044,6 +4044,191 @@ html[lang="zh"] .account-label { max-width: 240px; }
 }
 
 /* ================================================================
+   ENDINGS GALLERY (meta-progression) — wave 8
+   3x3 grid of ending slots inside the shared .dialog card. Reached slots carry
+   a subtle cyan→magenta depth tint (--depth 1-5); sealed slots are dim '▓ ???'.
+   ================================================================ */
+.endings-dialog { padding: 30px; width: min(92vw, 560px); }
+
+.endings-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--sp-3);
+}
+
+.ending-slot {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-1);
+  min-height: 92px;
+  padding: var(--sp-3) var(--sp-2);
+  text-align: center;
+  box-sizing: border-box;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  clip-path: polygon(
+    0 0, calc(100% - var(--cut-sm)) 0, 100% var(--cut-sm),
+    100% 100%, var(--cut-sm) 100%, 0 calc(100% - var(--cut-sm)));
+}
+
+/* Reached slot — depth-tinted neon glow (cyan L1 → magenta L5). */
+.ending-slot.reached {
+  --depth-t: calc((var(--depth, 1) - 1) / 4);
+  --depth-color: color-mix(in srgb, var(--magenta) calc(var(--depth-t) * 100%), var(--cyan));
+  border-color: var(--depth-color);
+  background: color-mix(in srgb, var(--depth-color) 8%, var(--bg-input));
+  box-shadow: 0 0 14px color-mix(in srgb, var(--depth-color) 32%, transparent),
+              inset 0 0 12px color-mix(in srgb, var(--depth-color) 10%, transparent);
+}
+.ending-slot.reached .ending-slot-glyph { color: var(--depth-color, var(--cyan)); }
+.ending-slot.reached .ending-slot-name {
+  color: var(--text-bright);
+  text-shadow: 0 0 8px color-mix(in srgb, var(--depth-color) 40%, transparent);
+}
+
+.ending-slot-glyph { font-size: 18px; line-height: 1; }
+.ending-slot-name {
+  font-family: var(--font-display);
+  font-size: 12px;
+  letter-spacing: 1px;
+  font-weight: 600;
+}
+.ending-slot-meta {
+  font-size: 10px;
+  color: var(--text-dim);
+  letter-spacing: 0.5px;
+}
+
+/* Sealed slot — no id, no hint, dim glyph only. */
+.ending-slot.sealed { opacity: 0.55; }
+.ending-slot.sealed .ending-slot-glyph { color: var(--text-dim); }
+.ending-slot.sealed .ending-slot-name { color: var(--text-dim); font-weight: 400; }
+
+.endings-footer {
+  display: flex;
+  justify-content: center;
+  margin-bottom: var(--sp-3);
+}
+.endings-counter {
+  font-family: var(--font-mono, monospace);
+  font-size: 12px;
+  letter-spacing: 1px;
+  color: var(--cyan-dim);
+}
+
+/* Game-over 'NEW ENDING RECORDED' line. */
+.game-over-new-ending {
+  margin-top: var(--sp-4);
+  font-family: var(--font-mono, monospace);
+  font-size: 13px;
+  letter-spacing: 1px;
+  color: var(--green-bright);
+  text-shadow: 0 0 10px rgba(0, 255, 136, 0.4);
+  animation: new-ending-in 0.6s ease-out;
+}
+.game-over-new-ending[hidden] { display: none; }
+@keyframes new-ending-in {
+  0% { opacity: 0; transform: translateY(6px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+/* ================================================================
+   DISTRICT CONSTELLATION MAP (WORLD tab) — wave 8
+   Compact neon SVG of unlocked districts. Nodes are clickable (travel prefill);
+   the current node gets a pulse ring.
+   ================================================================ */
+.dmap-section { padding-bottom: var(--sp-2); }
+.dmap-wrap {
+  position: relative;
+  width: 100%;
+  border: 1px solid var(--border);
+  background:
+    radial-gradient(circle at 50% 45%, color-mix(in srgb, var(--cyan) 6%, transparent), transparent 70%),
+    var(--bg-input);
+  clip-path: polygon(
+    0 0, calc(100% - var(--cut-sm)) 0, 100% var(--cut-sm),
+    100% 100%, var(--cut-sm) 100%, 0 calc(100% - var(--cut-sm)));
+}
+.dmap-svg { display: block; width: 100%; height: auto; }
+
+.dmap-edge {
+  stroke: color-mix(in srgb, var(--cyan) 30%, transparent);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+}
+.dmap-node {
+  fill: var(--bg-dark);
+  stroke: var(--cyan);
+  stroke-width: 1.5;
+}
+.dmap-node.current {
+  fill: var(--magenta);
+  stroke: var(--magenta);
+  filter: drop-shadow(0 0 5px var(--magenta));
+}
+.dmap-pulse {
+  fill: none;
+  stroke: var(--magenta);
+  stroke-width: 1.5;
+  opacity: 0.7;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: dmap-pulse 2s ease-out infinite;
+}
+@keyframes dmap-pulse {
+  0%   { transform: scale(0.7); opacity: 0.7; }
+  70%  { transform: scale(1.9); opacity: 0; }
+  100% { transform: scale(1.9); opacity: 0; }
+}
+.dmap-label {
+  fill: var(--cyan);
+  font-family: var(--font-mono, monospace);
+  font-size: 9px;
+  letter-spacing: 0.3px;
+}
+.dmap-label.current { fill: var(--magenta); font-weight: 700; }
+
+.dmap-node-g.clickable { cursor: pointer; }
+.dmap-node-g.clickable:hover .dmap-node { stroke: var(--green-bright); filter: drop-shadow(0 0 5px var(--green-bright)); }
+.dmap-node-g.clickable:hover .dmap-label { fill: var(--green-bright); }
+.dmap-node-g.clickable:focus-visible { outline: none; }
+.dmap-node-g.clickable:focus-visible .dmap-node { stroke: var(--green-bright); }
+.dmap-node-g.clickable:focus-visible .dmap-label { fill: var(--green-bright); }
+
+.dmap-sealed { fill: var(--text-dim); opacity: 0.5; }
+.dmap-sealed-label {
+  padding: 2px var(--sp-2) var(--sp-1);
+  font-size: 10px;
+  letter-spacing: 0.5px;
+}
+
+/* ================================================================
+   RESUME SKELETON — wave 8
+   One-line '// restoring signal…' placeholder shown while a resume/load's
+   opening narrative is still resolving. Replaced by the narrative on arrival.
+   ================================================================ */
+.resume-skeleton {
+  padding: var(--sp-2) 0;
+  margin: var(--sp-2) 0;
+}
+.resume-skeleton-text {
+  font-family: var(--font-mono, monospace);
+  font-size: 13px;
+  letter-spacing: 1px;
+  color: var(--cyan-dim);
+  opacity: 0.85;
+  animation: resume-skeleton-blink 1.4s ease-in-out infinite;
+}
+.resume-skeleton.reduced .resume-skeleton-text { animation: none; }
+@keyframes resume-skeleton-blink {
+  0%, 100% { opacity: 0.35; }
+  50%      { opacity: 0.95; }
+}
+
+/* ================================================================
    REDUCED MOTION
    Honor the OS/browser "reduce motion" preference: kill the ambient
    infinite animations and the decorative CRT flicker layers. Default

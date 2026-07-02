@@ -234,7 +234,23 @@ const LABELS = {
     game_title: 'SIGNAL LOST',
     menu_new_game: 'NEW GAME', menu_resume: 'RESUME',
     menu_load_game: 'LOAD GAME', menu_settings: 'SETTINGS',
+    menu_endings: 'ENDINGS',
     menu_footer: 'NEXUS MONITORING ACTIVE',
+    // Endings gallery (meta-progression)
+    endings_title: '// ENDINGS ARCHIVE',
+    endings_sealed: '??‽',           // shown on sealed slots (▓ ???)
+    endings_reached_on: 'Reached',
+    endings_reached_turn: 'Turn',
+    endings_counter: 'endings discovered',   // '{n}/{total} endings discovered'
+    endings_new_recorded: 'NEW ENDING RECORDED',
+    endings_gallery_short: 'Gallery',        // '◈ NEW ENDING RECORDED — Gallery 3/9'
+    // District constellation map (WORLD tab)
+    district_map_title: 'DISTRICT MAP',
+    district_map_current: 'Current',
+    district_map_sealed: 'Sealed',           // dim edge slots ('{n} Sealed')
+    district_map_travel: 'go to',            // click → prefill 'go to {name}'
+    // Resume/load skeleton line
+    restoring_signal: '// restoring signal…',
     // New game screen
     config_title: '// IDENTITY CONFIGURATION',
     label_designation: 'DESIGNATION', label_alias: 'ALIAS', label_background: 'BACKGROUND',
@@ -465,7 +481,23 @@ const LABELS = {
     game_title: '信号遗失',
     menu_new_game: '新游戏', menu_resume: '继续',
     menu_load_game: '载入存档', menu_settings: '设置',
+    menu_endings: '结局',
     menu_footer: 'NEXUS监控已激活',
+    // Endings gallery (meta-progression)
+    endings_title: '// 结局档案',
+    endings_sealed: '??‽',
+    endings_reached_on: '达成于',
+    endings_reached_turn: '回合',
+    endings_counter: '结局已发现',            // '{n}/{total} 结局已发现'
+    endings_new_recorded: '记录新结局',
+    endings_gallery_short: '结局档案',        // '◈ 记录新结局 — 结局档案 3/9'
+    // District constellation map (WORLD tab)
+    district_map_title: '区域地图',
+    district_map_current: '当前',
+    district_map_sealed: '封锁',              // '{n} 封锁'
+    district_map_travel: '前往',              // click → prefill '前往{name}'
+    // Resume/load skeleton line
+    restoring_signal: '// 正在恢复信号…',
     // New game screen
     config_title: '// 身份配置',
     label_designation: '姓名', label_alias: '化名', label_background: '背景',
@@ -838,8 +870,15 @@ function setLanguage(lang) {
   const navBtn = document.getElementById('btnNavMenu');
   if (navBtn) navBtn.title = L('nav_menu_tip');
 
-  // Re-render all panels if we have cached session
+  // Re-render all panels if we have cached session (this also repaints the
+  // district constellation map with localized district names).
   if (cachedSession) updateAllPanels(cachedSession);
+  // If the endings gallery is open, repaint it so reached-ending names + the
+  // counter switch language in place.
+  const endOv = document.getElementById('endingsOverlay');
+  if (endOv && endOv.style.display !== 'none' && typeof _renderEndingsGallery === 'function') {
+    _renderEndingsGallery();
+  }
 }
 
 let cachedSession = null; // Store last session for re-render on language change
@@ -1870,6 +1909,14 @@ function handleServerMessage(msg) {
         document.getElementById('btnLoadGame').style.display = 'none';
         cachedSaves = [];
       }
+      // Meta-progression: cache the spoiler-safe endings gallery (reached ones
+      // named, plus the total) so the ENDINGS menu can render sealed slots from
+      // the count alone. Additive — absent fields degrade to an empty gallery.
+      if (Array.isArray(msg.endings_discovered)) _endingsDiscovered = msg.endings_discovered;
+      if (typeof msg.endings_total === 'number') _endingsTotal = msg.endings_total;
+      // If the gallery dialog is open, repaint it live on a fresh status.
+      const endOv = document.getElementById('endingsOverlay');
+      if (endOv && endOv.style.display !== 'none') _renderEndingsGallery();
       if (msg.provider) prefillProviderSettings(msg.provider);
       if (msg.langsmith) prefillLangsmithSettings(msg.langsmith);
       if (msg.settings && msg.settings.features) _cachedFeatures = msg.settings.features;
@@ -1897,6 +1944,11 @@ function handleServerMessage(msg) {
       // and then resuming the SAME session doesn't erase the side-channel.
       if (msg.mode !== 'resume') resetCompanion();
       if (msg.session) updateAllPanels(msg.session);
+      // Resume/load skeleton: the restored session is in, but the opening
+      // narrative is still resolving on the server (a mode='resume' turn follows).
+      // Drop a one-line '// restoring signal…' placeholder into the chat so the
+      // area isn't blank; the narrative frame (or an error/watchdog) removes it.
+      if (msg.mode === 'resume') showResumeSkeleton();
       if (pendingTutorial) { pendingTutorial = false; setTimeout(startTutorial, 600); }
       break;
 
@@ -1944,6 +1996,9 @@ function handleServerMessage(msg) {
       // offer and the stored command so a later error can't re-send stale text.
       _lastPlayerInput = null;
       _dismissRetryCard();
+      // The resume/load opening scene has arrived — drop the restoring-signal
+      // placeholder (the real narrative replaces it).
+      removeResumeSkeleton();
       if (_firstSceneArmed) {
         // Buffered opening scene: the tutorial masks the first-turn wait. Hold the
         // scene regardless of its role (system OR agent — the backend has labelled
@@ -2024,7 +2079,21 @@ function handleServerMessage(msg) {
       // back down; disabling also drops focus, so Enter goes nowhere.
       disableInput();
       resetPredictions();
-      setTimeout(() => showGameOver(msg.ending, msg.narrative, msg.death_cause), 2000);
+      // Meta-progression: the game_over frame carries the refreshed per-account
+      // gallery. Detect whether THIS ending is newly discovered (present now but
+      // not in our last-cached gallery) before we overwrite the cache, so the
+      // end-screen can light up a '◈ NEW ENDING RECORDED' line. Then adopt the
+      // fresh gallery + total so the ENDINGS menu is up to date without a
+      // round-trip. All additive — absent fields degrade to no new-ending line.
+      let _newEnding = false;
+      if (Array.isArray(msg.endings_discovered)) {
+        const _prevIds = new Set((_endingsDiscovered || []).map(e => e && e.id));
+        _newEnding = msg.ending != null
+          && msg.endings_discovered.some(e => e && e.id === msg.ending && !_prevIds.has(e.id));
+        _endingsDiscovered = msg.endings_discovered;
+      }
+      if (typeof msg.endings_total === 'number') _endingsTotal = msg.endings_total;
+      setTimeout(() => showGameOver(msg.ending, msg.narrative, msg.death_cause, _newEnding), 2000);
       break;
 
     case 'saved':
@@ -2082,6 +2151,9 @@ function handleServerMessage(msg) {
       }
       _finalizeActiveTyper();  // snap any in-flight narration to done first
       endTurnUI();
+      // A resume/load that errored before its opening scene must drop the
+      // restoring-signal placeholder — otherwise it sits above the retry card.
+      removeResumeSkeleton();
       // Recoverable turn error → an inline retry card in the chat (not a
       // vanishing toast) so the player can re-send their last action.
       showRetryCard(msg.message);
@@ -2868,6 +2940,33 @@ function showSystemNotice(text) {
   el.innerHTML = `<div class="system-notice-text">${esc(text)}</div>`;
   container.appendChild(el);
   container.scrollTop = container.scrollHeight;
+}
+
+// ----------------------------------------------------------------------------
+// RESUME SKELETON — a one-line placeholder shown while a resume/load is still
+// resolving its opening narrative (game_started is in, no narrative yet). It is
+// replaced by the narrative on arrival, and removed on error / watchdog so it
+// can never linger. Small, non-typewriter, single reused node.
+// ----------------------------------------------------------------------------
+let _resumeSkeletonEl = null;
+
+function showResumeSkeleton() {
+  removeResumeSkeleton();
+  const container = document.getElementById('chatMessages');
+  if (!container) return;
+  const el = document.createElement('div');
+  el.className = 'chat-msg resume-skeleton' + (prefersReducedMotion ? ' reduced' : '');
+  el.innerHTML = `<div class="resume-skeleton-text">${esc(L('restoring_signal'))}</div>`;
+  container.appendChild(el);
+  container.scrollTop = container.scrollHeight;
+  _resumeSkeletonEl = el;
+}
+
+function removeResumeSkeleton() {
+  if (_resumeSkeletonEl && _resumeSkeletonEl.parentNode) {
+    _resumeSkeletonEl.parentNode.removeChild(_resumeSkeletonEl);
+  }
+  _resumeSkeletonEl = null;
 }
 
 // Knowledge-added: a quieter sibling of the discovery ceremony. No banner, no
@@ -3834,6 +3933,9 @@ function _armWatchdog() {
   _turnWatchdog = setTimeout(() => {
     _turnWatchdog = null;
     endTurnUI();
+    // A hung resume/load never delivered its opening scene — drop the skeleton
+    // so it can't linger under the recovery notice.
+    removeResumeSkeleton();
     // Surface a recoverable, bilingual system line — the player can retry.
     showSystemNotice(L('link_quiet'));
   }, _WATCHDOG_MS);
@@ -3907,7 +4009,7 @@ function confirmSave() {
 }
 function closeSaveDialog() { closeDialog(document.getElementById('saveDialog')); }
 
-function showGameOver(ending, narrative, deathCause) {
+function showGameOver(ending, narrative, deathCause, newEnding) {
   triggerGlitch(); triggerGlitch();
   let label = ending ? `// ${ending.toUpperCase()}` : L('game_over_fallback');
   if (ending === 'death' && deathCause) {
@@ -3923,9 +4025,97 @@ function showGameOver(ending, narrative, deathCause) {
     narr += (narr ? '\n\n' : '') + L('death_reconnect_nudge');
   }
   document.getElementById('gameOverNarrative').textContent = narr;
+  // Meta-progression: if this run unlocked a previously-undiscovered ending, show
+  // a small '◈ NEW ENDING RECORDED — Gallery 3/9' line. The host node is created
+  // once and reused; hidden (emptied) when nothing new was recorded so a replay
+  // over the same overlay can't leave a stale line behind.
+  let newEl = document.getElementById('gameOverNewEnding');
+  if (!newEl) {
+    newEl = document.createElement('div');
+    newEl.id = 'gameOverNewEnding';
+    newEl.className = 'game-over-new-ending';
+    const body = document.querySelector('#gameOverOverlay .game-over-body');
+    if (body) body.appendChild(newEl); // sits under the narrative
+  }
+  if (newEnding) {
+    const total = _endingsTotal || (_endingsDiscovered ? _endingsDiscovered.length : 0);
+    const found = (_endingsDiscovered || []).length;
+    newEl.textContent = `◈ ${L('endings_new_recorded')} — ${L('endings_gallery_short')} ${found}/${total}`;
+    newEl.hidden = false;
+  } else {
+    newEl.textContent = '';
+    newEl.hidden = true;
+  }
   openDialog(document.getElementById('gameOverOverlay'), { dismissible: false });
   playBeep(200, 0.3, 0.05);
+  if (newEnding && !prefersReducedMotion) { setTimeout(() => playBeep(660, 0.12, 0.05), 260); }
 }
+
+// ================================================================
+// ENDINGS GALLERY (meta-progression)
+// A 3x3 grid of the nine designed endings. Reached ones (from the spoiler-safe
+// status payload) are named + carry reached-on info; every other slot is sealed
+// '▓ ???' drawn from the count alone. The client never learns an unreached
+// ending's id or name — the gallery is built purely from _endingsDiscovered
+// (reached, named) + _endingsTotal (how many sealed slots to draw).
+// ================================================================
+let _endingsDiscovered = [];   // [{id, name, name_zh, turn}] — REACHED only
+let _endingsTotal = 9;         // gallery size (server: endings_total)
+
+/** Bilingual display name for a reached ending row. */
+function _endingName(e) {
+  return (currentLang === 'zh' && e && e.name_zh) ? e.name_zh : (e && e.name) || '';
+}
+
+/** (Re)build the 3x3 gallery grid + footer counter from the cached payload. */
+function _renderEndingsGallery() {
+  const grid = document.getElementById('endingsGrid');
+  if (!grid) return;
+  const reached = Array.isArray(_endingsDiscovered) ? _endingsDiscovered : [];
+  // Total slots = max(server total, reached count) so a fresh/short total can
+  // never hide a reached ending. Clamp to a sane 3x3 minimum for layout.
+  const total = Math.max(_endingsTotal || 0, reached.length, 9);
+  let html = '';
+  for (let i = 0; i < total; i++) {
+    const e = reached[i];
+    if (e) {
+      // Assign a stable depth (1-5) per slot index so reached tokens get a
+      // subtle cyan→magenta tint ramp — flavor only, not a spoiler (no layer
+      // data ships with the ending).
+      const depth = (i % 5) + 1;
+      const name = _endingName(e);
+      const turn = (e.turn != null)
+        ? `<div class="ending-slot-meta">${esc(L('endings_reached_on'))} · ${esc(L('endings_reached_turn'))} ${esc(String(e.turn))}</div>`
+        : '';
+      html += `<div class="ending-slot reached depth-${depth}" style="--depth:${depth}" role="listitem">
+        <div class="ending-slot-glyph">◈</div>
+        <div class="ending-slot-name">${esc(name)}</div>
+        ${turn}
+      </div>`;
+    } else {
+      // Sealed slot — no id, no name, no hint. Count only.
+      html += `<div class="ending-slot sealed" role="listitem" aria-label="${esc(L('endings_sealed'))}">
+        <div class="ending-slot-glyph">▓</div>
+        <div class="ending-slot-name dim">???</div>
+      </div>`;
+    }
+  }
+  grid.innerHTML = html;
+  const counter = document.getElementById('endingsCounter');
+  if (counter) {
+    // Bilingual counter: '结局 2/9 已发现' / '2/9 endings discovered'.
+    counter.textContent = currentLang === 'zh'
+      ? `${L('menu_endings')} ${reached.length}/${total} 已发现`
+      : `${reached.length}/${total} ${L('endings_counter')}`;
+  }
+}
+
+function openEndingsGallery() {
+  _renderEndingsGallery();
+  playBeep(440, 0.06, 0.04);
+  openDialog(document.getElementById('endingsOverlay'));
+}
+function closeEndingsGallery() { closeDialog(document.getElementById('endingsOverlay')); }
 
 // ================================================================
 // TUTORIAL
@@ -4303,6 +4493,7 @@ function updateAllPanels(session) {
   updateDistrictPanel(session.location);
   updateInventoryPanel(session.inventory);
   updateNetworkPanel(session.npcs);
+  updateDistrictMap(session.world_state, session.location);
   updateWorldPanel(session.world_state);
   updateLogPanel(session.log);
   updateConversationPanel(session.conversation);
@@ -5145,6 +5336,138 @@ function extractEnglishKey(val) {
 }
 
 // ---------- WORLD PANEL (matches TUI WorldPanel — conditional alert/decay) ----------
+
+// ================================================================
+// DISTRICT CONSTELLATION MAP (WORLD tab)
+// A compact neon SVG map of UNLOCKED districts only — drawn from
+// world_state.district_access (the spoiler-safe unlocked list the server ships;
+// there is no district_map / adjacency payload, so no edges are fabricated).
+// Nodes are laid out on a deterministic radial ring seeded by a hash of the
+// district id (name) so the layout is stable across renders. The current
+// district (location.district) gets a pulse ring. Any sealed_count the server
+// might later ship is drawn as N unnamed dim slots at the map edge; today none
+// ships, so none render. Click an unlocked non-current node → prefill the input
+// with a bilingual travel phrase and focus it (never auto-sends).
+// Degrade: if district_access is absent/empty, the map host is emptied and the
+// existing world-state rendering below is left untouched.
+// ================================================================
+
+/** Stable 32-bit-ish hash of a string → non-negative int (FNV-1a style). */
+function _hashStr(s) {
+  let h = 2166136261;
+  const str = String(s || '');
+  for (let i = 0; i < str.length; i++) {
+    h ^= str.charCodeAt(i);
+    h = (h * 16777619) >>> 0;
+  }
+  return h >>> 0;
+}
+
+/** Prefill the composer with a bilingual travel phrase and focus (no send). */
+function travelTo(name) {
+  const input = document.getElementById('chatInput');
+  if (!input || input.disabled || !name) return;
+  // '前往{name}' in 中文, 'go to {name}' in English. Matches applyVerbChip's
+  // prefill+focus+caret-to-end behavior.
+  const phrase = currentLang === 'zh'
+    ? `${L('district_map_travel')}${name}`
+    : `${L('district_map_travel')} ${name}`;
+  input.value = phrase;
+  input.focus();
+  const end = input.value.length;
+  try { input.setSelectionRange(end, end); } catch (e) {}
+  playBeep(520, 0.05, 0.035);
+}
+
+function updateDistrictMap(worldState, location) {
+  const host = document.getElementById('panel-district-map');
+  if (!host) return;
+  const w = worldState || {};
+  const districts = Array.isArray(w.district_access) ? w.district_access : [];
+  // Degrade: nothing unlocked to draw → leave the map host empty, world-state
+  // rendering below is untouched.
+  if (districts.length === 0) { host.innerHTML = ''; return; }
+
+  const curDistrict = (location && location.district) || '';
+  // Optional sealed slot count — only if the server ever ships it. Today it does
+  // not (no district_map payload), so this stays 0 and no dim slots render.
+  const sealedCount = Math.max(0, parseInt(w.district_sealed_count, 10) || 0);
+
+  const W = 260, H = 168, cx = W / 2, cy = H / 2;
+  const n = districts.length;
+  // Deterministic radial layout: each node's angle is seeded by its id hash so
+  // the constellation is stable across renders (not index-order-dependent), then
+  // nudged onto an even ring so nodes don't collide. Single node → center.
+  const R = n === 1 ? 0 : Math.min(W, H) * 0.34;
+  const nodes = districts.map((d, i) => {
+    const seed = _hashStr(d.name || d.name_zh || i);
+    // Base angle from hash, spread by an even slice so labels stay legible.
+    const jitter = ((seed % 1000) / 1000 - 0.5) * (Math.PI / n);
+    const ang = (i / n) * Math.PI * 2 - Math.PI / 2 + jitter;
+    const x = n === 1 ? cx : cx + Math.cos(ang) * R;
+    const y = n === 1 ? cy : cy + Math.sin(ang) * R;
+    const name = (currentLang === 'zh' && d.name_zh) ? d.name_zh : d.name;
+    const isCurrent = d.name === curDistrict || d.name_zh === curDistrict
+      || name === curDistrict;
+    return { x, y, name, raw: d.name || name, isCurrent };
+  });
+
+  // No adjacency ships → no edges between nodes. We DO draw a faint spoke from
+  // the current node to each neighbor so the constellation reads as connected
+  // without implying a real travel graph (purely decorative "signal reach").
+  const cur = nodes.find(nd => nd.isCurrent);
+  let edges = '';
+  if (cur) {
+    for (const nd of nodes) {
+      if (nd === cur) continue;
+      edges += `<line x1="${cur.x.toFixed(1)}" y1="${cur.y.toFixed(1)}" x2="${nd.x.toFixed(1)}" y2="${nd.y.toFixed(1)}" class="dmap-edge"/>`;
+    }
+  }
+
+  let nodeSvg = '';
+  nodes.forEach((nd, i) => {
+    const cls = 'dmap-node' + (nd.isCurrent ? ' current' : '');
+    const pulse = (nd.isCurrent && !prefersReducedMotion)
+      ? `<circle cx="${nd.x.toFixed(1)}" cy="${nd.y.toFixed(1)}" r="7" class="dmap-pulse"/>` : '';
+    // Label placement: below the node, clamped horizontally so it never clips.
+    const lx = Math.max(30, Math.min(W - 30, nd.x));
+    const ly = nd.y > cy ? nd.y + 16 : nd.y - 11;
+    // Clickable only for unlocked, non-current nodes; current is inert.
+    const clickable = !nd.isCurrent;
+    const onclick = clickable ? ` onclick="travelTo(${JSON.stringify(nd.raw).replace(/"/g, '&quot;')})" tabindex="0" role="button" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.dispatchEvent(new MouseEvent('click'))}"` : '';
+    const aria = clickable
+      ? ` aria-label="${esc((currentLang === 'zh' ? L('district_map_travel') + nd.name : L('district_map_travel') + ' ' + nd.name))}"` : '';
+    nodeSvg += `<g class="dmap-node-g${clickable ? ' clickable' : ''}"${onclick}${aria}>
+      ${pulse}
+      <circle cx="${nd.x.toFixed(1)}" cy="${nd.y.toFixed(1)}" r="5" class="${cls}"/>
+      <text x="${lx.toFixed(1)}" y="${ly.toFixed(1)}" class="dmap-label${nd.isCurrent ? ' current' : ''}" text-anchor="middle">${esc(nd.name)}</text>
+    </g>`;
+  });
+
+  // Sealed edge slots (dim, unnamed) — drawn along the bottom edge if any ship.
+  let sealedSvg = '';
+  if (sealedCount > 0) {
+    const startX = 14, gap = 14, sy = H - 8;
+    for (let i = 0; i < sealedCount && i < 8; i++) {
+      sealedSvg += `<circle cx="${startX + i * gap}" cy="${sy}" r="3" class="dmap-sealed"/>`;
+    }
+  }
+  const sealedLabel = sealedCount > 0
+    ? `<div class="dmap-sealed-label dim">${sealedCount} ${esc(L('district_map_sealed'))}</div>` : '';
+
+  host.innerHTML = `<div class="panel-section dmap-section">
+    <div class="panel-section-title">${L('district_map_title')}</div>
+    <div class="dmap-wrap">
+      <svg class="dmap-svg" viewBox="0 0 ${W} ${H}" role="img"
+           aria-label="${esc(L('district_map_title'))}" preserveAspectRatio="xMidYMid meet">
+        <g class="dmap-edges">${edges}</g>
+        <g class="dmap-nodes">${nodeSvg}</g>
+        <g class="dmap-sealed-slots">${sealedSvg}</g>
+      </svg>
+      ${sealedLabel}
+    </div>
+  </div>`;
+}
 
 function updateWorldPanel(worldState) {
   const w = worldState || {};
