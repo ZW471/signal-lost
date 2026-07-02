@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, viewport-fit=cover">
   <title>SIGNAL LOST</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='4' fill='%230a0a0f'/><text x='16' y='22' text-anchor='middle' font-size='18' fill='%2300ff88'>S</text></svg>">
-  <link rel="stylesheet" href="/static/style.css?v=a3turn">
+  <link rel="stylesheet" href="/static/style.css?v=a4hud">
   <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;400;500;600;700&family=Noto+Sans+SC:wght@300;400;500;700&display=swap" rel="stylesheet">
 </head>
 <body>
@@ -166,20 +166,41 @@
   <div id="gameScreen" class="screen">
     <!-- Status bar -->
     <div class="status-bar" id="statusBar">
-      <div class="game-logo" id="gameLogo" aria-label="Signal Lost">SIGNAL LOST</div>
-      <div class="status-item status-item-integrity">
-        <span class="status-label" id="statLabelIntegrity">INTEGRITY</span>
-        <div class="integrity-pips" id="statIntegrityPips"></div>
+      <!-- LEFT ZONE: brand wordmark -->
+      <div class="status-zone status-zone-left">
+        <div class="game-logo" id="gameLogo" aria-label="Signal Lost">SIGNAL LOST</div>
       </div>
-      <div class="status-item">
-        <span class="status-label" id="statLabelLocation">LOCATION</span>
-        <span class="status-value truncate cyan" id="statLocation">—</span>
+
+      <!-- CENTER ZONE: meter cluster (integrity · nexus alert · signal coherence · clock · location) -->
+      <div class="status-zone status-zone-center" id="statusCenter">
+        <div class="status-item status-item-integrity" id="statItemIntegrity">
+          <span class="status-label" id="statLabelIntegrity">INTEGRITY</span>
+          <div class="integrity-pips" id="statIntegrityPips"></div>
+        </div>
+        <div class="status-item status-item-gauge" id="statItemNexus">
+          <span class="status-label" id="statLabelNexus">NEXUS</span>
+          <div class="hud-gauge" id="statNexusGauge" role="img"></div>
+        </div>
+        <div class="status-item status-item-gauge" id="statItemDecay">
+          <span class="status-label" id="statLabelDecay">SIGNAL</span>
+          <div class="hud-gauge" id="statDecayGauge" role="img"></div>
+        </div>
+        <div class="status-item status-item-clock" id="statItemClock">
+          <span class="status-label" id="statLabelClock">TIME</span>
+          <span class="status-value hud-clock" id="statClock">—</span>
+        </div>
+        <div class="status-item status-item-location">
+          <span class="status-label" id="statLabelLocation">LOCATION</span>
+          <span class="status-value truncate cyan" id="statLocation">—</span>
+        </div>
+        <div class="status-item status-item-area">
+          <span class="status-label" id="statLabelArea">AREA</span>
+          <span class="status-value truncate" id="statArea">—</span>
+        </div>
       </div>
-      <div class="status-item status-item-area">
-        <span class="status-label" id="statLabelArea">AREA</span>
-        <span class="status-value truncate" id="statArea">—</span>
-      </div>
-      <div class="status-item actions">
+
+      <!-- RIGHT ZONE: actions -->
+      <div class="status-item actions status-zone-right">
         <button class="status-btn status-btn-panels" onclick="toggleInfoPanels()" title="Show panels" aria-label="Toggle info panels" id="btnInfoPanels">▤</button>
         <div class="nav-menu-wrap">
           <button class="status-btn" onclick="toggleNavMenu(event)" title="Menu" aria-label="Menu" aria-haspopup="true" aria-expanded="false" id="btnNavMenu">☰</button>
@@ -538,7 +559,7 @@
   <!-- ========== NOTIFICATION ========== -->
   <div id="notification" class="notification"></div>
 
-  <script src="/static/music.js?v=a3turn"></script>
-  <script src="/static/app.js?v=a3turn"></script>
+  <script src="/static/music.js?v=a4hud"></script>
+  <script src="/static/app.js?v=a4hud"></script>
 </body>
 </html>

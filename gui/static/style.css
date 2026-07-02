@@ -754,31 +754,47 @@ html, body {
    GAME SCREEN — STATUS BAR
    ================================================================ */
 
+/* 3-zone grid: LEFT wordmark (auto) · CENTER meter cluster (1fr) · RIGHT actions (auto). */
 .status-bar {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
   align-items: center;
-  gap: 2px;
-  padding: 8px 16px;
+  gap: var(--sp-3);
+  padding: var(--sp-2) var(--sp-4);
   background: var(--bg-panel);
   border-bottom: 1px solid var(--border);
   z-index: 10;
   flex-shrink: 0;
 }
 
+/* Zones */
+.status-zone {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+.status-zone-left { justify-content: flex-start; }
+.status-zone-center {
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: var(--sp-1) 0;
+  min-width: 0;
+}
+.status-zone-right { justify-content: flex-end; }
+
 .status-item {
-  padding: 4px 14px;
-  border-right: 1px solid var(--border);
+  padding: var(--sp-1) var(--sp-3);
+  border-right: 1px solid var(--divider);
+  min-width: 0;
 }
 
-.status-item:last-child {
-  border-right: none;
-}
+/* The center cluster owns its own dividers; the last meter drops its rule. */
+.status-zone-center .status-item:last-child { border-right: none; }
 
 .status-item.actions {
-  margin-left: auto;
   border-right: none;
   display: flex;
-  gap: 8px;
+  gap: var(--sp-2);
 }
 
 .status-label {
@@ -802,6 +818,65 @@ html, body {
   text-overflow: ellipsis;
   white-space: nowrap;
   display: block;
+}
+
+/* ---- Banded mini-gauges (NEXUS alert · signal coherence) ---- */
+.hud-gauge {
+  margin-top: 3px;
+  width: 82px;
+  max-width: 22vw;
+}
+.hud-gauge-track {
+  position: relative;
+  display: block;
+  height: 6px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--r-1);
+  overflow: hidden;
+}
+.hud-gauge-fill {
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  border-radius: var(--r-1);
+  transition: width 0.6s ease, background 0.4s ease;
+}
+/* Tick marks at 25/50/75/90 — thin dividers over the ramp. */
+.hud-gauge-tick {
+  position: absolute;
+  top: 0; bottom: 0;
+  width: 1px;
+  background: var(--divider);
+  z-index: 1;
+}
+
+/* ---- In-world clock with period-progress thin fill ---- */
+.status-item-clock .hud-clock {
+  position: relative;
+  display: inline-block;
+  padding-bottom: 4px;
+  font-size: 13px;
+  white-space: nowrap;
+  color: var(--text-bright);
+}
+.hud-clock-text { position: relative; z-index: 1; }
+.hud-clock-fill {
+  position: absolute;
+  left: 0; bottom: 0;
+  height: 2px;
+  background: linear-gradient(90deg, var(--cyan), var(--magenta));
+  box-shadow: 0 0 6px var(--cyan);
+  transition: width 0.6s ease;
+}
+
+/* Band caption in the WORLD panel (current band + next escalation). */
+.band-caption {
+  margin-top: 6px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.35;
+  letter-spacing: 0.3px;
+  color: var(--text-dim);
 }
 
 .status-btn {
@@ -2366,9 +2441,7 @@ mark.search-hl {
   text-shadow: 0 0 8px rgba(0, 255, 245, 0.35);
   white-space: nowrap;
   flex-shrink: 0;
-  padding-right: 12px;
-  margin-right: 4px;
-  border-right: 1px solid var(--border);
+  padding-right: var(--sp-3);
   user-select: none;
 }
 
@@ -2484,15 +2557,26 @@ mark.search-hl {
     width: 100%;
   }
 
-  /* ---- Status bar: wrap / scroll so it never spills off-screen. ---- */
+  /* ---- Status bar: degrade the 3-zone grid to [brand+meters | actions].
+     The left wordmark and the center cluster share the first (wrapping) cell;
+     the actions stay pinned right. ---- */
   .status-bar {
-    flex-wrap: wrap;
+    grid-template-columns: 1fr auto;
+    column-gap: var(--sp-2);
     row-gap: 4px;
     padding: 6px 10px;
     padding-left: max(10px, env(safe-area-inset-left));
     padding-right: max(10px, env(safe-area-inset-right));
     padding-top: max(6px, env(safe-area-inset-top));
   }
+  /* Wordmark spans the top row across the meter cluster; meters flow below it. */
+  .status-zone-left { grid-column: 1 / 2; grid-row: 1; }
+  .status-zone-center {
+    grid-column: 1 / 2;
+    grid-row: 2;
+    justify-content: flex-start;
+  }
+  .status-zone-right { grid-column: 2; grid-row: 1 / 3; }
   .status-item {
     padding: 2px 8px;
   }
@@ -2500,6 +2584,9 @@ mark.search-hl {
   .status-value.truncate { max-width: 90px; }
   /* AREA is the least essential — drop it on small screens to save room. */
   .status-item-area { display: none; }
+  /* Narrow the mini-gauges so the meter cluster fits a phone row. */
+  .hud-gauge { width: 64px; }
+  .status-item-clock .hud-clock { font-size: 12px; }
 
   /* Actions group stays on the right; allow wrapping. */
   .status-item.actions {
@@ -2910,6 +2997,13 @@ mark.search-hl {
   /* INTEGRITY must never be hidden — but below 480px the bar is cramped, so
      drop the text label and keep the pip meter (icon-only). */
   .status-item-integrity .status-label { display: none; }
+  .status-item-integrity { padding-left: 0; }
+
+  /* LOCATION/CLOCK are secondary vs. the fail meters on a tiny screen — drop
+     them so INTEGRITY + the two banded gauges stay legible. AREA already gone. */
+  .status-item-location,
+  .status-item-clock { display: none; }
+  .hud-gauge { width: 56px; }
 
   /* Keep truncation tight on narrow phones even in 中文 (CJK gets a little
      more than Latin, but not the desktop 280px). */

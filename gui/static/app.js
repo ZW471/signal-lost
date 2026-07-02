@@ -41,6 +41,66 @@ const IMPLANT_COLORS = {
   '激活': 'green', '过载': 'red', '共鸣': 'magenta', '损坏': 'yellow',
 };
 
+// ----------------------------------------------------------------
+// BANDED-GAUGE THRESHOLDS — mirror engine/game_data.py
+// ALERT_THRESHOLDS / DECAY_THRESHOLDS (do NOT edit game_data.py; copy only).
+// Each entry: threshold + bilingual escalation effect for the WORLD-panel caption.
+// ----------------------------------------------------------------
+const ALERT_THRESHOLDS = [
+  { threshold: 25,  effect: 'Increased patrols in Sector 7 and Chrome Heights', effect_zh: '第七区和镀金台巡逻增加' },
+  { threshold: 50,  effect: 'Sector 7 lockdown, Chrome Heights restricted',      effect_zh: '第七区封锁，镀金台限制出入' },
+  { threshold: 75,  effect: 'NEXUS raids Undercroft, Neon Row restricted',       effect_zh: 'NEXUS突袭底渊，霓虹街限制出入' },
+  { threshold: 90,  effect: 'Full manhunt, only The Sprawl is safe',             effect_zh: '全城搜捕，仅蔓城尚属安全' },
+  { threshold: 100, effect: 'Capture — funneled to Order ending or death',       effect_zh: '被捕——走向秩序结局或死亡' },
+];
+const DECAY_THRESHOLDS = [
+  { threshold: 25,  effect: 'Echo manifestations weaker',      effect_zh: '回响显现减弱' },
+  { threshold: 50,  effect: 'Signal artifacts lose potency',   effect_zh: '信号遗物失去效力' },
+  { threshold: 75,  effect: 'Good endings much harder',        effect_zh: '好结局变得极其困难' },
+  { threshold: 100, effect: 'Good endings impossible',         effect_zh: '好结局已不可能' },
+];
+
+// Tick positions (%) for the banded mini-gauges and the cyan→yellow→orange→red ramp.
+const GAUGE_TICKS = [25, 50, 75, 90];
+// value (0-100) → CSS var color for the fill. Bands: <25 cyan, <50 yellow, <75 orange, ≥75 red.
+function gaugeBandColor(v) {
+  if (v >= 75) return 'var(--red)';
+  if (v >= 50) return 'var(--orange)';
+  if (v >= 25) return 'var(--yellow)';
+  return 'var(--cyan)';
+}
+/** Nearest escalation AT-OR-ABOVE the current value, for the "next: X at N" caption.
+ *  Returns {threshold, effect, effect_zh} or null if already at/above the top band. */
+function nextEscalation(thresholds, value) {
+  for (const t of thresholds) {
+    if (value < t.threshold) return t;
+  }
+  return null;
+}
+/** Localized escalation effect text for a threshold entry. */
+function escalationEffect(entry) {
+  if (!entry) return '';
+  return (currentLang === 'zh' && entry.effect_zh) ? entry.effect_zh : entry.effect;
+}
+
+/** One-line band caption: current band consequence + next escalation, bilingual.
+ *  e.g. "Watchful · next: Sector 7 lockdown, Chrome Heights restricted at 50".
+ *  `statusDisplay` is already localized (server status_zh or label map) and safe
+ *  to escape here. Returns an escaped HTML fragment. */
+function bandCaption(thresholds, value, statusDisplay) {
+  const v = Math.max(0, Math.min(100, Number(value) || 0));
+  const nxt = nextEscalation(thresholds, v);
+  const head = esc(statusDisplay || '');
+  if (!nxt) {
+    // Already in the top band — no further escalation to warn about.
+    return `<div class="band-caption dim">${head} · ${esc(L('hud_band_max'))}</div>`;
+  }
+  const eff = escalationEffect(nxt);
+  // "next: <effect> at <threshold>" / "下一级：<effect> @ <threshold>"
+  const nextLbl = esc(L('hud_next'));
+  return `<div class="band-caption dim">${head} · ${nextLbl}: ${esc(eff)} @ ${nxt.threshold}</div>`;
+}
+
 // ================================================================
 // i18n — LABELS & DATA TRANSLATION (matched to TUI LABELS dict)
 // ================================================================
@@ -92,6 +152,9 @@ const LABELS = {
     search_placeholder: 'Search…', no_search_results: 'No matches',
     // Status bar
     location: 'LOCATION',
+    hud_nexus: 'NEXUS', hud_signal: 'SIGNAL', hud_time: 'TIME',
+    hud_day: 'Day', hud_next: 'next', hud_band_max: 'critical band',
+    hud_coherence: 'SIGNAL COHERENCE',
     // Chat
     chat_placeholder: 'What do you do?', processing: 'PROCESSING NEURAL INPUT',
     thinking_hint: '// link resolving — review your INTEL panels while you wait',
@@ -230,6 +293,9 @@ const LABELS = {
     player_label: '玩家', agent_label: '引擎',
     search_placeholder: '搜索…', no_search_results: '无匹配项',
     location: '位置',
+    hud_nexus: '连结', hud_signal: '信号', hud_time: '时间',
+    hud_day: '第', hud_next: '下一级', hud_band_max: '危险区间',
+    hud_coherence: '信号一致性',
     chat_placeholder: '你想做什么？', processing: '正在处理神经输入',
     thinking_hint: '// 链路解析中 —— 可在等待时查看右侧情报面板',
     thinking_lines: [
@@ -2638,24 +2704,96 @@ function updateAllPanels(session) {
 function updateStatusBar(session) {
   const p = session.player || {};
   const l = session.location || {};
+  const w = session.world_state || {};
   const integrity = p.integrity || {};
 
   // Integrity pips: filled █ and empty ░
   const cur = integrity.current || 0, max = integrity.max || 3;
   let pips = '';
   for (let i = 0; i < max; i++) {
-    pips += i < cur ? '<span class="pip filled">\u2588</span>' : '<span class="pip empty">\u2591</span>';
+    pips += i < cur ? '<span class="pip filled">█</span>' : '<span class="pip empty">░</span>';
   }
-  document.getElementById('statIntegrityPips').innerHTML = pips;
+  const pipsEl = document.getElementById('statIntegrityPips');
+  if (pipsEl) {
+    pipsEl.innerHTML = pips;
+    // Icon-only mode (<480px) hides the label, so keep an accessible tooltip.
+    pipsEl.setAttribute('title', L('integrity').toUpperCase() + ': ' + cur + ' / ' + max);
+    pipsEl.setAttribute('aria-label', L('integrity').toUpperCase() + ' ' + cur + ' / ' + max);
+  }
 
-  // Location (district + area)
-  setText('statLocation', l.district || '—');
-  setText('statArea', l.area || '—');
+  // --- Banded mini-gauges (mirror WORLD panel semantics) ---
+  const alert = w.nexus_alert || {};
+  const alertVal = Math.max(0, Math.min(100, Number(alert.current) || 0));
+  const alertStatus = (currentLang === 'zh' && alert.status_zh) ? alert.status_zh : localizeAlertStatus(alert.status);
+  renderBandedGauge('statNexusGauge', alertVal,
+    L('hud_nexus') + ' · ' + alertStatus + ' · ' + alertVal + '%');
+
+  // Fragment decay — always shown (no >0 guard), framed as signal coherence.
+  const decay = w.fragment_decay || {};
+  const decayVal = Math.max(0, Math.min(100, Number(decay.current) || 0));
+  const decayStatus = (currentLang === 'zh' && decay.status_zh) ? decay.status_zh : localizeDecayStatus(decay.status);
+  renderBandedGauge('statDecayGauge', decayVal,
+    L('hud_coherence') + ' · ' + decayStatus + ' · ' + decayVal + '%');
+
+  // --- In-world clock: "Day N · <period> · HH:MM" with a thin fill
+  //     for the progress through the current 360-min period. ---
+  const t = w.time || {};
+  const day = t.day || 1;
+  const periodDisplay = localizeData('time', t.period) || t.period || '';
+  const pIcon = TIME_ICONS[(t.period || '').toLowerCase()] || '';
+  const clockStr = t.clock || '';
+  const parts = [];
+  parts.push(L('hud_day') + ' ' + day);
+  if (periodDisplay) parts.push((pIcon ? pIcon + ' ' : '') + periodDisplay);
+  if (clockStr) parts.push(clockStr);
+  const clockEl = document.getElementById('statClock');
+  if (clockEl) {
+    // period_minutes runs 0-360 within a period; thin fill shows progress.
+    const pm = Math.max(0, Math.min(360, Number(t.period_minutes) || 0));
+    const pct = Math.round((pm / 360) * 100);
+    clockEl.innerHTML = '<span class="hud-clock-text">' + esc(parts.join(' · ')) + '</span>' +
+      '<span class="hud-clock-fill" style="width:' + pct + '%"></span>';
+    clockEl.setAttribute('title', parts.join(' · '));
+  }
+
+  // Location (district + area) — set title on truncated values for full text.
+  const districtVal = l.district || '—';
+  const areaVal = l.area || '—';
+  setText('statLocation', districtVal);
+  setText('statArea', areaVal);
+  const locEl = document.getElementById('statLocation');
+  if (locEl) locEl.setAttribute('title', districtVal);
+  const areaEl = document.getElementById('statArea');
+  if (areaEl) areaEl.setAttribute('title', areaVal);
 
   // Translate status bar labels
   setText('statLabelIntegrity', L('integrity').toUpperCase());
+  setText('statLabelNexus', L('hud_nexus').toUpperCase());
+  setText('statLabelDecay', L('hud_signal').toUpperCase());
+  setText('statLabelClock', L('hud_time').toUpperCase());
   setText('statLabelLocation', L('location').toUpperCase());
   setText('statLabelArea', L('area').toUpperCase());
+}
+
+/** Render a banded mini-gauge into `elId`: a track with tick marks at 25/50/75/90
+ *  and a fill whose color follows the cyan->yellow->orange->red ramp. `label` is the
+ *  bilingual tooltip/aria text. */
+function renderBandedGauge(elId, value, label) {
+  const el = document.getElementById(elId);
+  if (!el) return;
+  const v = Math.max(0, Math.min(100, Number(value) || 0));
+  const color = gaugeBandColor(v);
+  let ticks = '';
+  for (const tk of GAUGE_TICKS) {
+    ticks += '<span class="hud-gauge-tick" style="left:' + tk + '%"></span>';
+  }
+  el.innerHTML =
+    '<span class="hud-gauge-track">' + ticks +
+      '<span class="hud-gauge-fill" style="width:' + v + '%;background:' + color +
+      ';box-shadow:0 0 6px ' + color + '"></span>' +
+    '</span>';
+  el.setAttribute('title', label);
+  el.setAttribute('aria-label', label);
 }
 
 function countDiscoveredTraces(traces) {
@@ -3184,25 +3322,29 @@ function updateWorldPanel(worldState) {
   const alertVal = Math.max(0, Math.min(100, alert.current || 0));
   {
     const alertPct = alertVal;
-    const alertStatusDisplay = localizeAlertStatus(alert.status);
+    // Prefer server-supplied status_zh in 中文; fall back to the label map.
+    const alertStatusDisplay = (currentLang === 'zh' && alert.status_zh)
+      ? alert.status_zh : localizeAlertStatus(alert.status);
     html += `<div class="panel-section"><div class="panel-section-title">${L('nexus_alert')}</div>
       <div class="panel-row"><span class="panel-key">${L('status')}</span>
         <span class="panel-val ${alertColor(alert.status)}">${esc(alertStatusDisplay)}</span></div>
       <div class="progress-bar"><div class="progress-fill alert-gradient" style="width:${alertPct}%"></div></div>
       <div class="dim" style="font-size:11px;text-align:right">${alertVal}%</div>
+      ${bandCaption(ALERT_THRESHOLDS, alertVal, alertStatusDisplay)}
     </div>`;
   }
 
-  // Fragment Decay — only shown if > 0 (matches TUI)
-  const decayVal = decay.current || 0;
-  if (decayVal > 0) {
-    const decayPct = Math.min(decayVal, 10) * 10;
-    const decayStatusDisplay = localizeDecayStatus(decay.status);
+  // Fragment Decay — always shown, framed as signal coherence (no >0 guard).
+  const decayVal = Math.max(0, Math.min(100, decay.current || 0));
+  {
+    const decayStatusDisplay = (currentLang === 'zh' && decay.status_zh)
+      ? decay.status_zh : localizeDecayStatus(decay.status);
     html += `<div class="panel-section"><div class="panel-section-title">${L('fragment_decay')}</div>
       <div class="panel-row"><span class="panel-key">${L('status')}</span>
         <span class="panel-val">${esc(decayStatusDisplay)}</span></div>
-      <div class="progress-bar"><div class="progress-fill decay-gradient" style="width:${decayPct}%"></div></div>
+      <div class="progress-bar"><div class="progress-fill decay-gradient" style="width:${decayVal}%"></div></div>
       <div class="dim" style="font-size:11px;text-align:right">${decayVal}%</div>
+      ${bandCaption(DECAY_THRESHOLDS, decayVal, decayStatusDisplay)}
     </div>`;
   }
 
