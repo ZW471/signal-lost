@@ -584,6 +584,130 @@ def test_listeners_named_by_trusted_npc():
     print("  [PASS] TRACE-L2-02 unlockable via trusted ally + protect rumor; gates intact")
 
 
+def test_l3_07_requires_sector7_context():
+    """TRACE-L3-07 must not fire on the bare word 'level'.
+
+    Regression (playtest wave 6, friction #3a): the check keyed on ANY entry
+    containing 'level' — the opening's 'street level Neo-Kowloon' fired a
+    Layer-3 trace on turn 1 and inflated the deepest-layer stat. Depth words
+    must now co-occur with Sector-7/lab context in the SAME entry, and 'label'
+    must not count as lab context.
+    """
+    from engine.game_data import TRACE_CONDITIONS
+
+    check = next(tc for tc in TRACE_CONDITIONS if tc["id"] == "TRACE-L3-07")["check"]
+    t, n, p, w = {"discovered": []}, {"npcs": []}, {"turn": 1}, {}
+
+    def K(*descs):
+        return {"facts": [{"description": d, "turn": 1} for d in descs],
+                "rumors": [], "evidence": [], "theories": [], "connections": []}
+
+    # Negatives: bare depth word (the turn-1 false positive), 'label' is not
+    # lab context, and context + depth split across two entries don't count.
+    assert not check(K("You wake at street level in Neo-Kowloon."), t, n, p, w), \
+        "bare 'street level' fired TRACE-L3-07 (turn-1 false positive is back)"
+    assert not check(K("The hatch bears a scraped NEXUS acquisition label, buried deep in grime."), t, n, p, w), \
+        "'label' counted as lab context for TRACE-L3-07"
+    assert not check(K("Sector 7 is locked down tonight.",
+                       "The market has a lower level below the steps."), t, n, p, w), \
+        "TRACE-L3-07 fired from context and depth in SEPARATE entries"
+    # Positives: co-occurrence in one entry, EN and 中文.
+    assert check(K("Sector 7 has multiple levels — the deeper labs are below."), t, n, p, w), \
+        "genuine Sector-7 multi-level entry did not fire TRACE-L3-07"
+    assert check(K("提取行动发生在第七区更深层的实验室。"), t, n, p, w), \
+        "中文 第七区+深层实验室 entry did not fire TRACE-L3-07"
+    print("  [PASS] TRACE-L3-07 needs Sector-7/lab + depth in ONE entry (bare 'level' silent)")
+
+
+def test_act_on_evidence_discovery_route():
+    """Decrypt/analyze/scan acts unlock selected mid-layer traces.
+
+    Playtest wave 6, friction #3b: discovery was front-loaded keyword luck and
+    the panel froze in T11-20 even for players acting on evidence (the very
+    verbs the teaching suggestions push). Entries recording a tool act — the
+    act named in the text or the `source` field, as real wave-6 sessions show
+    ("M-17 passive signal scan", "服务巷Signal残壳分析") — now fire an OR-branch on
+    TRACE-L3-05 / L3-08 / L2-06. Conversational mentions of the same topics
+    without an act must NOT take this route.
+    """
+    from engine.game_data import TRACE_CONDITIONS
+
+    checks = {tc["id"]: tc["check"] for tc in TRACE_CONDITIONS}
+    t, n, p, w = {"discovered": []}, {"npcs": []}, {"turn": 12}, {}
+    empty = {"facts": [], "rumors": [], "evidence": [], "theories": [], "connections": []}
+
+    # (1) Real wave-6 shape: evidence recorded FROM a scan act (the act lives
+    # in the `source` field) about under-city hardware → TRACE-L3-05 fires.
+    k_scan = dict(empty, evidence=[{
+        "description": "Relay box M-17 hides an encrypted packet inside its audio fault noise.",
+        "source": "M-17 passive signal scan", "turn": 9}])
+    assert checks["TRACE-L3-05"](k_scan, t, n, p, w), \
+        "scan-derived relay-box evidence did not fire TRACE-L3-05 (act route)"
+
+    # (2) An analysis act whose result carries the entity's voice → L3-08.
+    k_voice = dict(empty, facts=[{
+        "description": "Signal analysis of the fragment: before the silence, there was a voice.",
+        "source": "signal analysis", "turn": 14}])
+    assert checks["TRACE-L3-08"](k_voice, t, n, p, w), \
+        "analyzed fragment carrying a voice did not fire TRACE-L3-08 (act route)"
+
+    # (3) 中文 act route: a scan coming back as dead zones / jamming → L2-06.
+    k_zh = dict(empty, evidence=[{
+        "description": "扫描显示这条巷子是监控的死角，画面尽是雪花屏蔽。",
+        "source": "信号扫描", "turn": 8}])
+    assert checks["TRACE-L2-06"](k_zh, t, n, p, w), \
+        "中文 扫描+死角 entry did not fire TRACE-L2-06 (act route)"
+
+    # Negatives — same topics WITHOUT an act must not take the act route...
+    k_talk = dict(empty, rumors=[{
+        "description": "A hawker mentions the relay box and old tunnels under the market.",
+        "source": "market hawker", "turn": 3}])
+    assert not checks["TRACE-L3-05"](k_talk, t, n, p, w), \
+        "conversational tunnel gossip fired TRACE-L3-05 without any act"
+    k_drunk = dict(empty, rumors=[{
+        "description": "An old drunk says he once heard a voice whisper in the wires.",
+        "source": "drunk", "turn": 4}])
+    assert not checks["TRACE-L3-08"](k_drunk, t, n, p, w), \
+        "voice gossip without an act fired TRACE-L3-08"
+    # ...and an act about an unrelated topic doesn't fire either.
+    k_off = dict(empty, facts=[{
+        "description": "Decrypted the vendor's ledger: he owes 40 credits to a loan shark.",
+        "source": "ledger decrypt", "turn": 5}])
+    assert not checks["TRACE-L3-08"](k_off, t, n, p, w), \
+        "an off-topic decrypt act fired TRACE-L3-08"
+    print("  [PASS] Act-on-evidence route fires L3-05/L3-08/L2-06; talk-only and off-topic acts stay silent")
+
+
+def test_ambient_causes_and_bilingual_scarcity_rule():
+    """Wave-6 F1/F2: implant joins the rationed images (in 中文 too); ambient
+    meter changes have bilingual default causes.
+
+    F1: the anti-repetition directive rationed rain/neon/hum but not the
+    implant itself, and 中文 runs slipped more than EN — the rule must name the
+    植入体/嗡鸣 terms and bind narration in any language.
+    F2: passive meter settles (e.g. alert decay) reached the client with no
+    reason — game_data must provide EN+中文 default causes for every ambient
+    meter/direction the server track can attach.
+    """
+    from engine.game_data import AMBIENT_CAUSE_LABELS
+    from engine.prompts import SYSTEM_PROMPT
+
+    line = next(l for l in SYSTEM_PROMPT.splitlines() if "sensory register" in l)
+    assert "implant" in line, "scarcity rule no longer rations the implant"
+    assert "植入体" in line and "嗡鸣" in line, \
+        "scarcity rule must name the 中文 terms (植入体/嗡鸣)"
+    assert "every language" in line.lower() or "any language" in line.lower(), \
+        "scarcity rule must explicitly bind narration in any output language"
+
+    for key in ("alert_down", "alert_up", "decay_up", "decay_down",
+                "integrity_down", "integrity_up"):
+        labels = AMBIENT_CAUSE_LABELS.get(key)
+        assert labels, f"AMBIENT_CAUSE_LABELS missing '{key}'"
+        assert labels.get("en") and labels.get("zh"), \
+            f"AMBIENT_CAUSE_LABELS['{key}'] must carry both en and zh causes"
+    print("  [PASS] Implant scarcity rule is bilingual; ambient meter causes carry en+zh")
+
+
 def main():
     print("=" * 60)
     print("Signal Lost — Regression Tests")
@@ -608,6 +732,9 @@ def main():
         test_forced_merge_still_fires_ascension,
         test_l3_reachable_by_conversational_play,
         test_listeners_named_by_trusted_npc,
+        test_l3_07_requires_sector7_context,
+        test_act_on_evidence_discovery_route,
+        test_ambient_causes_and_bilingual_scarcity_rule,
     ]
 
     passed = 0

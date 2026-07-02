@@ -166,6 +166,62 @@ def _protects_signal_sensitives(knowledge: dict) -> bool:
     return False
 
 
+# TRACE-L3-07 co-occurrence gate (playtest wave 6, friction #3a): the old check
+# fired on ANY entry containing the bare word "level" — the opening's "street
+# level Neo-Kowloon" unlocked a Layer-3 trace on turn 1 and inflated the
+# deepest-layer stat. A depth term must now co-occur with Sector-7 / lab
+# context in the SAME entry. "lab" is boundary-matched so "label" / "available"
+# don't count as lab context.
+_S7_CONTEXT_RE = re.compile(
+    r"sector\s*-?\s*7|sector\s+seven|(?<![a-z])labs?(?![a-z])|laborator|七区|实验室")
+_S7_DEPTH_RE = re.compile(
+    r"(?<![a-z])(?:level|deep|layer|storey|sub-?basement|underground)"
+    r"|多层|深层|层级|下层|地下|底层")
+
+
+def _sector7_depth_in_one_entry(knowledge: dict) -> bool:
+    """True when a SINGLE knowledge entry pairs Sector-7/lab context with a
+    depth/level term (TRACE-L3-07)."""
+    for entry_type in _KNOWLEDGE_TYPES:
+        for entry in knowledge.get(entry_type, []):
+            text = _entry_text(entry)
+            if _S7_CONTEXT_RE.search(text) and _S7_DEPTH_RE.search(text):
+                return True
+    return False
+
+
+# Act-on-evidence discovery route (playtest wave 6, friction #3b). Discovery
+# cadence was front-loaded keyword luck: by T11-20 the trace panel barely moved
+# even for players actively decrypting/analyzing/scanning what they found — the
+# very acts the teaching suggestions push. Entries born from those tool acts
+# are recognizable: the resolver records them with the act named in the entry
+# text or its `source` field (real wave-6 sessions: source "M-17 passive signal
+# scan", "S7-INTAKE signal analysis", "服务巷Signal残壳分析"). Selected mid-layer
+# traces below take an OR-branch through _acted_on_evidence() so acting on
+# evidence keeps the panel moving without loosening the conversational gates.
+_ACT_MARKERS: list[str] = [
+    "decrypt", "decipher", "decode", "analys", "analyz", "scan", "probe",
+    "presented", "present the evidence", "resonance reading",
+    "解密", "破译", "解码", "分析", "解析", "扫描", "探测", "出示", "呈交",
+]
+
+
+def _acted_on_evidence(knowledge: dict, topic_keywords: list[str]) -> bool:
+    """True when a single knowledge entry records the RESULT of a player act
+    (decrypt / analyze / scan / present — named in the entry text or its
+    `source` field) AND mentions the topic in the same entry."""
+    kws = [kw.lower() for kw in topic_keywords]
+    for entry_type in _KNOWLEDGE_TYPES:
+        for entry in knowledge.get(entry_type, []):
+            text = _entry_text(entry)
+            src = str(entry.get("source") or "").lower()
+            if not any(m in text or m in src for m in _ACT_MARKERS):
+                continue
+            if any(kw in text for kw in kws):
+                return True
+    return False
+
+
 def _any_npc_trust_at_least(npcs: dict, min_level: str) -> bool:
     """True if ANY known NPC's trust is at or above the threshold (bilingual).
 
@@ -346,7 +402,12 @@ TRACE_CONDITIONS: list[dict] = [
     {"id": "TRACE-L2-06", "layer": 2,
      "description": "NEXUS surveillance has blind spots — the Signal interferes with their scanners",
      "description_zh": "NEXUS的监控存在盲区——信号会干扰他们的扫描器",
-     "check": lambda k, t, n, p, w: _has_fact_or_rumor_about(k, ["blind spot", "盲区", "interfere", "干扰", "scanner"])},
+     # Act route (wave 6, #3b): a scan act that itself comes back as static /
+     # dead zones demonstrates the interference first-hand.
+     "check": lambda k, t, n, p, w: (
+         _has_fact_or_rumor_about(k, ["blind spot", "盲区", "interfere", "干扰", "scanner"])
+         or _acted_on_evidence(k, ["static", "dead zone", "jammed", "no coverage",
+                                   "死角", "静默区", "屏蔽"]))},
     {"id": "TRACE-L2-07", "layer": 2,
      "description": "Multiple people have disappeared following the same pattern — all had old implants",
      "description_zh": "多人以相同模式失踪——他们都有旧植入体",
@@ -401,8 +462,15 @@ TRACE_CONDITIONS: list[dict] = [
     {"id": "TRACE-L3-05", "layer": 3,
      "description": "The Undercroft contains pre-Severance infrastructure still partially active",
      "description_zh": "底渊中仍有部分运作的断离前基础设施",
-     "check": lambda k, t, n, p, w: _has_evidence(k, ["undercroft", "infrastructure", "active", "pre-severance",
-                                                      "底渊", "基础设施", "运作", "断离前"])},
+     # Act route (wave 6, #3b): a scan/analysis act on the under-city hardware
+     # itself — e.g. wave-6's "M-17 passive signal scan" evidence — verifies the
+     # old infrastructure is live even without the exact lore words.
+     "check": lambda k, t, n, p, w: (
+         _has_evidence(k, ["undercroft", "infrastructure", "active", "pre-severance",
+                           "底渊", "基础设施", "运作", "断离前"])
+         or _acted_on_evidence(k, ["undercroft", "tunnel", "conduit", "relay box",
+                                   "hatch", "under-market", "底渊", "隧道", "导管",
+                                   "中继", "检修口"]))},
     {"id": "TRACE-L3-06", "layer": 3,
      "description": "Fragment extraction is painful and often fatal — NEXUS doesn't care",
      "description_zh": "碎片提取过程痛苦且往往致命——NEXUS对此毫不在意",
@@ -411,13 +479,20 @@ TRACE_CONDITIONS: list[dict] = [
     {"id": "TRACE-L3-07", "layer": 3,
      "description": "Sector 7 has multiple levels — the deeper labs are where extraction happens",
      "description_zh": "第七区有多层结构——提取行动发生在更深层的实验室",
-     "check": lambda k, t, n, p, w: (
-         _has_evidence(k, ["sector 7", "lab", "level", "deep"]) or _has_evidence(k, ["第七区", "实验室", "深层"]))},
+     # Wave-6 friction #3a: bare "level" fired this on turn 1 ("street level
+     # Neo-Kowloon"). Depth must co-occur with Sector-7/lab context per entry.
+     "check": lambda k, t, n, p, w: _sector7_depth_in_one_entry(k)},
     {"id": "TRACE-L3-08", "layer": 3,
      "description": "The entity in the network tried to communicate before it was severed",
      "description_zh": "网络中的实体在被切断前曾试图沟通",
-     "check": lambda k, t, n, p, w: _has_evidence(k, ["communicate", "message", "entity", "before severance",
-                                                      "沟通", "试图沟通", "信息", "实体", "断离前"])},
+     # Act route (wave 6, #3b): analyzing a Signal fragment that carries a
+     # voice/whisper (the analyze_signal fragments literally read "...before the
+     # silence, there was a voice...") IS hearing the entity's attempt.
+     "check": lambda k, t, n, p, w: (
+         _has_evidence(k, ["communicate", "message", "entity", "before severance",
+                           "沟通", "试图沟通", "信息", "实体", "断离前"])
+         or _acted_on_evidence(k, ["voice", "whisper", "speaking", "spoke",
+                                   "声音", "低语", "话语", "在说话"]))},
     {"id": "TRACE-L3-09", "layer": 3,
      "description": "Some extracted fragments have been weaponized by NEXUS — Project Resonance",
      "description_zh": "一些被提取的碎片已被NEXUS武器化——共鸣计划",
@@ -628,6 +703,35 @@ ALERT_CAUSE_LABELS: dict[str, dict] = {
     "attacking_nexus": {
         "en": "you attacked NEXUS assets",
         "zh": "你袭击了NEXUS的目标"},
+}
+
+# Player-facing default causes for PASSIVE / ambient meter changes (EN + 中文).
+# Playtest wave 6, friction #2: passive settles (alert decaying over time,
+# background integrity strain, fragment decay ticking) reached the client as a
+# bare number with no reason. Additive, same pattern as ALERT_CAUSE_LABELS:
+# the server-side meter-notice track attaches one of these when a change has
+# no player-attributable cause, so no meter move is ever mute. Keys are
+# "<meter>_<direction>". Phrased ambient and spoiler-safe — they reference
+# neither undiscovered content nor a specific player act.
+AMBIENT_CAUSE_LABELS: dict[str, dict] = {
+    "alert_down": {
+        "en": "the grid's attention moves on",
+        "zh": "城市网格的注意力转移"},
+    "alert_up": {
+        "en": "routine sweeps tighten across the district",
+        "zh": "城区例行排查悄然收紧"},
+    "decay_up": {
+        "en": "the fragments fade a little more with time",
+        "zh": "碎片随时间流逝又消退了一分"},
+    "decay_down": {
+        "en": "the fragments settle and hold their pattern",
+        "zh": "碎片趋于稳定，暂时止住了消退"},
+    "integrity_down": {
+        "en": "the strain of the day wears on you",
+        "zh": "连日的损耗侵蚀着你"},
+    "integrity_up": {
+        "en": "a quiet stretch lets your body knit itself back",
+        "zh": "片刻安稳让身体缓了过来"},
 }
 
 ALERT_THRESHOLDS: list[dict] = [
