@@ -1836,6 +1836,13 @@ async def _run_turn(sess: PlayerSession, ws: WebSocket, player_input: str | None
                     result = sess.graph.invoke(sess.game_state)
                     sess.game_state = result
 
+            # The turn's HumanMessage is appended IN PLACE to the live
+            # sess.game_state below, before streaming. Keep a handle to it so a
+            # pre-commit cancel can revert the append — otherwise the rejected
+            # input would linger as a dangling, unanswered user turn and leak
+            # into the next turn's LLM context (the graph streams over its own
+            # internal copy, so it never removes it for us on abort).
+            _turn_msg = None
             if mode == "resume":
                 player = sess.game_state.get("player", {})
                 location = sess.game_state.get("location", {})
@@ -1855,12 +1862,14 @@ async def _run_turn(sess: PlayerSession, ws: WebSocket, player_input: str | None
                         f"Currently at {location.get('area', '?')} in {location.get('district', '?')}. "
                         f"Turn {player.get('turn', 1)}. Provide a brief scene-setting narrative.]"
                     )
-                sess.game_state["messages"].append(HumanMessage(content=resume_text))
+                _turn_msg = HumanMessage(content=resume_text)
+                sess.game_state["messages"].append(_turn_msg)
                 sess.game_state["skip_conversation_log"] = True
                 sess.game_state["skip_turn_increment"] = True
                 sess.game_state["skip_validation"] = True
             else:
-                sess.game_state["messages"].append(HumanMessage(content=player_input))
+                _turn_msg = HumanMessage(content=player_input)
+                sess.game_state["messages"].append(_turn_msg)
 
             # Stream the turn so we can emit phase frames and honour a cancel,
             # while extracting the exact same final state ``invoke`` would return
@@ -1869,9 +1878,16 @@ async def _run_turn(sess: PlayerSession, ws: WebSocket, player_input: str | None
                 sess.graph, sess.game_state, _emit_phase, _cancelled,
             )
             if result is _TURN_ABORTED:
-                # Aborted before state_writer — nothing was persisted and
-                # sess.game_state is untouched (the streamed state was local).
-                # Leave game_state as-is so the next turn resumes cleanly.
+                # Aborted before state_writer — nothing durable was persisted
+                # (the streamed state was local to the graph). But the append
+                # above DID mutate the live sess.game_state["messages"], so
+                # revert it: pop the exact HumanMessage we appended, restoring
+                # the pre-turn state. Without this the cancelled input would be
+                # replayed as context on the next turn (and, on the blocked-
+                # input path, the stripping RemoveMessage never ran either).
+                msgs = sess.game_state.get("messages")
+                if msgs and _turn_msg is not None and msgs[-1] is _turn_msg:
+                    msgs.pop()
                 return _TURN_ABORTED
             sess.game_state = result
             return result

@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, viewport-fit=cover">
   <title>SIGNAL LOST</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='4' fill='%230a0a0f'/><text x='16' y='22' text-anchor='middle' font-size='18' fill='%2300ff88'>S</text></svg>">
-  <link rel="stylesheet" href="/static/style.css?v=w5c">
+  <link rel="stylesheet" href="/static/style.css?v=w5fix">
   <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;400;500;600;700&family=Noto+Sans+SC:wght@300;400;500;700&display=swap" rel="stylesheet">
 </head>
 <body>
@@ -251,14 +251,16 @@
     <div class="game-layout" id="gameLayout">
       <!-- Chat panel (left) -->
       <div class="chat-panel" id="chatPanel">
-        <!-- role="log" marks the narration transcript as a live log region. We do
-             NOT put aria-live here: the typewriter mutates each message char-by-
-             char (textContent), which a polite live region would announce as a
-             storm of partial fragments. Instead the visually-hidden #chatLiveRegion
-             below is the single polite announcer — finalize() writes each message's
-             COMPLETE text into it exactly once, so screen readers hear the final
-             narration once per message with no double-announce. -->
-        <div class="chat-messages" id="chatMessages" role="log" data-i18n-aria="chat_log_label"></div>
+        <!-- role="region" (NOT role="log") names the transcript as a plain
+             landmark. role="log" would carry an IMPLICIT aria-live="polite",
+             and the typewriter mutates each message char-by-char (textContent),
+             which any live region would announce as a storm of partial/garbled
+             fragments. A non-live region keeps those mutations silent; the
+             visually-hidden #chatLiveRegion below is the single polite
+             announcer — finalize() writes each message's COMPLETE text into it
+             exactly once, so screen readers hear the final narration once per
+             message with no double-announce. -->
+        <div class="chat-messages" id="chatMessages" role="region" data-i18n-aria="chat_log_label"></div>
         <div id="chatLiveRegion" class="sr-only" aria-live="polite" aria-atomic="true"></div>
         <div class="thinking-indicator" id="thinkingIndicator" style="display:none">
           <div class="thinking-row">
@@ -669,7 +671,7 @@
        lane so the two no longer collide. -->
   <div id="toastStack" class="toast-stack" aria-live="polite" aria-relevant="additions"></div>
 
-  <script src="/static/music.js?v=w5c"></script>
-  <script src="/static/app.js?v=w5c"></script>
+  <script src="/static/music.js?v=w5fix"></script>
+  <script src="/static/app.js?v=w5fix"></script>
 </body>
 </html>
