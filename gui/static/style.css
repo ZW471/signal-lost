@@ -9,6 +9,7 @@
   --magenta-dim: #b300b3;
   --yellow: #ffbf00;
   --green: #00ff41;
+  --green-bright: #00ff88;
   --red: #ff073a;
   --orange: #ff6b35;
   --bg-dark: #0a0a0f;
@@ -16,12 +17,66 @@
   --bg-input: #12121c;
   --border: #1a1a2e;
   --border-glow: #00fff520;
+  --divider: #ffffff14;
   --text: #c0c0d0;
   --text-dim: #606080;
+  --text-muted: #cccccc;
   --text-bright: #e0e0f0;
-  --font-mono: 'Share Tech Mono', 'Courier New', monospace;
-  --font-display: 'Orbitron', sans-serif;
-  --font-ui: 'Rajdhani', sans-serif;
+  --font-mono: 'Share Tech Mono', 'Courier New', 'Noto Sans SC', monospace;
+  --font-display: 'Orbitron', 'Noto Sans SC', sans-serif;
+  --font-ui: 'Rajdhani', 'Noto Sans SC', sans-serif;
+
+  /* Radius scale */
+  --r-1: 2px;
+  --r-2: 4px;
+  --r-3: 8px;
+
+  /* Clipped-corner ("hex-cut") scale — used by clip-path polygons */
+  --cut-sm: 8px;
+  --cut-md: 12px;
+  --cut-lg: 15px;
+
+  /* Spacing scale */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 24px;
+  --sp-6: 32px;
+
+  /* Reusable neon glow shadows */
+  --glow-cyan: 0 0 10px rgba(0, 255, 245, 0.4);
+  --glow-green: 0 0 10px rgba(0, 255, 136, 0.35);
+  --glow-magenta: 0 0 10px rgba(255, 0, 255, 0.4);
+
+  /* Keyboard focus ring (double-ring: dark spacer + cyan halo) */
+  --focus-ring: 0 0 0 2px var(--bg-dark), 0 0 0 4px var(--cyan);
+}
+
+/* ================================================================
+   GLOBAL FOCUS-VISIBLE, SELECTION, SCROLLBAR
+   ================================================================ */
+
+.cyber-btn:focus-visible,
+.status-btn:focus-visible,
+.panel-tab:focus-visible,
+.cyber-select:focus-visible,
+.menu-lang-select:focus-visible,
+.cyber-slider:focus-visible,
+.auth-tab:focus-visible,
+.save-entry:focus-visible,
+.send-btn:focus-visible,
+.companion-send:focus-visible,
+.companion-input:focus-visible,
+.suggested-action-btn:focus-visible,
+.panel-search-input:focus-visible {
+  box-shadow: var(--focus-ring);
+  outline: none;
+}
+
+::selection {
+  background: var(--cyan);
+  color: var(--bg-dark);
 }
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -32,7 +87,6 @@ html, body {
   color: var(--text);
   font-family: var(--font-mono);
   overflow: hidden;
-  overflow-x: hidden;
   -webkit-font-smoothing: antialiased;
 }
 
@@ -298,28 +352,6 @@ html, body {
   98% { transform: none; }
 }
 
-.menu-subtitle {
-  font-family: var(--font-ui);
-  font-size: 20px;
-  color: var(--text-dim);
-  margin-top: 10px;
-  letter-spacing: 2px;
-}
-
-.typewriter {
-  overflow: hidden;
-  border-right: 2px solid var(--cyan);
-  white-space: nowrap;
-  animation: typewriter 2s steps(40, end), blink-caret 0.75s step-end infinite;
-  max-width: fit-content;
-  margin: 10px auto 0;
-}
-
-@keyframes typewriter {
-  from { width: 0; }
-  to { width: 100%; }
-}
-
 @keyframes blink-caret {
   50% { border-color: transparent; }
 }
@@ -500,7 +532,7 @@ html, body {
   border: 1px solid var(--border);
   clip-path: polygon(0 0, calc(100% - 20px) 0, 100% 20px, 100% 100%, 20px 100%, 0 calc(100% - 20px));
   scrollbar-width: thin;
-  scrollbar-color: var(--cyan) var(--bg-dark);
+  scrollbar-color: var(--cyan-dim) var(--bg-dark);
 }
 
 .config-title {
@@ -678,8 +710,7 @@ html, body {
    SAVES LIST
    ================================================================ */
 
-#loadGameScreen .config-container,
-#resumeScreen .config-container {
+#loadGameScreen .config-container {
   overflow-y: hidden;
 }
 
@@ -688,7 +719,7 @@ html, body {
   max-height: calc(90vh - 150px);
   overflow-y: auto;
   scrollbar-width: thin;
-  scrollbar-color: var(--cyan) var(--bg-dark);
+  scrollbar-color: var(--cyan-dim) var(--bg-dark);
 }
 
 .save-entry {
@@ -771,34 +802,6 @@ html, body {
   text-overflow: ellipsis;
   white-space: nowrap;
   display: block;
-}
-
-.integrity-bar {
-  position: relative;
-  width: 100px;
-  height: 18px;
-  background: var(--bg-input);
-  border: 1px solid var(--border);
-  overflow: hidden;
-}
-
-.integrity-fill {
-  height: 100%;
-  background: linear-gradient(90deg, var(--red), var(--yellow), var(--green));
-  transition: width 0.8s ease;
-  box-shadow: 0 0 10px rgba(0,255,65,0.3);
-}
-
-.integrity-text {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-family: var(--font-display);
-  font-size: 11px;
-  color: white;
-  text-shadow: 0 0 4px black;
 }
 
 .status-btn {
@@ -1407,7 +1410,7 @@ mark.search-hl {
 
 .panel-list-item {
   padding: 6px 0;
-  border-bottom: 1px solid rgba(255,255,255,0.03);
+  border-bottom: 1px solid var(--divider);
 }
 
 .panel-list-item:last-child {
@@ -1707,7 +1710,7 @@ mark.search-hl {
   background: var(--bg-panel);
   border: 1px solid var(--border);
   color: var(--text-dim);
-  font-family: var(--font-mono, monospace);
+  font-family: var(--font-mono);
   font-size: 12px;
   letter-spacing: 1px;
   text-transform: uppercase;
@@ -1763,7 +1766,7 @@ mark.search-hl {
   border: none;
   border-bottom: 1px solid var(--border);
   color: var(--text);
-  font-family: var(--font-mono, monospace);
+  font-family: var(--font-mono);
   font-size: 12px;
   letter-spacing: 1px;
   text-transform: uppercase;
@@ -1811,7 +1814,7 @@ mark.search-hl {
   background: var(--bg-input);
   border: 1px solid var(--border);
   color: var(--text-dim);
-  font-family: var(--font-mono, monospace);
+  font-family: var(--font-mono);
   font-size: 12px;
   letter-spacing: 2px;
   text-transform: uppercase;
@@ -1875,11 +1878,11 @@ mark.search-hl {
   padding: 10px 18px;
   background: rgba(0, 255, 136, 0.12);
   border: 1px solid rgba(0, 255, 136, 0.35);
-  color: #00ff88;
+  color: var(--green-bright);
   font-family: var(--font-display);
   font-size: 12px;
   letter-spacing: 1px;
-  border-radius: 4px;
+  border-radius: var(--r-2);
   opacity: 0;
   transform: translateY(12px);
   transition: opacity 0.3s ease, transform 0.3s ease;
@@ -1919,7 +1922,7 @@ mark.search-hl {
    STATUS BAR PIPS (matched to TUI)
    ================================================================ */
 
-.integrity-pips, .trace-pips {
+.integrity-pips {
   display: flex;
   gap: 1px;
   font-size: 14px;
@@ -1929,27 +1932,9 @@ mark.search-hl {
 
 .pip.filled { color: var(--green); text-shadow: 0 0 6px var(--green); }
 .pip.empty { color: var(--text-dim); opacity: 0.4; }
-.pip.trace-filled { color: var(--magenta); text-shadow: 0 0 6px var(--magenta); }
-.pip.trace-empty { color: var(--text-dim); opacity: 0.3; }
 
 .status-value.cyan-bright { color: var(--cyan); font-weight: bold; }
 .status-value.cyan { color: var(--cyan); }
-
-.alert-bar-mini {
-  width: 80px; height: 6px;
-  background: var(--bg-input);
-  border: 1px solid var(--border);
-  overflow: hidden;
-  margin-top: 4px;
-  border-radius: 1px;
-}
-
-.alert-bar-fill {
-  height: 100%;
-  background: linear-gradient(90deg, var(--green) 0%, var(--yellow) 40%, var(--red) 70%, var(--red) 100%);
-  transition: width 0.8s ease;
-  box-shadow: 0 0 4px rgba(255,255,0,0.3);
-}
 
 /* ================================================================
    RESIZE HANDLE
@@ -2225,7 +2210,7 @@ mark.search-hl {
 
 .conv-entry {
   padding: 8px 0;
-  border-bottom: 1px solid rgba(255,255,255,0.03);
+  border-bottom: 1px solid var(--divider);
 }
 
 .conv-entry:last-child { border-bottom: none; }
@@ -2237,6 +2222,7 @@ mark.search-hl {
   margin-bottom: 4px;
   display: flex;
   gap: 8px;
+  align-items: center;
 }
 
 .conv-content {
@@ -2303,7 +2289,6 @@ mark.search-hl {
   margin-left: auto;
   font-family: var(--font-mono);
 }
-.conv-header { display: flex; gap: 8px; align-items: center; }
 .usage-stats { margin: 8px 0; }
 
 /* ================================================================
@@ -2312,7 +2297,7 @@ mark.search-hl {
 
 .discovery-notification {
   background: rgba(0, 255, 136, 0.08);
-  border-left: 3px solid #00ff88;
+  border-left: 3px solid var(--green-bright);
   padding: 8px 12px;
   margin: 8px 0;
   font-size: 0.9em;
@@ -2320,11 +2305,11 @@ mark.search-hl {
 }
 .discovery-badge {
   font-weight: bold;
-  color: #00ff88;
+  color: var(--green-bright);
   margin-bottom: 4px;
 }
 .discovery-icon { margin-right: 6px; }
-.discovery-text { color: #ccc; font-style: italic; }
+.discovery-text { color: var(--text-muted); font-style: italic; }
 @keyframes discovery-pulse {
   0% { opacity: 0; transform: translateY(10px); }
   100% { opacity: 1; transform: translateY(0); }
@@ -2341,7 +2326,7 @@ mark.search-hl {
 }
 .system-notice-text {
   color: var(--yellow);
-  font-family: var(--font-mono, monospace);
+  font-family: var(--font-mono);
   letter-spacing: 0.3px;
   white-space: pre-wrap;
 }
@@ -2892,10 +2877,6 @@ mark.search-hl {
   .companion-fab { display: none; }
   .input-prefix { display: none; }
   .chat-neural-btn { display: inline-flex; }
-
-  /* INTEGRITY is omitted from the cramped mobile bar (still shown in ID panel);
-     the SIGNAL LOST wordmark stays. */
-  .status-item-integrity { display: none; }
 }
 
 /* Finer phone tuning for very narrow devices. */
@@ -2903,4 +2884,49 @@ mark.search-hl {
   .status-value.truncate { max-width: 96px; }
   .game-logo { font-size: 11px; letter-spacing: 1px; padding-right: 8px; }
   .panel-tab { padding: 9px 10px; font-size: 10px; }
+
+  /* INTEGRITY must never be hidden — but below 480px the bar is cramped, so
+     drop the text label and keep the pip meter (icon-only). */
+  .status-item-integrity .status-label { display: none; }
+
+  /* Keep truncation tight on narrow phones even in 中文 (CJK gets a little
+     more than Latin, but not the desktop 280px). */
+  html[lang="zh"] .status-value.truncate { max-width: 120px; }
+}
+
+/* ================================================================
+   CJK TYPOGRAPHY TUNING (html[lang="zh"])
+   Latin type is tracked out for the display look, but wide letter-spacing
+   and Latin-tuned truncation widths break Chinese glyphs. When the UI is in
+   中文 we zero/halve the tracking on titles/labels and relax truncation.
+   ================================================================ */
+html[lang="zh"] .menu-title h1 { letter-spacing: 2px; }
+html[lang="zh"] .cyber-btn { letter-spacing: 2px; }
+html[lang="zh"] .status-label { letter-spacing: 0; }
+
+/* CJK glyphs are wider than Latin — give truncated fields more room. */
+html[lang="zh"] .status-value.truncate { max-width: 280px; }
+html[lang="zh"] .account-label { max-width: 240px; }
+
+/* ================================================================
+   REDUCED MOTION
+   Honor the OS/browser "reduce motion" preference: kill the ambient
+   infinite animations and the decorative CRT flicker layers. Default
+   (no-preference) users see the full neon/CRT identity unchanged.
+   ================================================================ */
+@media (prefers-reduced-motion: reduce) {
+  /* Neutralize every animation/transition; the JS particle & glitch loops
+     are also skipped in app.js so nothing keeps repainting. */
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  /* Hide the continuously-scrolling scanlines and the flashing glitch layer. */
+  .scanlines,
+  .glitch-overlay { display: none !important; }
 }

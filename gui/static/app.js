@@ -390,6 +390,9 @@ function localizeData(category, value) {
 function setLanguage(lang) {
   currentLang = lang;
   localStorage.setItem('signal_lost_ui_lang', lang);
+  // Reflect language on <html> for correct CJK line-breaking, font selection
+  // (html[lang="zh"] tuning) and screen-reader pronunciation.
+  document.documentElement.lang = lang === 'zh' ? 'zh' : 'en';
   const menuLangSel = document.getElementById('selectMenuLanguage');
   if (menuLangSel) menuLangSel.value = lang;
   // Update tab labels
@@ -618,10 +621,16 @@ let cachedSession = null; // Store last session for re-render on language change
 // PARTICLE SYSTEM
 // ================================================================
 
+// Read the reduced-motion preference once. When set, we skip the ambient
+// particle/glitch loops entirely (CSS also neutralizes keyframe animations).
+const prefersReducedMotion = window.matchMedia
+  && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
 const canvas = document.getElementById('particles');
 const ctx = canvas.getContext('2d');
 let particles = [];
 let mouseX = 0, mouseY = 0;
+let _particleRAF = null;
 
 function resizeCanvas() {
   canvas.width = window.innerWidth;
@@ -683,9 +692,28 @@ function animateParticles() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   particles.forEach(p => { p.update(); p.draw(); });
   drawConnections();
-  requestAnimationFrame(animateParticles);
+  _particleRAF = requestAnimationFrame(animateParticles);
 }
-animateParticles();
+
+function startParticles() {
+  if (prefersReducedMotion || _particleRAF !== null) return;
+  _particleRAF = requestAnimationFrame(animateParticles);
+}
+
+function stopParticles() {
+  if (_particleRAF !== null) { cancelAnimationFrame(_particleRAF); _particleRAF = null; }
+}
+
+// Skip the ambient particle field entirely for reduced-motion users.
+if (!prefersReducedMotion) startParticles();
+
+// Pause the rAF loop while the tab is hidden and resume on return
+// (mirrors MusicEngine's visibility handling) to save CPU/battery.
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) stopParticles();
+  else startParticles();
+});
+
 document.addEventListener('mousemove', e => { mouseX = e.clientX; mouseY = e.clientY; });
 
 // ================================================================
@@ -697,10 +725,18 @@ function triggerGlitch() {
   o.classList.remove('active'); void o.offsetWidth; o.classList.add('active');
   setTimeout(() => o.classList.remove('active'), 200);
 }
-setInterval(() => { if (Math.random() < 0.15) triggerGlitch(); }, 5000);
+// The ambient random-glitch flash is decorative; skip it for reduced-motion users.
+if (!prefersReducedMotion) {
+  setInterval(() => { if (Math.random() < 0.15) triggerGlitch(); }, 5000);
+}
 
-const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+let audioCtx = null;
+try {
+  const AudioCtx = window.AudioContext || window.webkitAudioContext;
+  if (AudioCtx) audioCtx = new AudioCtx();
+} catch (e) { audioCtx = null; }
 function playBeep(freq = 880, duration = 0.05, volume = 0.03) {
+  if (!audioCtx) return;
   try {
     const osc = audioCtx.createOscillator(), gain = audioCtx.createGain();
     osc.type = 'square'; osc.frequency.value = freq;
@@ -3345,7 +3381,7 @@ window.addEventListener('load', () => {
 
 // Start music on first user interaction (browsers require gesture for AudioContext)
 function _initMusicOnce() {
-  if (audioCtx.state === 'suspended') audioCtx.resume();
+  if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
   // Only play menu music if we're on a menu screen; skip if already in-game
   const onMenu = ['menuScreen', 'bootScreen', 'newGameScreen', 'loadGameScreen']
     .some(id => { const el = document.getElementById(id); return el && el.classList.contains('active'); });
