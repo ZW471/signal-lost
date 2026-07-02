@@ -1234,6 +1234,14 @@ async def websocket_endpoint(ws: WebSocket):
                         "session": await _get_session_data_async(sess),
                     })
 
+            else:
+                # Recognized-shape frame with an unrecognized action: ack with a
+                # bilingual error so clients waiting on a reply never hang.
+                await ws.send_json({
+                    "type": "error",
+                    "message": "Unknown action. / 未知操作。",
+                })
+
     except WebSocketDisconnect:
         _on_disconnect(sess, ws)
     except RuntimeError as e:
