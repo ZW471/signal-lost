@@ -50,7 +50,6 @@ import auth
 from engine.graph import compile_graph, set_llm, set_fast_llm, get_llm, get_fast_llm
 from engine.world_sim_scheduler import WorldSimScheduler
 from engine.claude_code_engine import run_turn as cc_run_turn
-from engine.game_data import LIVE_TRACES_PER_LAYER
 from engine import action_cache
 from engine import opening_cache
 from engine import companion
@@ -586,6 +585,45 @@ def _filter_hidden(obj):
     return obj
 
 
+_TRACE_LAYER_ID_RE = re.compile(r"-L(\d+)-")
+
+
+def _present_traces(traces: dict) -> dict:
+    """Discovered-only client presentation of the persisted traces blob.
+
+    THE SPOILER RULE: the client must never learn the SIZE of undiscovered
+    content. The persisted traces.json scaffold (all five layers, per-layer
+    undiscovered slot maps, "N / 47" totals, "3/8" progress strings, deep-layer
+    flavor names) stays engine-internal. The client receives ONLY:
+
+    - ``discovered`` — the traces the player actually found (real ids kept), and
+    - ``reached_layers`` — ``[{num, name, name_zh}]`` for layers the player has
+      already reached (max L# across discovered ids). Layers deeper than that
+      are omitted entirely: no sealed rows, no names, no counts.
+
+    No denominators, no totals, no undiscovered slots ship in any form.
+    """
+    discovered = [d for d in (traces.get("discovered") or []) if isinstance(d, dict)]
+    deepest = 0
+    for d in discovered:
+        m = _TRACE_LAYER_ID_RE.search(str(d.get("id", "")))
+        if m:
+            try:
+                deepest = max(deepest, int(m.group(1)))
+            except ValueError:
+                pass
+    reached_layers = [
+        {"num": n,
+         "name": _RUN_SUMMARY_LAYER_NAMES.get(n, {}).get("en", f"Layer {n}"),
+         "name_zh": _RUN_SUMMARY_LAYER_NAMES.get(n, {}).get("zh", f"Layer {n}")}
+        for n in range(1, deepest + 1)
+    ]
+    out = {"discovered": discovered, "reached_layers": reached_layers}
+    if traces.get("title"):
+        out["title"] = traces["title"]
+    return out
+
+
 def _get_session_data(sess: PlayerSession) -> dict:
     """Read all of *sess*'s session JSON files, filter hidden fields, return dict."""
     sd = sess.session_dir
@@ -593,6 +631,12 @@ def _get_session_data(sess: PlayerSession) -> dict:
         return {}
     data = load_session(sd)
     data = _filter_hidden(data)
+    # Traces need more than the generic hidden-flag filter: undiscovered slots
+    # are NOT marked hidden (they carry status:"undiscovered"), and the scaffold
+    # itself (per-layer denominators, "N / 47" total, deep-layer names) is
+    # content-scope information. Replace it with the discovered-only view.
+    if isinstance(data.get("traces"), dict):
+        data["traces"] = _present_traces(data["traces"])
     conv_path = os.path.join(sd, "conversation.jsonl")
     conversation = []
     if os.path.exists(conv_path):
@@ -642,12 +686,9 @@ def _meter_snapshot_from_data(data: dict) -> dict:
     decay = world.get("fragment_decay") or {}
 
     trace_ids: set = set()
-    layers = ((data.get("traces") or {}).get("layers") or {})
-    if isinstance(layers, dict):
-        for layer in layers.values():
-            for tid, tr in ((layer or {}).get("traces") or {}).items():
-                if isinstance(tr, dict) and tr.get("status") and tr["status"] != "undiscovered":
-                    trace_ids.add(tid)
+    for tr in ((data.get("traces") or {}).get("discovered") or []):
+        if isinstance(tr, dict) and tr.get("id"):
+            trace_ids.add(str(tr["id"]))
 
     know_titles: set = set()
     knowledge = data.get("knowledge") or {}
@@ -703,8 +744,9 @@ def _build_run_summary(session_data: dict, death_cause) -> dict:
     """Build the spoiler-safe run epitaph shown on the game-over / gallery screens.
 
     Everything is derived from the already-loaded, spoiler-filtered *session_data*
-    (the same blob ``_finish_turn`` read this turn). Only counts + already-known
-    layer names are emitted — no undiscovered trace/knowledge/layer name leaks.
+    (the same blob ``_finish_turn`` read this turn). Only DISCOVERED counts + the
+    already-known deepest-layer name are emitted — never a total, denominator, or
+    unreached layer name (THE SPOILER RULE: no undiscovered-content sizes).
     """
     player = session_data.get("player") or {}
     world = session_data.get("world_state") or {}
@@ -721,10 +763,10 @@ def _build_run_summary(session_data: dict, death_cause) -> dict:
     turn = player.get("turn")
     day = wtime.get("day") if isinstance(wtime, dict) else None
 
-    # Traces: count discovered only; total from the canonical live scaffold.
+    # Traces: DISCOVERED count only — never a total/denominator (THE SPOILER
+    # RULE: the client must not learn the size of undiscovered content).
     discovered = traces.get("discovered")
     traces_found = len(discovered) if isinstance(discovered, list) else 0
-    traces_total = sum(LIVE_TRACES_PER_LAYER.values()) or 47
     deepest = _run_summary_deepest_layer(traces)
     layer_meta = _RUN_SUMMARY_LAYER_NAMES.get(deepest, {})
 
@@ -737,7 +779,6 @@ def _build_run_summary(session_data: dict, death_cause) -> dict:
         "turns": turn if isinstance(turn, int) else None,
         "days": day if isinstance(day, int) else None,
         "traces_found": traces_found,
-        "traces_total": traces_total,
         "deepest_layer": deepest,
         "deepest_layer_name": layer_meta.get("en", ""),
         "deepest_layer_name_zh": layer_meta.get("zh", ""),
@@ -930,23 +971,23 @@ def _maybe_autosave(session_dir: str, saves_root: str) -> None:
 # ``session/<uid>/endings_discovered.json`` holding a de-duplicated list of
 # {id, turn, day, timestamp} — one entry per DISTINCT ending id, first reach
 # wins (turn/day/timestamp of the first time that ending fired). The gallery the
-# client renders only ever names endings the player ACTUALLY reached; unreached
-# ones are sealed '???' slots the client draws from the count alone, so this file
-# is the sole source of "which endings are unlocked". The generic multi-cause
-# "death" failure state is not one of the nine designed endings, so it is stored
+# client renders only ever names endings the player ACTUALLY reached; how many
+# endings exist in total is NEVER shipped (THE SPOILER RULE) — the client shows
+# reached slots plus a single unquantified sealed '▓ ???' hint. The generic
+# multi-cause "death" failure state is not a designed ending, so it is stored
 # for completeness but never resolved into a named gallery slot.
 _ENDINGS_FILE = "endings_discovered.json"
 
-# The nine designed endings, id → {name, name_zh}, resolved once from game_data
+# The designed endings, id → {name, name_zh}, resolved once from game_data
 # so the payload never has to import ENDINGS at call time. NEVER expanded with
-# ad-hoc ids (e.g. "death"): only these nine can occupy a named gallery slot.
+# ad-hoc ids (e.g. "death"): only these can occupy a named gallery slot. The
+# SIZE of this table is engine-internal — never transmitted to the client.
 from engine.game_data import ENDINGS as _ENDINGS_DEFS
 
 _DESIGNED_ENDINGS: "dict[str, dict]" = {
     e["id"]: {"name": e.get("name", e["id"]), "name_zh": e.get("name_zh", e.get("name", e["id"]))}
     for e in _ENDINGS_DEFS
 }
-ENDINGS_TOTAL = len(_DESIGNED_ENDINGS)  # 9 — the size of the gallery
 
 
 def _endings_path(session_root: str) -> str:
@@ -1001,10 +1042,11 @@ def _record_ending(session_root: str, ending_id: str, turn, day, run_summary=Non
 def _endings_discovered_payload(session_root: str) -> list[dict]:
     """Resolve the user's reached endings into the spoiler-safe gallery payload.
 
-    Returns ``[{id, name, name_zh, turn}]`` for ONLY the nine designed endings the
+    Returns ``[{id, name, name_zh, turn}]`` for ONLY the designed endings the
     user has actually reached (a stored "death" or any unknown id is dropped — it
-    is not a gallery slot). Never emits an id/name for an UNREACHED ending, so no
-    ending the player hasn't seen can leak through this channel."""
+    is not a gallery slot). Never emits an id/name for an UNREACHED ending, and
+    never any count of how many endings exist, so neither the content nor the
+    SIZE of the unreached remainder can leak through this channel."""
     out = []
     for e in _read_endings_history(session_root):
         eid = e.get("id")
@@ -1019,10 +1061,12 @@ def _endings_discovered_payload(session_root: str) -> list[dict]:
         }
         # Per-ending run epitaph, if this reach recorded one (older history rows
         # predate it — the gallery degrades to turn-only for those). Spoiler-safe:
-        # counts + already-known layer names only, same as the game-over frame.
+        # discovered counts + already-known layer names only, same as the
+        # game-over frame. Histories written before the no-totals purge carry a
+        # `traces_total` denominator — strip it on the way out.
         rs = e.get("run_summary")
         if isinstance(rs, dict):
-            row["run_summary"] = rs
+            row["run_summary"] = {k: v for k, v in rs.items() if k != "traces_total"}
         out.append(row)
     return out
 
@@ -1040,12 +1084,12 @@ def _status_payload(sess: PlayerSession | None) -> dict:
         "langsmith": _get_langsmith_status(),
     }
     if sess is None:
-        # Logged out: still advertise the gallery SIZE (so the menu can show
-        # sealed slots) but reveal no reached endings — there is no user to scope
-        # them to.
+        # Logged out: reveal no reached endings (no user to scope them to) and —
+        # THE SPOILER RULE — no gallery size either; the client renders a single
+        # unquantified sealed hint on its own.
         base.update({"authed": False, "username": None,
                      "has_session": False, "sessions": [], "saves": [],
-                     "endings_discovered": [], "endings_total": ENDINGS_TOTAL})
+                     "endings_discovered": []})
         return base
     sessions = _list_sessions(sess.session_root)
     saves = _list_saves(sess.saves_root)
@@ -1055,10 +1099,10 @@ def _status_payload(sess: PlayerSession | None) -> dict:
         "has_session": bool(sessions),
         "sessions": sessions,
         "saves": saves,
-        # Meta-progression: which of the nine designed endings this ACCOUNT has
-        # ever reached (names only for reached ones) + the gallery size.
+        # Meta-progression: which designed endings this ACCOUNT has ever reached
+        # (names only for reached ones). The gallery's total size is never
+        # shipped (THE SPOILER RULE — no undiscovered-content sizes).
         "endings_discovered": _endings_discovered_payload(sess.session_root),
-        "endings_total": ENDINGS_TOTAL,
     })
     return base
 
@@ -2372,16 +2416,17 @@ async def _finish_turn(sess: PlayerSession, ws: WebSocket, result: dict, mode: s
             "ending": ending,
             "death_cause": result.get("death_cause"),
             "narrative": narrative,
-            # Spoiler-safe run epitaph (turns/day, traces X/47, deepest layer +
-            # known name, knowledge counts, final meters, cause). Additive — old
+            # Spoiler-safe run epitaph (turns/day, DISCOVERED trace count,
+            # deepest layer + known name, knowledge counts, final meters, cause).
+            # No totals or denominators ship (THE SPOILER RULE). Additive — old
             # clients ignore it; the client degrades gracefully if absent.
             "run_summary": run_summary,
             # The refreshed per-account gallery so the end-screen can light up the
             # ending just earned (and any previously unlocked) without a round-trip.
-            # Names only for REACHED designed endings; sealed slots come from the
-            # total. A "death" or unknown id contributes no named slot.
+            # Names only for REACHED designed endings; the client hints at the
+            # sealed remainder without a count. A "death" or unknown id
+            # contributes no named slot.
             "endings_discovered": endings_discovered,
-            "endings_total": ENDINGS_TOTAL,
         })
         if sess.scheduler:
             sess.scheduler.stop()

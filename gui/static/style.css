@@ -1886,7 +1886,8 @@ mark.search-hl {
   --depth-color: color-mix(in srgb, var(--magenta) calc(var(--depth-t) * 100%), var(--cyan));
 }
 
-/* ---- Descent gauge (compact 0-5 header meter) ---- */
+/* ---- Descent gauge (header meter that GROWS with reached depth — no fixed
+   segment count, so the number of layers is never revealed) ---- */
 .descent-gauge {
   display: flex;
   align-items: center;
@@ -1925,6 +1926,18 @@ mark.search-hl {
   border-color: transparent;
   box-shadow: 0 0 6px color-mix(in srgb, var(--magenta) calc(((var(--depth,1) - 1) / 4) * 100%), var(--cyan));
 }
+/* Single unquantified "deeper signals remain" affordance — dim, dashed, one
+   glyph; deliberately NOT sized like a countable layer segment. */
+.descent-seg.beyond {
+  flex: 0 0 18px;
+  font-size: 9px;
+  line-height: 8px;
+  text-align: center;
+  color: var(--text-dim);
+  background: transparent;
+  border-style: dashed;
+}
+
 /* The current (deepest reached) layer expands to show its flavor name. */
 .descent-seg.current {
   flex: 2 1 0;
@@ -1982,16 +1995,18 @@ mark.search-hl {
   color: var(--text-muted);
 }
 
-/* ---- Segmented per-band progress bar (mirrors HUD banded-gauge language) ---- */
+/* ---- Discovered-count pip bar (mirrors HUD banded-gauge language). Pips are
+   FIXED-width so the bar's length encodes the discovered count — there is no
+   denominator track to fill (spoiler rule: no totals). ---- */
 .trace-segbar {
   display: flex;
+  flex-wrap: wrap;
   gap: 2px;
   margin-bottom: var(--sp-2);
 }
 .trace-seg {
-  flex: 1 1 0;
+  flex: 0 0 9px;
   height: 5px;
-  min-width: 2px;
   border-radius: var(--r-1);
   background: var(--bg-input);
   border: 1px solid var(--border);
@@ -4024,15 +4039,17 @@ html[lang="zh"] .account-label { max-width: 240px; }
 }
 
 /* ================================================================
-   ENDINGS GALLERY (meta-progression) — wave 8
-   3x3 grid of ending slots inside the shared .dialog card. Reached slots carry
-   a subtle cyan→magenta depth tint (--depth 1-5); sealed slots are dim '▓ ???'.
+   ENDINGS GALLERY (meta-progression) — wave 8, no-totals purge wave 12
+   Flow grid SIZED TO DISCOVERED CONTENT (spoiler rule: the grid shape must not
+   imply how many endings exist): reached slots carry a subtle cyan→magenta
+   depth tint (--depth 1-5), followed by a single unquantified sealed '▓ ???'
+   hint card.
    ================================================================ */
 .endings-dialog { padding: 30px; width: min(92vw, 560px); }
 
 .endings-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
   gap: var(--sp-3);
 }
 
@@ -4206,7 +4223,8 @@ html[lang="zh"] .account-label { max-width: 240px; }
   color: var(--depth-color, var(--cyan));
 }
 
-/* Mini 5-band layer bar — depth-tinted segments (Trace Ladder visual echo). */
+/* Mini layer bar — one depth-tinted segment per REACHED layer (Trace Ladder
+   visual echo; grows with depth, never a fixed band count). */
 .rs-layerbar { display: inline-flex; gap: 3px; margin-left: auto; }
 .rs-band {
   width: 14px;
@@ -4340,13 +4358,6 @@ html[lang="zh"] .account-label { max-width: 240px; }
 .dmap-node-g.clickable:focus-visible { outline: none; }
 .dmap-node-g.clickable:focus-visible .dmap-node { stroke: var(--green-bright); }
 .dmap-node-g.clickable:focus-visible .dmap-label { fill: var(--green-bright); }
-
-.dmap-sealed { fill: var(--text-dim); opacity: 0.5; }
-.dmap-sealed-label {
-  padding: 2px var(--sp-2) var(--sp-1);
-  font-size: 10px;
-  letter-spacing: 0.5px;
-}
 
 /* ================================================================
    RESUME SKELETON — wave 8

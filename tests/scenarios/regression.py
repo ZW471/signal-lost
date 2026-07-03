@@ -1071,15 +1071,19 @@ def test_endings_history_dedup_and_spoiler_safe():
     Server feature (endings gallery meta-progression): a reached ending is appended
     to session/<uid>/endings_discovered.json exactly once (first-reach wins), the
     'status' gallery payload names ONLY reached DESIGNED endings (never an unreached
-    id/name), the generic 'death' failure state is stored but never occupies a named
-    gallery slot, and endings_total is the count of designed endings (9).
+    id/name), and the generic 'death' failure state is stored but never occupies a
+    named gallery slot. NO-TOTALS RULE: the module no longer exports ENDINGS_TOTAL —
+    how many endings exist is undiscovered-content scope and must never ship (the
+    old test pinned `ENDINGS_TOTAL == 9`; that presentation is now forbidden).
     """
     import gui.server as srv
 
     with tempfile.TemporaryDirectory() as root:
-        # Nothing reached yet → empty gallery, but total advertised.
+        # Nothing reached yet → empty gallery. No gallery-size constant may exist
+        # for a payload to pick up.
         assert srv._endings_discovered_payload(root) == [], "fresh user must have no reached endings"
-        assert srv.ENDINGS_TOTAL == 9, f"expected 9 designed endings, got {srv.ENDINGS_TOTAL}"
+        assert not hasattr(srv, "ENDINGS_TOTAL"), \
+            "ENDINGS_TOTAL is back — the gallery size must stay engine-internal (no-totals rule)"
 
         # Reach a real designed ending; it resolves to a named slot with turn.
         srv._record_ending(root, "the_bridge", 47, 6)
@@ -1144,17 +1148,21 @@ def test_endings_history_atomic_write_survives_garbage():
 
 
 def test_status_payload_carries_endings_gallery():
-    """The 'status' payload exposes endings_discovered + endings_total, spoiler-safe.
+    """The 'status' payload exposes endings_discovered ONLY — never a gallery size.
 
-    Logged-out: advertises the gallery SIZE only, zero reached endings. Logged-in:
-    reflects that user's own reached endings and never another shape's ending.
+    NO-TOTALS RULE (rewrite of the wave-8 test that pinned `endings_total` in both
+    branches — that field existed solely to carry the total ending count, which is
+    undiscovered-content scope): logged-out ships zero reached endings and NO
+    endings_total; logged-in reflects that user's own reached endings, still with
+    NO endings_total.
     """
     import shutil
     import gui.server as srv
 
-    # Logged out — size only, no reached endings.
+    # Logged out — no reached endings, no gallery size.
     out = srv._status_payload(None)
-    assert out["endings_total"] == srv.ENDINGS_TOTAL, "logged-out payload missing endings_total"
+    assert "endings_total" not in out, \
+        "logged-out payload ships endings_total — the gallery size must never reach the client"
     assert out["endings_discovered"] == [], "logged-out payload must reveal no reached endings"
 
     # Logged in — scoped to this user's own session_root.
@@ -1168,10 +1176,11 @@ def test_status_payload_carries_endings_gallery():
             out2 = srv._status_payload(sess)
             ids = {g["id"] for g in out2["endings_discovered"]}
             assert ids == {"exile"}, f"status gallery not scoped to this user's reached endings: {ids}"
-            assert out2["endings_total"] == srv.ENDINGS_TOTAL
+            assert "endings_total" not in out2, \
+                "logged-in payload ships endings_total — the gallery size must never reach the client"
         finally:
             shutil.rmtree(sess.session_root, ignore_errors=True)
-    print("  [PASS] status payload carries a spoiler-safe endings gallery (logged in + out)")
+    print("  [PASS] status payload carries reached endings only — no gallery size (logged in + out)")
 
 
 def test_district_access_carries_unlocked_names_only():
@@ -1217,6 +1226,76 @@ def test_district_access_carries_unlocked_names_only():
         for sealed in ("The Spire", "The Resonance", "The Undercroft", "Sector 7"):
             assert sealed not in blob, f"sealed district '{sealed}' leaked into client world_state"
     print("  [PASS] district_access exposes unlocked names only; sealed registry stripped for client")
+
+
+def test_client_payload_reveals_no_content_totals():
+    """THE SPOILER RULE (no-totals purge): no client payload may reveal the SIZE
+    of undiscovered content.
+
+    The persisted traces.json legitimately keeps the full engine scaffold —
+    "N / 47" total, per-layer "x/y" progress, all five layers with undiscovered
+    "[???]" slots and deep-layer flavor names (engine gating needs it, and
+    ``reconcile_trace_presentation`` keeps writing it). ``_get_session_data``
+    must strip ALL of that down to a discovered-only presentation: the
+    discovered list plus {num, name, name_zh} for layers already REACHED —
+    no denominators, no unreached-layer names, no undiscovered slots. The run
+    summary ships a discovered count and the reached layer name, never a total.
+    """
+    from engine.state import create_new_session
+    from engine.game_data import reconcile_trace_presentation, LIVE_TRACE_TOTAL
+    import gui.server as srv
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        session_dir = os.path.join(tmpdir, "nototals")
+        create_new_session(session_dir=session_dir, name="N", alias="N",
+                           background="street_runner", difficulty="standard", language="en")
+
+        # Simulate live play: two discoveries (deepest reached layer = 3), then
+        # the engine's per-turn presentation reconcile, which persists the
+        # internal "N / 47" total and per-layer denominators.
+        traces_path = os.path.join(session_dir, "traces.json")
+        with open(traces_path, encoding="utf-8") as f:
+            traces = json.load(f)
+        traces["discovered"] = [
+            {"id": "TRACE-L1-01", "description": "NEXUS controls Neo-Kowloon", "turn": 2},
+            {"id": "TRACE-L3-01", "description": "A deep truth", "turn": 9},
+        ]
+        reconcile_trace_presentation(traces)
+        assert traces["total_discovered"] == f"2 / {LIVE_TRACE_TOTAL}", \
+            "the ENGINE-INTERNAL scaffold must keep its canonical total"
+        with open(traces_path, "w", encoding="utf-8") as f:
+            json.dump(traces, f, ensure_ascii=False)
+
+        sess = srv.PlayerSession("nt-user", "nt-uid")
+        sess.session_dir = session_dir
+        data = srv._get_session_data(sess)
+        ct = data["traces"]
+
+        # Discovered scope survives verbatim (real ids, never renumbered).
+        assert [d["id"] for d in ct["discovered"]] == ["TRACE-L1-01", "TRACE-L3-01"], \
+            f"discovered traces must reach the client: {ct.get('discovered')}"
+        # Reached layers only (1..deepest=3), each named; deeper layers absent
+        # entirely — no sealed rows, no names, no slot counts.
+        nums = [l["num"] for l in ct["reached_layers"]]
+        assert nums == [1, 2, 3], f"reached_layers must cover 1..deepest only: {nums}"
+        assert any(l.get("name") == "The Severance Truth" for l in ct["reached_layers"]), \
+            "the REACHED deepest layer's name is player-known and must ship"
+        # The forbidden scaffold fields are gone from the client payload.
+        assert "layers" not in ct and "total_discovered" not in ct, \
+            f"scaffold fields leaked to the client: {sorted(ct)}"
+        blob = json.dumps(ct, ensure_ascii=False)
+        assert f"/ {LIVE_TRACE_TOTAL}" not in blob and "progress" not in blob \
+            and "[???]" not in blob, f"totals/denominators/undiscovered slots leaked: {blob[:200]}"
+        # Deep-layer flavor names must not ship before they are reached.
+        for name in ("The Mirror", "The Full Truth", "镜像", "完整真相"):
+            assert name not in blob, f"unreached layer name '{name}' leaked to the client"
+
+        # Run summary: discovered count + reached layer name only — no total.
+        rs = srv._build_run_summary(data, None)
+        assert rs["traces_found"] == 2, f"run summary lost the discovered count: {rs}"
+        assert "traces_total" not in rs, "run summary ships a trace total (forbidden denominator)"
+        assert rs["deepest_layer"] == 3 and rs["deepest_layer_name"] == "The Severance Truth"
+    print("  [PASS] client payload ships discovered scope only — no totals, denominators, or deep names")
 
 
 def test_suggestion_recent_memory_and_no_repeat_directive():
@@ -1334,6 +1413,7 @@ def main():
         test_endings_history_atomic_write_survives_garbage,
         test_status_payload_carries_endings_gallery,
         test_district_access_carries_unlocked_names_only,
+        test_client_payload_reveals_no_content_totals,
     ]
 
     passed = 0

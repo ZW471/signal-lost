@@ -539,8 +539,10 @@ def gen_frontend() -> None:
     emit("fe_render_deep_panels", "frontend/render", "Deep-state panels (33 traces) render",
          "en", "gui", "deep_en",
          setup="Load this near-endgame save; open Traces and World panels.",
-         rubric="PASS if trace progress, layers, meters and world events render correctly and "
-                "legibly. FAIL on broken progress bars, clipped layers, or mixed languages.")
+         rubric="PASS if trace bands (discovered counts ONLY — no totals or '/N' denominators "
+                "anywhere), reached layers, meters and world events render correctly and "
+                "legibly. FAIL on broken bars, clipped layers, mixed languages, or any "
+                "undiscovered-content total (e.g. 'N/47', '?/8', a fixed 5-slot gauge).")
     emit("fe_render_contrast", "frontend/render", "Core text is legible (contrast)", "en", "gui",
          base_mid("en"),
          setup="Load the save; read the narrative, panel values, and dim/secondary labels.",

@@ -145,7 +145,9 @@ Signal Lost/
 
 ### Knowledge & Trace System
 
-47 traces across 5 layers (L1×8, L2×11, L3×11, L4×9, L5×8). Each trace has a `check()` lambda in `game_data.py` that evaluates against current state. `trace_checker` runs every turn and never forgets discoveries. `deepest_layer` gates what content the LLM can narrate (via `prompts.py` BACKGROUND_LAYERS).
+The engine tracks 47 traces across 5 layers (L1×8, L2×11, L3×11, L4×9, L5×8) — these totals are **engine-internal only**. Each trace has a `check()` lambda in `game_data.py` that evaluates against current state. `trace_checker` runs every turn and never forgets discoveries. `deepest_layer` gates what content the LLM can narrate (via `prompts.py` BACKGROUND_LAYERS).
+
+**THE SPOILER RULE (no-totals):** the UI / client payloads must never reveal the *size* of undiscovered content — no "N/47" totals, no per-layer denominators ("3/8"), no fixed 5-segment depth gauges, no endings-gallery size. `gui/server.py` (`_present_traces`) strips the persisted trace scaffold down to a discovered-only presentation (the `discovered` list + `{num, name, name_zh}` for layers already reached); `_build_run_summary` and the endings payloads ship discovered counts only. Sealed/unknown content may be *hinted* only unquantified (a single `▓ ???` card, a lone "deeper" affordance). Discovered counts, depth reached so far, and already-known names are fine; in-game mechanical meters (integrity 3/3, alert %) are not content scope. The persisted `traces.json` scaffold (`reconcile_trace_presentation`, `LIVE_TRACE_TOTAL`, `LIVE_TRACES_PER_LAYER`) stays intact for engine gating — it just must never be transmitted.
 
 ### Endings & Consent (`engine/game_data.py`)
 

@@ -157,12 +157,13 @@ const LABELS = {
     theories: 'THEORIES', connections: 'CONNECTIONS', none_discovered: 'None discovered',
     // Traces
     traces_of_truth: 'TRACES OF TRUTH', discovered: 'Discovered',
-    // Trace Ladder — descent gauge + layer bands (flavor names bilingual;
-    // the traces.json scaffold ships English-only, so names route through L()).
-    descent: 'DESCENT', trace_locked: 'LOCKED',
+    // Trace Ladder — descent gauge + layer bands. SPOILER RULE: only the
+    // shallow layer names live in client LABELS; deeper reached-layer names
+    // ship from the server (traces.reached_layers / discovery layer_name) only
+    // once the player has actually reached them.
+    descent: 'DESCENT',
     trace_layer_1: 'The Surface', trace_layer_2: 'The Conspiracy',
-    trace_layer_3: 'The Severance Truth', trace_layer_4: 'The Mirror',
-    trace_layer_5: 'The Full Truth',
+    trace_layer_3: 'The Severance Truth',
     // Toasts + discovery ceremony
     toast_dismiss: 'Dismiss',
     toast_more: 'more',
@@ -239,12 +240,10 @@ const LABELS = {
     endings_sealed: '??‽',           // shown on sealed slots (▓ ???)
     endings_reached_on: 'Reached',
     endings_reached_turn: 'Turn',
-    endings_counter: 'endings discovered',   // '{n}/{total} endings discovered'
+    endings_counter: 'endings discovered',   // '{n} endings discovered' (no total)
     endings_new_recorded: 'NEW ENDING RECORDED',
-    endings_gallery_short: 'Gallery',        // '◈ NEW ENDING RECORDED — Gallery 3/9'
     // District constellation map (WORLD tab)
     district_map_title: 'DISTRICT MAP',
-    district_map_sealed: 'Sealed',           // dim edge slots ('{n} Sealed')
     district_map_travel: 'go to',            // click → prefill 'go to {name}'
     // Resume/load skeleton line
     restoring_signal: '// restoring signal…',
@@ -435,10 +434,9 @@ const LABELS = {
     facts: '事实', rumors: '传闻', evidence: '证据',
     theories: '推论', connections: '关联', none_discovered: '尚未发现',
     traces_of_truth: '真相痕迹', discovered: '已发现',
-    descent: '深潜', trace_locked: '未解封',
+    descent: '深潜',
     trace_layer_1: '表层', trace_layer_2: '阴谋',
-    trace_layer_3: '断离真相', trace_layer_4: '镜像',
-    trace_layer_5: '完整真相',
+    trace_layer_3: '断离真相',
     toast_dismiss: '关闭',
     toast_more: '更多',
     trace_uncovered: '痕迹揭示',
@@ -504,12 +502,10 @@ const LABELS = {
     endings_sealed: '??‽',
     endings_reached_on: '达成于',
     endings_reached_turn: '回合',
-    endings_counter: '结局已发现',            // '{n}/{total} 结局已发现'
+    endings_counter: '结局已发现',            // '结局 {n} 已发现'（无总数）
     endings_new_recorded: '记录新结局',
-    endings_gallery_short: '结局档案',        // '◈ 记录新结局 — 结局档案 3/9'
     // District constellation map (WORLD tab)
     district_map_title: '区域地图',
-    district_map_sealed: '封锁',              // '{n} 封锁'
     district_map_travel: '前往',              // click → prefill '前往{name}'
     // Resume/load skeleton line
     restoring_signal: '// 正在恢复信号…',
@@ -1945,11 +1941,10 @@ function handleServerMessage(msg) {
         document.getElementById('btnLoadGame').style.display = 'none';
         cachedSaves = [];
       }
-      // Meta-progression: cache the spoiler-safe endings gallery (reached ones
-      // named, plus the total) so the ENDINGS menu can render sealed slots from
-      // the count alone. Additive — absent fields degrade to an empty gallery.
+      // Meta-progression: cache the spoiler-safe endings gallery (REACHED
+      // endings only — the server never ships a gallery size). Additive —
+      // an absent field degrades to an empty gallery.
       if (Array.isArray(msg.endings_discovered)) _endingsDiscovered = msg.endings_discovered;
-      if (typeof msg.endings_total === 'number') _endingsTotal = msg.endings_total;
       // If the gallery dialog is open, repaint it live on a fresh status.
       const endOv = document.getElementById('endingsOverlay');
       if (endOv && endOv.style.display !== 'none') _renderEndingsGallery();
@@ -2119,8 +2114,9 @@ function handleServerMessage(msg) {
       // gallery. Detect whether THIS ending is newly discovered (present now but
       // not in our last-cached gallery) before we overwrite the cache, so the
       // end-screen can light up a '◈ NEW ENDING RECORDED' line. Then adopt the
-      // fresh gallery + total so the ENDINGS menu is up to date without a
-      // round-trip. All additive — absent fields degrade to no new-ending line.
+      // fresh gallery so the ENDINGS menu is up to date without a round-trip
+      // (no gallery size ships — spoiler rule). All additive — absent fields
+      // degrade to no new-ending line.
       let _newEnding = false;
       if (Array.isArray(msg.endings_discovered)) {
         const _prevIds = new Set((_endingsDiscovered || []).map(e => e && e.id));
@@ -2128,7 +2124,6 @@ function handleServerMessage(msg) {
           && msg.endings_discovered.some(e => e && e.id === msg.ending && !_prevIds.has(e.id));
         _endingsDiscovered = msg.endings_discovered;
       }
-      if (typeof msg.endings_total === 'number') _endingsTotal = msg.endings_total;
       setTimeout(() => showGameOver(msg.ending, msg.narrative, msg.death_cause, _newEnding, msg.run_summary), 2000);
       break;
 
@@ -2891,12 +2886,14 @@ function showDiscoveryNotification(msg) {
   playDiscoveryCeremony(msg);
 }
 
-/** Bilingual layer name for a discovery payload. Prefer the numeric layer (its
- *  flavor name is bilingual in LABELS); fall back to the server's player-known
- *  layer_name string. Both are already discovered → no spoiler risk. */
+/** Layer name for a discovery payload. LABELS only hold the shallow layer
+ *  names (spoiler rule: deep names never live client-side); deeper layers use
+ *  the server's player-known layer_name string — which is safe here because
+ *  the player just discovered a trace in that layer. */
 function _discoveryLayerName(msg) {
   const n = Number(msg && msg.layer);
-  if (n >= 1 && n <= 5) return L('trace_layer_' + n);
+  const key = 'trace_layer_' + n;
+  if (n >= 1 && LABELS.en && LABELS.en[key]) return L(key);
   return (msg && msg.layer_name) ? String(msg.layer_name) : '';
 }
 
@@ -4054,19 +4051,20 @@ function closeSaveDialog() { closeDialog(document.getElementById('saveDialog'));
 // when the summary is absent (old saves / mid-migration) so callers degrade
 // gracefully.
 
-// Mini 5-band layer bar echoing the Trace Ladder / Descent visual language: five
-// depth-tinted segments, lit up to `deepest`, with the reached one marked current.
-// Names are never printed here (spoiler-safe) — it's a pure depth glyph strip.
+// Mini layer bar echoing the Trace Ladder / Descent visual language. GROWS with
+// depth: one depth-tinted segment per REACHED layer — never a fixed band count,
+// never a total (spoiler rule: no undiscovered-content sizes). Names are never
+// printed here — it's a pure depth glyph strip. (The clamp is a cosmetic sanity
+// bound on the tint ramp, not a displayed total.)
 function renderRunSummaryLayerBar(deepest) {
   const d = Math.max(0, Math.min(5, Number(deepest) || 0));
   let segs = '';
-  for (let n = 1; n <= 5; n++) {
-    const reached = n <= d;
-    const isCurrent = n === d && d > 0;
-    const cls = 'rs-band' + (reached ? ' reached' : '') + (isCurrent ? ' current' : '');
+  for (let n = 1; n <= d; n++) {
+    const isCurrent = n === d;
+    const cls = 'rs-band reached' + (isCurrent ? ' current' : '');
     segs += `<span class="${cls}" style="--depth:${n}"></span>`;
   }
-  return `<span class="rs-layerbar" role="img" aria-label="${esc(L('run_descent'))} ${d}/5">${segs}</span>`;
+  return `<span class="rs-layerbar" role="img" aria-label="${esc(L('run_descent'))} ${d}">${segs}</span>`;
 }
 
 // Localized deepest-layer name from the run_summary (already player-known — the
@@ -4112,17 +4110,19 @@ function renderRunSummary(rs) {
   const dayTurnLine = dayTurn.length
     ? `<div class="rs-dayturn">${dayTurn.join(' · ')}</div>` : '';
 
-  // Traces X/47 + mini layer bar.
+  // Traces DISCOVERED count + mini layer bar. Never a total/denominator — old
+  // stored summaries may still carry traces_total; it is deliberately ignored.
   const tracesRow = `<div class="rs-row">
     <span class="rs-label">${esc(L('run_traces'))}</span>
-    <span class="rs-value">${esc(num(rs.traces_found))}<span class="rs-slash">/</span>${esc(num(rs.traces_total))}</span>
+    <span class="rs-value">${esc(num(rs.traces_found))}</span>
     ${renderRunSummaryLayerBar(rs.deepest_layer)}
   </div>`;
 
-  // Descent depth + known layer name.
+  // Descent depth reached + known layer name (no '/5' — the layer count is
+  // undiscovered-content scope).
   const descentRow = `<div class="rs-row">
     <span class="rs-label">${esc(L('run_descent'))}</span>
-    <span class="rs-value">L${esc(String(Math.max(0, Number(rs.deepest_layer) || 0)))}<span class="rs-slash">/</span>5</span>
+    <span class="rs-value">L${esc(String(Math.max(0, Number(rs.deepest_layer) || 0)))}</span>
     <span class="rs-layername">${esc(_runSummaryLayerName(rs))}</span>
   </div>`;
 
@@ -4206,7 +4206,8 @@ function showGameOver(ending, narrative, deathCause, newEnding, runSummary) {
   rsHost.hidden = !rsHtml;
 
   // Meta-progression: if this run unlocked a previously-undiscovered ending, show
-  // a small '◈ NEW ENDING RECORDED — Gallery 3/9' line. The host node is created
+  // a small '◈ NEW ENDING RECORDED' line (no gallery counter — the gallery size
+  // is undiscovered-content scope and never shown). The host node is created
   // once and reused; hidden (emptied) when nothing new was recorded so a replay
   // over the same overlay can't leave a stale line behind. Kept BELOW the summary.
   let newEl = document.getElementById('gameOverNewEnding');
@@ -4222,9 +4223,7 @@ function showGameOver(ending, narrative, deathCause, newEnding, runSummary) {
     if (body) body.appendChild(newEl);
   }
   if (newEnding) {
-    const total = _endingsTotal || (_endingsDiscovered ? _endingsDiscovered.length : 0);
-    const found = (_endingsDiscovered || []).length;
-    newEl.textContent = `◈ ${L('endings_new_recorded')} — ${L('endings_gallery_short')} ${found}/${total}`;
+    newEl.textContent = `◈ ${L('endings_new_recorded')}`;
     newEl.hidden = false;
   } else {
     newEl.textContent = '';
@@ -4247,59 +4246,55 @@ function showGameOver(ending, narrative, deathCause, newEnding, runSummary) {
 
 // ================================================================
 // ENDINGS GALLERY (meta-progression)
-// A 3x3 grid of the nine designed endings. Reached ones (from the spoiler-safe
-// status payload) are named + carry reached-on info; every other slot is sealed
-// '▓ ???' drawn from the count alone. The client never learns an unreached
-// ending's id or name — the gallery is built purely from _endingsDiscovered
-// (reached, named) + _endingsTotal (how many sealed slots to draw).
+// DISCOVERED SCOPE ONLY: one named slot per REACHED ending (from the
+// spoiler-safe status payload), plus exactly ONE unquantified sealed '▓ ???'
+// card hinting that more remains — the client never learns an unreached
+// ending's id, name, or HOW MANY endings exist (the gallery size is
+// undiscovered-content scope and is never shipped or shown).
 // ================================================================
 let _endingsDiscovered = [];   // [{id, name, name_zh, turn}] — REACHED only
-let _endingsTotal = 9;         // gallery size (server: endings_total)
 
 /** Bilingual display name for a reached ending row. */
 function _endingName(e) {
   return (currentLang === 'zh' && e && e.name_zh) ? e.name_zh : (e && e.name) || '';
 }
 
-/** (Re)build the 3x3 gallery grid + footer counter from the cached payload. */
+/** (Re)build the gallery grid + footer counter from the cached payload.
+ *  Grid = one named slot per REACHED ending + exactly ONE unquantified sealed
+ *  card. The client cannot know when every ending is found (it never learns the
+ *  total), so the sealed hint is always present — spoiler-safe by construction. */
 function _renderEndingsGallery() {
   const grid = document.getElementById('endingsGrid');
   if (!grid) return;
   const reached = Array.isArray(_endingsDiscovered) ? _endingsDiscovered : [];
-  // Total slots = max(server total, reached count) so a fresh/short total can
-  // never hide a reached ending. Clamp to a sane 3x3 minimum for layout.
-  const total = Math.max(_endingsTotal || 0, reached.length, 9);
   let html = '';
-  for (let i = 0; i < total; i++) {
-    const e = reached[i];
-    if (e) {
-      // Assign a stable depth (1-5) per slot index so reached tokens get a
-      // subtle cyan→magenta tint ramp — flavor only, not a spoiler (no layer
-      // data ships with the ending).
-      const depth = (i % 5) + 1;
-      const name = _endingName(e);
-      const turn = (e.turn != null)
-        ? `<div class="ending-slot-meta">${esc(L('endings_reached_on'))} · ${esc(L('endings_reached_turn'))} ${esc(String(e.turn))}</div>`
-        : '';
-      // Reached slots with a stored run_summary are expandable (click → inline
-      // stat grid below the grid). Older reaches (no summary) stay static.
-      const hasRs = e.run_summary && typeof e.run_summary === 'object';
-      const rsAttrs = hasRs
-        ? ` data-ending="${esc(String(e.id || ''))}" tabindex="0" role="button" aria-expanded="false"`
-        : ' role="listitem"';
-      html += `<div class="ending-slot reached depth-${depth}${hasRs ? ' expandable' : ''}" style="--depth:${depth}"${rsAttrs}>
-        <div class="ending-slot-glyph">◈</div>
-        <div class="ending-slot-name">${esc(name)}</div>
-        ${turn}
-      </div>`;
-    } else {
-      // Sealed slot — no id, no name, no hint. Count only.
-      html += `<div class="ending-slot sealed" role="listitem" aria-label="${esc(L('endings_sealed'))}">
-        <div class="ending-slot-glyph">▓</div>
-        <div class="ending-slot-name dim">???</div>
-      </div>`;
-    }
-  }
+  reached.forEach((e, i) => {
+    // Assign a stable depth (1-5) per slot index so reached tokens get a
+    // subtle cyan→magenta tint ramp — flavor only, not a spoiler (no layer
+    // data ships with the ending).
+    const depth = (i % 5) + 1;
+    const name = _endingName(e);
+    const turn = (e.turn != null)
+      ? `<div class="ending-slot-meta">${esc(L('endings_reached_on'))} · ${esc(L('endings_reached_turn'))} ${esc(String(e.turn))}</div>`
+      : '';
+    // Reached slots with a stored run_summary are expandable (click → inline
+    // stat grid below the grid). Older reaches (no summary) stay static.
+    const hasRs = e.run_summary && typeof e.run_summary === 'object';
+    const rsAttrs = hasRs
+      ? ` data-ending="${esc(String(e.id || ''))}" tabindex="0" role="button" aria-expanded="false"`
+      : ' role="listitem"';
+    html += `<div class="ending-slot reached depth-${depth}${hasRs ? ' expandable' : ''}" style="--depth:${depth}"${rsAttrs}>
+      <div class="ending-slot-glyph">◈</div>
+      <div class="ending-slot-name">${esc(name)}</div>
+      ${turn}
+    </div>`;
+  });
+  // ONE sealed card — an unquantified "more remains sealed" hint. No id, no
+  // name, no count of what's left.
+  html += `<div class="ending-slot sealed" role="listitem" aria-label="${esc(L('endings_sealed'))}">
+    <div class="ending-slot-glyph">▓</div>
+    <div class="ending-slot-name dim">???</div>
+  </div>`;
   grid.innerHTML = html;
 
   // Wire click/keyboard on expandable reached slots → toggle an inline detail
@@ -4321,10 +4316,11 @@ function _renderEndingsGallery() {
 
   const counter = document.getElementById('endingsCounter');
   if (counter) {
-    // Bilingual counter: '结局 2/9 已发现' / '2/9 endings discovered'.
+    // Bilingual DISCOVERED-only counter: '结局 2 已发现' / '2 endings
+    // discovered' — never a '/total' denominator.
     counter.textContent = currentLang === 'zh'
-      ? `${L('menu_endings')} ${reached.length}/${total} 已发现`
-      : `${reached.length}/${total} ${L('endings_counter')}`;
+      ? `${L('menu_endings')} ${reached.length} 已发现`
+      : `${reached.length} ${L('endings_counter')}`;
   }
 }
 
@@ -4976,25 +4972,19 @@ function updateKnowledgePanel(knowledge) {
 
 // ---------- TRACES PANEL — Layered Trace Ladder + Descent depth gauge ----------
 //
-// The five real story layers (The Surface → The Full Truth) render as labeled
-// bands. Each *discovered* trace is bucketed under its TRUE layer by parsing the
-// L# from its real id (TRACE-L3-07 → layer 3) — ids are never renumbered. Layers
-// deeper than the player's reached depth render as ONE sealed row (counts only);
-// we never emit '[???]' text or any undiscovered trace name (hard spoiler rule).
-//
-// Per-layer denominators come from the server-reconciled scaffold (traces.layers
-// [*].progress, canonically synced to engine LIVE_TRACES_PER_LAYER) — never a
-// hard-coded 47.
+// DISCOVERED SCOPE ONLY (hard spoiler rule): the panel must never reveal the
+// SIZE of undiscovered content — no per-layer denominators, no "N / total", no
+// fixed layer count. Bands exist only for layers the player has REACHED (max L#
+// across discovered ids, parsed from real ids like TRACE-L3-07 — never
+// renumbered); each band shows its discovered count and traces. One trailing
+// unquantified '▓ ???' row hints that more remains sealed, and the Descent
+// gauge GROWS one segment per reached layer (plus a single unlit 'deeper'
+// affordance). Reached-layer names arrive from the server
+// (traces.reached_layers) — deep-layer names never live in client LABELS.
 
 // Parse the layer number from a trace id like "TRACE-L3-07" → 3; null if absent.
 function traceLayerNum(id) {
   const m = /-L(\d+)-/.exec(String(id || ''));
-  return m ? parseInt(m[1], 10) : null;
-}
-
-// Parse the layer number from a scaffold layer key like "layer_3_severance" → 3.
-function scaffoldLayerNum(key) {
-  const m = /layer[_-]?(\d+)/i.exec(String(key || ''));
   return m ? parseInt(m[1], 10) : null;
 }
 
@@ -5010,59 +5000,58 @@ function computeDeepestLayer(session) {
   return deepest;
 }
 
-const TRACE_LADDER_LAYERS = 5;
+// Flavor name for a REACHED layer: prefer the server-shipped
+// traces.reached_layers entry (bilingual, reached-only), else the static label
+// for the shallow layers the client is allowed to hold (L1–L3), else nothing.
+function _reachedLayerName(namesByNum, num) {
+  const e = namesByNum && namesByNum[num];
+  if (e) return (currentLang === 'zh' && e.name_zh) ? e.name_zh : (e.name || '');
+  const key = 'trace_layer_' + num;
+  return (LABELS.en && LABELS.en[key]) ? L(key) : '';
+}
 
-// Compact 0-5 Descent gauge: current layer's flavor name lit, deeper segments
-// unlit and UNLABELED (spoiler-safe — no deeper layer names revealed).
-function renderDescentGauge(deepest) {
+// Descent gauge that GROWS with progress: one segment per REACHED layer
+// (1..deepest, the deepest one named), plus a single unlit '▸' affordance
+// meaning "deeper signals remain" — never a fixed layer count, never a total.
+function renderDescentGauge(deepest, namesByNum) {
   let segs = '';
-  for (let n = 1; n <= TRACE_LADDER_LAYERS; n++) {
-    const reached = n <= deepest;
+  for (let n = 1; n <= deepest; n++) {
     const isCurrent = n === deepest;
-    // Only the CURRENT (deepest reached) layer is named; reached-but-shallower
-    // layers stay lit-but-unlabeled, deeper layers unlit-and-unlabeled.
-    const label = isCurrent ? esc(L('trace_layer_' + n)) : '';
-    const cls = 'descent-seg' + (reached ? ' reached' : '') + (isCurrent ? ' current' : '');
+    // Only the CURRENT (deepest reached) layer is named; shallower reached
+    // layers stay lit-but-unlabeled.
+    const label = isCurrent ? esc(_reachedLayerName(namesByNum, n)) : '';
+    const cls = 'descent-seg reached' + (isCurrent ? ' current' : '');
     segs += `<span class="${cls}" style="--depth:${n}">${label}</span>`;
   }
-  return `<div class="descent-gauge" role="img" aria-label="${esc(L('descent'))} ${deepest}/${TRACE_LADDER_LAYERS}">
+  // One unquantified "deeper remains" affordance — count-free by design.
+  segs += `<span class="descent-seg beyond" aria-hidden="true">▸</span>`;
+  return `<div class="descent-gauge" role="img" aria-label="${esc(L('descent'))} ${deepest}">
     <span class="descent-label">${esc(L('descent'))}</span>
     <span class="descent-track">${segs}</span>
   </div>`;
 }
 
-// Segmented progress bar for one layer: `total` pips, `count` filled. Neon fill
+// Discovered-count pip bar for one band: one LIT pip per discovered trace. The
+// bar's length IS the discovered count — no denominator pips ever. Neon fill
 // intensifies with depth (dim cyan at L1 → hot magenta at L5) via --depth.
-function renderTraceSegments(count, total, layerNum) {
-  const n = Math.max(0, Number(total) || 0);
-  const c = Math.max(0, Math.min(n, Number(count) || 0));
+function renderTraceSegments(count, layerNum) {
+  const c = Math.max(0, Number(count) || 0);
   let pips = '';
-  for (let i = 0; i < n; i++) {
-    pips += `<span class="trace-seg${i < c ? ' on' : ''}"></span>`;
-  }
+  for (let i = 0; i < c; i++) pips += `<span class="trace-seg on"></span>`;
   return `<span class="trace-segbar" style="--depth:${layerNum}">${pips}</span>`;
-}
-
-// Parse "3/8" style progress → {count, total}. Falls back to slot count.
-function parseLayerProgress(layer, discoveredCount) {
-  const raw = String((layer && layer.progress) || '');
-  const m = /(\d+)\s*\/\s*(\d+)/.exec(raw);
-  if (m) return { count: parseInt(m[1], 10), total: parseInt(m[2], 10) };
-  const slots = (layer && layer.traces && typeof layer.traces === 'object')
-    ? Object.keys(layer.traces).length : 0;
-  return { count: discoveredCount, total: slots };
 }
 
 function updateTracesPanel(traces) {
   const t = traces || {};
   const discovered = Array.isArray(t.discovered) ? t.discovered : [];
-  const layersObj = (t.layers && typeof t.layers === 'object') ? t.layers : {};
 
-  // Build an ordered [1..5] view of the scaffold layers (key → number).
-  const layerEntries = Object.entries(layersObj)
-    .map(([key, layer]) => ({ num: scaffoldLayerNum(key), layer }))
-    .filter(e => e.num != null)
-    .sort((a, b) => a.num - b.num);
+  // Server-shipped names for REACHED layers only ([{num, name, name_zh}]).
+  const namesByNum = {};
+  if (Array.isArray(t.reached_layers)) {
+    for (const e of t.reached_layers) {
+      if (e && e.num != null) namesByNum[e.num] = e;
+    }
+  }
 
   // Bucket discovered traces under their TRUE layer by real-id L# parsing.
   const byLayer = {};
@@ -5074,11 +5063,11 @@ function updateTracesPanel(traces) {
 
   const deepest = computeDeepestLayer({ traces: t });
 
-  // Header: title + total + Descent gauge.
+  // Header: title + discovered count + Descent gauge (grows with depth).
   let html = `<div class="panel-section">
     <div class="panel-section-title">${L('traces_of_truth')}</div>
     <div class="panel-row"><span class="panel-key">${L('discovered')}</span><span class="panel-val cyan">${discovered.length}</span></div>
-    ${renderDescentGauge(deepest)}
+    ${renderDescentGauge(deepest, namesByNum)}
   </div>`;
 
   if (discovered.length === 0 && deepest === 0) {
@@ -5088,33 +5077,19 @@ function updateTracesPanel(traces) {
     return;
   }
 
-  // Render each of the five bands in depth order.
-  for (const { num, layer } of layerEntries) {
+  // One band per REACHED layer (1..deepest), discovered scope only.
+  for (let num = 1; num <= deepest; num++) {
     const bucket = byLayer[num] || [];
-    const prog = parseLayerProgress(layer, bucket.length);
-    const total = prog.total;
-    const name = esc(L('trace_layer_' + num));
+    const name = esc(_reachedLayerName(namesByNum, num));
 
-    if (num > deepest) {
-      // Sealed row: counts only. NEVER the gated layer flavor name (that would
-      // spoil the plot twists) — render a neutral redacted placeholder instead,
-      // matching the descent gauge which leaves deeper layers unlabeled.
-      html += `<div class="trace-band locked" style="--depth:${num}">
-        <div class="trace-band-header">
-          <span class="trace-band-name locked-name">▓▓▓▓▓</span>
-          <span class="trace-band-lock">[${esc(L('trace_locked'))}] ? / ${total}</span>
-        </div>
-      </div>`;
-      continue;
-    }
-
-    // Open band: name, segmented bar, count, and the real discovered traces.
+    // Open band: name, discovered-count pip bar, count (no denominator), and
+    // the real discovered traces.
     html += `<div class="trace-band open" style="--depth:${num}">
       <div class="trace-band-header">
         <span class="trace-band-name">${name}</span>
-        <span class="trace-band-count">${bucket.length} / ${total}</span>
+        <span class="trace-band-count">${bucket.length}</span>
       </div>
-      ${renderTraceSegments(bucket.length, total, num)}`;
+      ${renderTraceSegments(bucket.length, num)}`;
 
     // Discovered trace lines — keep REAL ids, do not renumber.
     for (const tr of bucket) {
@@ -5129,6 +5104,15 @@ function updateTracesPanel(traces) {
     }
     html += `</div>`;
   }
+
+  // ONE trailing unquantified sealed hint — "more remains sealed", never how
+  // much. No layer names, no counts, no denominators.
+  html += `<div class="trace-band locked">
+    <div class="trace-band-header">
+      <span class="trace-band-name locked-name">▓▓▓▓▓</span>
+      <span class="trace-band-lock">???</span>
+    </div>
+  </div>`;
 
   document.getElementById('panel-traces-body').innerHTML = html;
   applyPanelSearch('traces');
@@ -5639,9 +5623,9 @@ function updateDistrictMap(worldState, location) {
   if (districts.length === 0) { host.innerHTML = ''; return; }
 
   const curDistrict = (location && location.district) || '';
-  // Optional sealed slot count — only if the server ever ships it. Today it does
-  // not (no district_map payload), so this stays 0 and no dim slots render.
-  const sealedCount = Math.max(0, parseInt(w.district_sealed_count, 10) || 0);
+  // NOTE (spoiler rule): no sealed-district COUNT is ever rendered here — how
+  // many districts remain locked is undiscovered-content scope. The map draws
+  // unlocked districts only.
 
   const W = 260, H = 168, cx = W / 2, cy = H / 2;
   const n = districts.length;
@@ -5694,17 +5678,6 @@ function updateDistrictMap(worldState, location) {
     </g>`;
   });
 
-  // Sealed edge slots (dim, unnamed) — drawn along the bottom edge if any ship.
-  let sealedSvg = '';
-  if (sealedCount > 0) {
-    const startX = 14, gap = 14, sy = H - 8;
-    for (let i = 0; i < sealedCount && i < 8; i++) {
-      sealedSvg += `<circle cx="${startX + i * gap}" cy="${sy}" r="3" class="dmap-sealed"/>`;
-    }
-  }
-  const sealedLabel = sealedCount > 0
-    ? `<div class="dmap-sealed-label dim">${sealedCount} ${esc(L('district_map_sealed'))}</div>` : '';
-
   host.innerHTML = `<div class="panel-section dmap-section">
     <div class="panel-section-title">${L('district_map_title')}</div>
     <div class="dmap-wrap">
@@ -5712,9 +5685,7 @@ function updateDistrictMap(worldState, location) {
            aria-label="${esc(L('district_map_title'))}" preserveAspectRatio="xMidYMid meet">
         <g class="dmap-edges">${edges}</g>
         <g class="dmap-nodes">${nodeSvg}</g>
-        <g class="dmap-sealed-slots">${sealedSvg}</g>
       </svg>
-      ${sealedLabel}
     </div>
   </div>`;
 }
