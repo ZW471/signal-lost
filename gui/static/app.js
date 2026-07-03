@@ -321,6 +321,29 @@ const LABELS = {
     chat_player: '\u25B6 PLAYER', chat_agent: '\u25C0 SIGNAL LOST', chat_system: '\u25CF SYSTEM',
     // Game over
     game_over_reconnect: 'RECONNECT', game_over_fallback: '// CONNECTION TERMINATED',
+    // Run-summary death screen (roguelike epitaph)
+    run_terminated: 'CONNECTION TERMINATED',
+    run_day: 'Day', run_turn: 'Turn',
+    run_traces: 'Traces', run_descent: 'Descent',
+    run_knowledge: 'Intel', run_meters: 'Final Signal',
+    run_kn_facts: 'Facts', run_kn_rumors: 'Rumors', run_kn_evidence: 'Evidence',
+    run_kn_theories: 'Theories', run_kn_connections: 'Links',
+    run_meter_alert: 'Alert', run_meter_decay: 'Decay', run_meter_integrity: 'Integrity',
+    run_depth_unknown: 'Unmapped',
+    // One-line flavor epitaphs, keyed by cause (death causes + ending families).
+    epitaph_collapse: 'The implant burned out. The signal went dark with you.',
+    epitaph_capture: 'NEXUS closed the net. Your search ends in their custody.',
+    epitaph_unknown: 'The trail went cold. Neo-Kowloon swallows another ghost.',
+    epitaph_the_bridge: 'You spanned two worlds — and refused to let either fall.',
+    epitaph_symbiosis: 'Not conqueror, not conquered. Something new took root.',
+    epitaph_exposure: 'The truth broke containment. The city heard everything.',
+    epitaph_liberation: 'The chains dissolved. What comes next is theirs to write.',
+    epitaph_ascension: 'You let go of the flesh and became the signal itself.',
+    epitaph_order: 'You chose the cage that keeps the lights on.',
+    epitaph_purification: 'You burned it clean — and stood alone in the ash.',
+    epitaph_silence: 'You closed the door on the truth. The city sleeps on.',
+    epitaph_exile: 'You walked away from all of it. The Severance keeps its secret.',
+    epitaph_generic: 'The run is over. The signal remembers how far you reached.',
     // Connection
     connection_lost: 'Connection lost. Reconnecting…',
     reconnecting_inline: '// link dropped — reconnecting… your input is held',
@@ -563,6 +586,29 @@ const LABELS = {
     chat_player: '\u25B6 玩家', chat_agent: '\u25C0 信号遗失', chat_system: '\u25CF 系统',
     // Game over
     game_over_reconnect: '重新连接', game_over_fallback: '// 连接已终止',
+    // Run-summary death screen (roguelike epitaph)
+    run_terminated: '连接终止',
+    run_day: '第', run_turn: '回合',
+    run_traces: '痕迹', run_descent: '深潜',
+    run_knowledge: '情报', run_meters: '最终信号',
+    run_kn_facts: '事实', run_kn_rumors: '传闻', run_kn_evidence: '证据',
+    run_kn_theories: '理论', run_kn_connections: '关联',
+    run_meter_alert: '警戒', run_meter_decay: '衰变', run_meter_integrity: '完整度',
+    run_depth_unknown: '未探明',
+    // One-line flavor epitaphs, keyed by cause (death causes + ending families).
+    epitaph_collapse: '植入体烧毁了。信号随你一同陷入黑暗。',
+    epitaph_capture: 'NEXUS收紧了网。你的追寻终结于他们的囚笼。',
+    epitaph_unknown: '线索断了。新九龙又吞没了一个幽灵。',
+    epitaph_the_bridge: '你连接了两个世界——并拒绝让任何一方崩塌。',
+    epitaph_symbiosis: '非征服者，亦非被征服者。某种全新之物就此扎根。',
+    epitaph_exposure: '真相冲破了封锁。整座城市都听见了。',
+    epitaph_liberation: '枷锁消融。接下来的一切，由他们书写。',
+    epitaph_ascension: '你放下了血肉，化身为信号本身。',
+    epitaph_order: '你选择了那座让灯火长明的牢笼。',
+    epitaph_purification: '你将一切焚为净土——独自伫立于灰烬之中。',
+    epitaph_silence: '你对真相关上了门。城市继续沉睡。',
+    epitaph_exile: '你抛下了这一切。断离守住了它的秘密。',
+    epitaph_generic: '这一局结束了。信号记得你曾抵达的深度。',
     // Connection
     connection_lost: '连接已断开，正在重连…',
     reconnecting_inline: '// 链路中断 —— 正在重连…你的输入已保留',
@@ -2083,7 +2129,7 @@ function handleServerMessage(msg) {
         _endingsDiscovered = msg.endings_discovered;
       }
       if (typeof msg.endings_total === 'number') _endingsTotal = msg.endings_total;
-      setTimeout(() => showGameOver(msg.ending, msg.narrative, msg.death_cause, _newEnding), 2000);
+      setTimeout(() => showGameOver(msg.ending, msg.narrative, msg.death_cause, _newEnding, msg.run_summary), 2000);
       break;
 
     case 'saved':
@@ -3999,8 +4045,126 @@ function confirmSave() {
 }
 function closeSaveDialog() { closeDialog(document.getElementById('saveDialog')); }
 
-function showGameOver(ending, narrative, deathCause, newEnding) {
+// ---------- RUN-SUMMARY EPITAPH (reusable component) ----------
+//
+// A compact, spoiler-safe stat grid rendered from the server's run_summary blob
+// (counts + already-known layer names only). Shared by the game-over screen and
+// the endings-gallery reached-slot expansion. Every interpolation is esc()'d;
+// all copy routes through L()/LABELS so the grid is fully bilingual. Returns ''
+// when the summary is absent (old saves / mid-migration) so callers degrade
+// gracefully.
+
+// Mini 5-band layer bar echoing the Trace Ladder / Descent visual language: five
+// depth-tinted segments, lit up to `deepest`, with the reached one marked current.
+// Names are never printed here (spoiler-safe) — it's a pure depth glyph strip.
+function renderRunSummaryLayerBar(deepest) {
+  const d = Math.max(0, Math.min(5, Number(deepest) || 0));
+  let segs = '';
+  for (let n = 1; n <= 5; n++) {
+    const reached = n <= d;
+    const isCurrent = n === d && d > 0;
+    const cls = 'rs-band' + (reached ? ' reached' : '') + (isCurrent ? ' current' : '');
+    segs += `<span class="${cls}" style="--depth:${n}"></span>`;
+  }
+  return `<span class="rs-layerbar" role="img" aria-label="${esc(L('run_descent'))} ${d}/5">${segs}</span>`;
+}
+
+// Localized deepest-layer name from the run_summary (already player-known — the
+// server only ships the name of a layer the player actually reached). Falls back
+// to a neutral 'Unmapped' when depth is 0 / name missing.
+function _runSummaryLayerName(rs) {
+  const name = (currentLang === 'zh' && rs && rs.deepest_layer_name_zh)
+    ? rs.deepest_layer_name_zh
+    : (rs && rs.deepest_layer_name) || '';
+  return name || L('run_depth_unknown');
+}
+
+// One-line flavor epitaph, keyed by cause. For a designed ending we key on the
+// ending id (epitaph_<id>); for a death we key on the death cause
+// (epitaph_collapse / _capture / _unknown). Anything unrecognized → generic.
+function _runEpitaphText(ending, deathCause) {
+  let key = null;
+  if (ending && ending !== 'death') {
+    key = 'epitaph_' + ending;
+  } else {
+    const causeKeys = { collapse: 'epitaph_collapse', capture: 'epitaph_capture', unknown: 'epitaph_unknown' };
+    key = causeKeys[deathCause] || 'epitaph_unknown';
+  }
+  // Only use the key if it actually exists in LABELS; else generic fallback so a
+  // brand-new ending id can never render a raw 'epitaph_xyz' token.
+  const has = (LABELS.en && LABELS.en[key]);
+  return L(has ? key : 'epitaph_generic');
+}
+
+/** Build the reusable run-summary stat grid markup from a run_summary blob.
+ *  Returns '' if rs is falsy (graceful degrade). Depth drives an accent tint via
+ *  --depth on the root so deeper runs read hotter (cyan→magenta). */
+function renderRunSummary(rs) {
+  if (!rs || typeof rs !== 'object') return '';
+  const depth = Math.max(1, Math.min(5, Number(rs.deepest_layer) || 1));
+  const kc = rs.knowledge_counts || {};
+  const num = (v) => (typeof v === 'number' ? String(v) : '—');
+
+  // Day · Turn line.
+  const dayTurn = [];
+  if (rs.days != null) dayTurn.push(`${esc(L('run_day'))} ${esc(num(rs.days))}`);
+  if (rs.turns != null) dayTurn.push(`${esc(L('run_turn'))} ${esc(num(rs.turns))}`);
+  const dayTurnLine = dayTurn.length
+    ? `<div class="rs-dayturn">${dayTurn.join(' · ')}</div>` : '';
+
+  // Traces X/47 + mini layer bar.
+  const tracesRow = `<div class="rs-row">
+    <span class="rs-label">${esc(L('run_traces'))}</span>
+    <span class="rs-value">${esc(num(rs.traces_found))}<span class="rs-slash">/</span>${esc(num(rs.traces_total))}</span>
+    ${renderRunSummaryLayerBar(rs.deepest_layer)}
+  </div>`;
+
+  // Descent depth + known layer name.
+  const descentRow = `<div class="rs-row">
+    <span class="rs-label">${esc(L('run_descent'))}</span>
+    <span class="rs-value">L${esc(String(Math.max(0, Number(rs.deepest_layer) || 0)))}<span class="rs-slash">/</span>5</span>
+    <span class="rs-layername">${esc(_runSummaryLayerName(rs))}</span>
+  </div>`;
+
+  // Knowledge counts (compact chips).
+  const kn = [
+    ['run_kn_facts', kc.facts], ['run_kn_rumors', kc.rumors],
+    ['run_kn_evidence', kc.evidence], ['run_kn_theories', kc.theories],
+    ['run_kn_connections', kc.connections],
+  ].filter(([, v]) => typeof v === 'number')
+   .map(([k, v]) => `<span class="rs-chip"><span class="rs-chip-n">${esc(String(v))}</span> ${esc(L(k))}</span>`)
+   .join('');
+  const knRow = kn ? `<div class="rs-row rs-know">
+    <span class="rs-label">${esc(L('run_knowledge'))}</span>
+    <span class="rs-chips">${kn}</span>
+  </div>` : '';
+
+  // Final meters.
+  const meters = [
+    ['run_meter_alert', rs.alert_final], ['run_meter_decay', rs.decay_final],
+    ['run_meter_integrity', rs.integrity_final],
+  ].filter(([, v]) => typeof v === 'number')
+   .map(([k, v]) => `<span class="rs-chip"><span class="rs-chip-n">${esc(String(v))}</span> ${esc(L(k))}</span>`)
+   .join('');
+  const meterRow = meters ? `<div class="rs-row rs-know">
+    <span class="rs-label">${esc(L('run_meters'))}</span>
+    <span class="rs-chips">${meters}</span>
+  </div>` : '';
+
+  return `<div class="run-summary depth-${depth}" style="--depth:${depth}">
+    ${dayTurnLine}
+    <div class="rs-grid">
+      ${tracesRow}
+      ${descentRow}
+      ${knRow}
+      ${meterRow}
+    </div>
+  </div>`;
+}
+
+function showGameOver(ending, narrative, deathCause, newEnding, runSummary) {
   triggerGlitch(); triggerGlitch();
+  // Epitaph title: 'CONNECTION TERMINATED' framing + a cause line beneath it.
   let label = ending ? `// ${ending.toUpperCase()}` : L('game_over_fallback');
   if (ending === 'death' && deathCause) {
     // Death-cause labels route through LABELS (death_collapse / death_capture /
@@ -4015,17 +4179,47 @@ function showGameOver(ending, narrative, deathCause, newEnding) {
     narr += (narr ? '\n\n' : '') + L('death_reconnect_nudge');
   }
   document.getElementById('gameOverNarrative').textContent = narr;
+
+  // One-line flavor epitaph (client-chosen from LABELS by cause). Hosted once,
+  // reused; cleared when nothing applies so a replay can't leave stale text.
+  let epiEl = document.getElementById('gameOverEpitaph');
+  if (!epiEl) {
+    epiEl = document.createElement('div');
+    epiEl.id = 'gameOverEpitaph';
+    epiEl.className = 'game-over-epitaph';
+    const body = document.querySelector('#gameOverOverlay .game-over-body');
+    if (body) body.appendChild(epiEl); // sits under the narrative
+  }
+  epiEl.textContent = _runEpitaphText(ending, deathCause);
+
+  // Run-summary stat grid (spoiler-safe). Hosted once, reused. Degrades to hidden
+  // when the frame carried no run_summary (old saves / mid-migration).
+  let rsHost = document.getElementById('gameOverRunSummary');
+  if (!rsHost) {
+    rsHost = document.createElement('div');
+    rsHost.id = 'gameOverRunSummary';
+    const body = document.querySelector('#gameOverOverlay .game-over-body');
+    if (body) body.appendChild(rsHost); // sits under the epitaph
+  }
+  const rsHtml = renderRunSummary(runSummary);
+  rsHost.innerHTML = rsHtml;
+  rsHost.hidden = !rsHtml;
+
   // Meta-progression: if this run unlocked a previously-undiscovered ending, show
   // a small '◈ NEW ENDING RECORDED — Gallery 3/9' line. The host node is created
   // once and reused; hidden (emptied) when nothing new was recorded so a replay
-  // over the same overlay can't leave a stale line behind.
+  // over the same overlay can't leave a stale line behind. Kept BELOW the summary.
   let newEl = document.getElementById('gameOverNewEnding');
   if (!newEl) {
     newEl = document.createElement('div');
     newEl.id = 'gameOverNewEnding';
     newEl.className = 'game-over-new-ending';
     const body = document.querySelector('#gameOverOverlay .game-over-body');
-    if (body) body.appendChild(newEl); // sits under the narrative
+    if (body) body.appendChild(newEl); // sits under the summary
+  } else {
+    // Ensure it stays the last child even after summary host was (re)appended.
+    const body = document.querySelector('#gameOverOverlay .game-over-body');
+    if (body) body.appendChild(newEl);
   }
   if (newEnding) {
     const total = _endingsTotal || (_endingsDiscovered ? _endingsDiscovered.length : 0);
@@ -4036,6 +4230,15 @@ function showGameOver(ending, narrative, deathCause, newEnding) {
     newEl.textContent = '';
     newEl.hidden = true;
   }
+
+  // Depth-tinted glow on the container, scaled by deepest_layer (static under
+  // reduced-motion — the class just sets a stronger box-shadow, no animation).
+  const container = document.querySelector('#gameOverOverlay .game-over-container');
+  if (container) {
+    const d = runSummary ? Math.max(0, Math.min(5, Number(runSummary.deepest_layer) || 0)) : 0;
+    container.setAttribute('data-depth', String(d));
+  }
+
   openDialog(document.getElementById('gameOverOverlay'), { dismissible: false });
   playBeep(200, 0.3, 0.05);
   if (newEnding && !prefersReducedMotion) { setTimeout(() => playBeep(660, 0.12, 0.05), 260); }
@@ -4077,7 +4280,13 @@ function _renderEndingsGallery() {
       const turn = (e.turn != null)
         ? `<div class="ending-slot-meta">${esc(L('endings_reached_on'))} · ${esc(L('endings_reached_turn'))} ${esc(String(e.turn))}</div>`
         : '';
-      html += `<div class="ending-slot reached depth-${depth}" style="--depth:${depth}" role="listitem">
+      // Reached slots with a stored run_summary are expandable (click → inline
+      // stat grid below the grid). Older reaches (no summary) stay static.
+      const hasRs = e.run_summary && typeof e.run_summary === 'object';
+      const rsAttrs = hasRs
+        ? ` data-ending="${esc(String(e.id || ''))}" tabindex="0" role="button" aria-expanded="false"`
+        : ' role="listitem"';
+      html += `<div class="ending-slot reached depth-${depth}${hasRs ? ' expandable' : ''}" style="--depth:${depth}"${rsAttrs}>
         <div class="ending-slot-glyph">◈</div>
         <div class="ending-slot-name">${esc(name)}</div>
         ${turn}
@@ -4091,6 +4300,24 @@ function _renderEndingsGallery() {
     }
   }
   grid.innerHTML = html;
+
+  // Wire click/keyboard on expandable reached slots → toggle an inline detail
+  // panel below the grid that reuses the run-summary component. Re-render keeps
+  // the currently-open slot expanded (idempotent across language toggles).
+  grid.querySelectorAll('.ending-slot.expandable').forEach((slot) => {
+    const id = slot.getAttribute('data-ending');
+    const toggle = () => _toggleEndingDetail(id, slot);
+    slot.addEventListener('click', toggle);
+    slot.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); toggle(); }
+    });
+    if (id && id === _endingsDetailFor) {
+      slot.classList.add('open');
+      slot.setAttribute('aria-expanded', 'true');
+    }
+  });
+  _renderEndingDetail();
+
   const counter = document.getElementById('endingsCounter');
   if (counter) {
     // Bilingual counter: '结局 2/9 已发现' / '2/9 endings discovered'.
@@ -4100,7 +4327,47 @@ function _renderEndingsGallery() {
   }
 }
 
+// Which reached ending's detail panel is currently expanded (null = none).
+let _endingsDetailFor = null;
+
+/** Toggle the inline run-summary detail for a reached ending slot. */
+function _toggleEndingDetail(id, slot) {
+  if (!id) return;
+  const grid = document.getElementById('endingsGrid');
+  _endingsDetailFor = (_endingsDetailFor === id) ? null : id;
+  if (grid) {
+    grid.querySelectorAll('.ending-slot.expandable').forEach((s) => {
+      const open = s.getAttribute('data-ending') === _endingsDetailFor;
+      s.classList.toggle('open', open);
+      s.setAttribute('aria-expanded', open ? 'true' : 'false');
+    });
+  }
+  _renderEndingDetail();
+  playBeep(_endingsDetailFor ? 520 : 360, 0.05, 0.03);
+}
+
+/** (Re)render the detail host below the grid for the open ending, reusing the
+ *  run-summary component. Hidden when nothing is open or the summary is absent. */
+function _renderEndingDetail() {
+  const dialog = document.querySelector('#endingsOverlay .dialog-body');
+  if (!dialog) return;
+  let host = document.getElementById('endingsDetail');
+  if (!host) {
+    host = document.createElement('div');
+    host.id = 'endingsDetail';
+    host.className = 'endings-detail';
+    dialog.appendChild(host); // sits under the grid
+  }
+  const reached = Array.isArray(_endingsDiscovered) ? _endingsDiscovered : [];
+  const e = _endingsDetailFor ? reached.find(r => r && r.id === _endingsDetailFor) : null;
+  const rsHtml = (e && e.run_summary) ? renderRunSummary(e.run_summary) : '';
+  if (!rsHtml) { host.innerHTML = ''; host.hidden = true; return; }
+  host.innerHTML = `<div class="endings-detail-name">◈ ${esc(_endingName(e))}</div>${rsHtml}`;
+  host.hidden = false;
+}
+
 function openEndingsGallery() {
+  _endingsDetailFor = null;   // always open collapsed
   _renderEndingsGallery();
   playBeep(440, 0.06, 0.04);
   openDialog(document.getElementById('endingsOverlay'));

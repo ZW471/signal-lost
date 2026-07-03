@@ -4116,6 +4116,169 @@ html[lang="zh"] .account-label { max-width: 240px; }
 }
 
 /* ================================================================
+   RUN-SUMMARY EPITAPH (game-over screen + endings-gallery detail)
+   A compact, spoiler-safe stat grid. Depth (1-5) drives a cyan→magenta accent
+   tint via --depth, echoing the Trace Ladder / Descent visual language.
+   ================================================================ */
+/* One-line flavor epitaph under the narrative. */
+.game-over-epitaph {
+  margin-top: var(--sp-3);
+  font-family: var(--font-mono, monospace);
+  font-size: 13px;
+  font-style: italic;
+  line-height: 1.6;
+  color: var(--cyan-dim);
+  letter-spacing: 0.5px;
+}
+.game-over-epitaph:empty { display: none; }
+
+/* Depth-tinted glow on the whole game-over card, scaled by deepest_layer. A
+   static box-shadow (no animation), so it survives reduced-motion untouched. */
+.game-over-container[data-depth] {
+  --gd-t: calc((var(--depth, 0)) / 5);
+}
+.game-over-container[data-depth="1"],
+.game-over-container[data-depth="2"],
+.game-over-container[data-depth="3"],
+.game-over-container[data-depth="4"],
+.game-over-container[data-depth="5"] {
+  box-shadow:
+    0 0 40px color-mix(in srgb,
+      color-mix(in srgb, var(--magenta) calc(((var(--depth,1) - 1) / 4) * 100%), var(--cyan))
+      calc(12% + var(--depth,0) * 6%), transparent),
+    inset 0 0 30px color-mix(in srgb,
+      color-mix(in srgb, var(--magenta) calc(((var(--depth,1) - 1) / 4) * 100%), var(--cyan))
+      calc(4% + var(--depth,0) * 2%), transparent);
+}
+
+#gameOverRunSummary { margin-top: var(--sp-4); }
+#gameOverRunSummary[hidden] { display: none; }
+
+.run-summary {
+  --depth-color: color-mix(in srgb, var(--magenta) calc(((var(--depth,1) - 1) / 4) * 100%), var(--cyan));
+  text-align: left;
+  border: 1px solid color-mix(in srgb, var(--depth-color) 40%, var(--border));
+  background: color-mix(in srgb, var(--depth-color) 5%, var(--bg-input));
+  padding: var(--sp-3) var(--sp-4);
+  clip-path: polygon(
+    0 0, calc(100% - var(--cut-sm)) 0, 100% var(--cut-sm),
+    100% 100%, var(--cut-sm) 100%, 0 calc(100% - var(--cut-sm)));
+}
+
+.rs-dayturn {
+  font-family: var(--font-mono, monospace);
+  font-size: 12px;
+  letter-spacing: 2px;
+  color: var(--depth-color, var(--cyan));
+  text-align: center;
+  margin-bottom: var(--sp-3);
+  text-transform: uppercase;
+}
+
+.rs-grid { display: flex; flex-direction: column; gap: var(--sp-2); }
+
+.rs-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+}
+.rs-label {
+  flex: 0 0 auto;
+  min-width: 72px;
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  letter-spacing: 1px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+}
+.rs-value {
+  font-family: var(--font-display, sans-serif);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-bright);
+}
+.rs-slash { color: var(--text-dim); margin: 0 1px; }
+.rs-layername {
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  letter-spacing: 0.5px;
+  color: var(--depth-color, var(--cyan));
+}
+
+/* Mini 5-band layer bar — depth-tinted segments (Trace Ladder visual echo). */
+.rs-layerbar { display: inline-flex; gap: 3px; margin-left: auto; }
+.rs-band {
+  width: 14px;
+  height: 8px;
+  background: var(--border);
+  border: 1px solid color-mix(in srgb, var(--text-dim) 40%, transparent);
+  transform: skewX(-18deg);
+}
+.rs-band.reached {
+  --bd: color-mix(in srgb, var(--magenta) calc(((var(--depth,1) - 1) / 4) * 100%), var(--cyan));
+  background: var(--bd);
+  border-color: var(--bd);
+  box-shadow: 0 0 5px color-mix(in srgb, var(--bd) 55%, transparent);
+}
+.rs-band.current {
+  height: 11px;
+  margin-top: -1.5px;
+}
+
+/* Knowledge / final-meter chip rows. */
+.rs-know { align-items: flex-start; }
+.rs-chips { display: flex; flex-wrap: wrap; gap: var(--sp-1); flex: 1 1 auto; }
+.rs-chip {
+  font-family: var(--font-mono, monospace);
+  font-size: 10px;
+  letter-spacing: 0.5px;
+  color: var(--text-dim);
+  padding: 2px 6px;
+  background: color-mix(in srgb, var(--depth-color) 6%, var(--bg-input));
+  border: 1px solid color-mix(in srgb, var(--depth-color) 22%, var(--border));
+  text-transform: uppercase;
+}
+.rs-chip-n { color: var(--text-bright); font-weight: 600; }
+
+/* Endings-gallery reached-slot expansion (reuses the run-summary component). */
+.ending-slot.expandable { cursor: pointer; }
+.ending-slot.expandable:hover,
+.ending-slot.expandable:focus-visible {
+  outline: none;
+  border-color: var(--depth-color, var(--cyan));
+  box-shadow: 0 0 18px color-mix(in srgb, var(--depth-color, var(--cyan)) 42%, transparent);
+}
+.ending-slot.expandable.open {
+  box-shadow: 0 0 22px color-mix(in srgb, var(--depth-color, var(--cyan)) 55%, transparent);
+}
+.ending-slot.expandable::after {
+  content: '▾';
+  position: absolute;
+  bottom: 3px; right: 6px;
+  font-size: 9px;
+  color: var(--depth-color, var(--cyan));
+  opacity: 0.7;
+}
+.ending-slot.expandable.open::after { content: '▴'; }
+
+.endings-detail { margin-top: var(--sp-4); }
+.endings-detail[hidden] { display: none; }
+.endings-detail-name {
+  font-family: var(--font-display, sans-serif);
+  font-size: 13px;
+  letter-spacing: 1px;
+  color: var(--text-bright);
+  margin-bottom: var(--sp-2);
+  text-align: center;
+}
+.endings-detail .run-summary { animation: new-ending-in 0.3s ease-out; }
+
+@media (prefers-reduced-motion: reduce) {
+  .endings-detail .run-summary { animation: none; }
+}
+
+/* ================================================================
    DISTRICT CONSTELLATION MAP (WORLD tab) — wave 8
    Compact neon SVG of unlocked districts. Nodes are clickable (travel prefill);
    the current node gets a pulse ring.

@@ -24,6 +24,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import re
 import shutil
 import sys
 import threading
@@ -49,6 +50,7 @@ import auth
 from engine.graph import compile_graph, set_llm, set_fast_llm, get_llm, get_fast_llm
 from engine.world_sim_scheduler import WorldSimScheduler
 from engine.claude_code_engine import run_turn as cc_run_turn
+from engine.game_data import LIVE_TRACES_PER_LAYER
 from engine import action_cache
 from engine import opening_cache
 from engine import companion
@@ -665,6 +667,100 @@ def _meter_snapshot_from_data(data: dict) -> dict:
     }
 
 
+# The five real story layers, id → localized name — the SAME table the discovery
+# notifications use (engine/claude_code_engine.py). The deepest reached layer's
+# name is player-known (they discovered a trace in it), so surfacing it is
+# spoiler-safe; deeper, unreached layer names are never emitted.
+_RUN_SUMMARY_LAYER_NAMES: "dict[int, dict]" = {
+    1: {"en": "The Surface", "zh": "表层"},
+    2: {"en": "The Conspiracy", "zh": "阴谋"},
+    3: {"en": "The Severance Truth", "zh": "断离真相"},
+    4: {"en": "The Mirror", "zh": "镜像"},
+    5: {"en": "The Full Truth", "zh": "完整真相"},
+}
+
+
+def _run_summary_deepest_layer(traces: dict) -> int:
+    """Deepest layer reached = max L# across DISCOVERED trace ids (0 if none).
+
+    Mirrors the client Descent gauge (``computeDeepestLayer``) and the engine's
+    ``extract_deepest_layer`` — parses the true ``TRACE-L<N>-`` id of already
+    discovered traces only, so nothing undiscovered contributes."""
+    deepest = 0
+    for tr in (traces.get("discovered") or []):
+        if not isinstance(tr, dict):
+            continue
+        m = re.search(r"-L(\d+)-", str(tr.get("id", "")))
+        if m:
+            try:
+                deepest = max(deepest, int(m.group(1)))
+            except ValueError:
+                pass
+    return deepest
+
+
+def _build_run_summary(session_data: dict, death_cause) -> dict:
+    """Build the spoiler-safe run epitaph shown on the game-over / gallery screens.
+
+    Everything is derived from the already-loaded, spoiler-filtered *session_data*
+    (the same blob ``_finish_turn`` read this turn). Only counts + already-known
+    layer names are emitted — no undiscovered trace/knowledge/layer name leaks.
+    """
+    player = session_data.get("player") or {}
+    world = session_data.get("world_state") or {}
+    traces = session_data.get("traces") or {}
+    knowledge = session_data.get("knowledge") or {}
+
+    ig = player.get("integrity") or {}
+    integ = ig.get("current") if isinstance(ig, dict) else ig
+    alert = world.get("nexus_alert") or {}
+    decay = world.get("fragment_decay") or {}
+    wtime = world.get("time") or {}
+
+    # Turn / day: same fields the game-over history record already reads.
+    turn = player.get("turn")
+    day = wtime.get("day") if isinstance(wtime, dict) else None
+
+    # Traces: count discovered only; total from the canonical live scaffold.
+    discovered = traces.get("discovered")
+    traces_found = len(discovered) if isinstance(discovered, list) else 0
+    traces_total = sum(LIVE_TRACES_PER_LAYER.values()) or 47
+    deepest = _run_summary_deepest_layer(traces)
+    layer_meta = _RUN_SUMMARY_LAYER_NAMES.get(deepest, {})
+
+    # Knowledge: present entries per bucket only (nothing hidden is counted).
+    def _bucket(name: str) -> int:
+        v = knowledge.get(name)
+        return len(v) if isinstance(v, list) else 0
+
+    return {
+        "turns": turn if isinstance(turn, int) else None,
+        "days": day if isinstance(day, int) else None,
+        "traces_found": traces_found,
+        "traces_total": traces_total,
+        "deepest_layer": deepest,
+        "deepest_layer_name": layer_meta.get("en", ""),
+        "deepest_layer_name_zh": layer_meta.get("zh", ""),
+        "knowledge_counts": {
+            "facts": _bucket("facts"),
+            "rumors": _bucket("rumors"),
+            "evidence": _bucket("evidence"),
+            "theories": _bucket("theories"),
+            "connections": _bucket("connections"),
+        },
+        "integrity_final": integ if isinstance(integ, (int, float)) else None,
+        "alert_final": alert.get("current") if isinstance(alert, dict) else None,
+        "decay_final": decay.get("current") if isinstance(decay, dict) else None,
+        "cause": death_cause,
+        # Localized cause phrase mirrors the client death-cause LABELS keys; only
+        # the three known death causes get a zh phrase, else None (client falls
+        # back to its own generic/ending epitaph).
+        "cause_zh": {
+            "collapse": "神经崩溃", "capture": "被NEXUS擒获", "unknown": "死亡",
+        }.get(death_cause),
+    }
+
+
 def _list_saves(saves_root: str) -> list[dict]:
     """List save games under *saves_root*, newest-first by mtime.
 
@@ -865,12 +961,14 @@ def _read_endings_history(session_root: str) -> list[dict]:
     return [e for e in data if isinstance(e, dict)] if isinstance(data, list) else []
 
 
-def _record_ending(session_root: str, ending_id: str, turn, day) -> None:
+def _record_ending(session_root: str, ending_id: str, turn, day, run_summary=None) -> None:
     """Append a reached ending to the user's history, once per DISTINCT id.
 
     Atomic (temp file + ``os.replace``) so a crash mid-write can never leave a
     truncated JSON that would wipe the whole gallery. First-reach wins: if the id
-    is already present we do nothing (don't overwrite the original turn/day). Meant
+    is already present we do nothing (don't overwrite the original turn/day/
+    summary). ``run_summary`` (spoiler-safe run epitaph) is stored alongside so
+    the gallery can show a per-ending stat grid without another round-trip. Meant
     to run in an executor thread — it does blocking disk I/O. Best-effort: any OS
     error is swallowed so a history write can never break the game-over path.
     """
@@ -882,12 +980,15 @@ def _record_ending(session_root: str, ending_id: str, turn, day) -> None:
         history = _read_endings_history(session_root)
         if any(e.get("id") == ending_id for e in history):
             return  # already unlocked — keep the first-reach record
-        history.append({
+        entry = {
             "id": ending_id,
             "turn": turn if isinstance(turn, int) else None,
             "day": day,
             "timestamp": int(_t.time()),
-        })
+        }
+        if isinstance(run_summary, dict):
+            entry["run_summary"] = run_summary
+        history.append(entry)
         path = _endings_path(session_root)
         tmp = f"{path}.tmp.{os.getpid()}"
         with open(tmp, "w", encoding="utf-8") as f:
@@ -910,12 +1011,19 @@ def _endings_discovered_payload(session_root: str) -> list[dict]:
         meta = _DESIGNED_ENDINGS.get(eid)
         if not meta:
             continue  # "death" / unknown → not one of the nine named slots
-        out.append({
+        row = {
             "id": eid,
             "name": meta["name"],
             "name_zh": meta["name_zh"],
             "turn": e.get("turn"),
-        })
+        }
+        # Per-ending run epitaph, if this reach recorded one (older history rows
+        # predate it — the gallery degrades to turn-only for those). Spoiler-safe:
+        # counts + already-known layer names only, same as the game-over frame.
+        rs = e.get("run_summary")
+        if isinstance(rs, dict):
+            row["run_summary"] = rs
+        out.append(row)
     return out
 
 
@@ -2237,6 +2345,15 @@ async def _finish_turn(sess: PlayerSession, ws: WebSocket, result: dict, mode: s
         # from the spoiler-filtered session_data we already read this turn. All
         # off the event loop; best-effort — a history-write failure must never
         # swallow the game_over the client is waiting on.
+        # Run epitaph for the game-over screen — a spoiler-safe stat summary of
+        # this run (turns/day, traces, deepest layer, knowledge counts, final
+        # meters, cause). All derived from the spoiler-filtered session_data we
+        # already read this turn; nothing undiscovered leaks.
+        run_summary = None
+        try:
+            run_summary = _build_run_summary(session_data, result.get("death_cause"))
+        except Exception:
+            run_summary = None
         endings_discovered = _endings_discovered_payload(sess.session_root) if sess.session_dir else []
         if ending and sess.session_dir:
             _plr = session_data.get("player") or {}
@@ -2244,7 +2361,7 @@ async def _finish_turn(sess: PlayerSession, ws: WebSocket, result: dict, mode: s
             try:
                 await asyncio.to_thread(
                     _record_ending, sess.session_root, ending,
-                    _plr.get("turn"), _wt.get("day"),
+                    _plr.get("turn"), _wt.get("day"), run_summary,
                 )
                 endings_discovered = await asyncio.to_thread(
                     _endings_discovered_payload, sess.session_root)
@@ -2255,6 +2372,10 @@ async def _finish_turn(sess: PlayerSession, ws: WebSocket, result: dict, mode: s
             "ending": ending,
             "death_cause": result.get("death_cause"),
             "narrative": narrative,
+            # Spoiler-safe run epitaph (turns/day, traces X/47, deepest layer +
+            # known name, knowledge counts, final meters, cause). Additive — old
+            # clients ignore it; the client degrades gracefully if absent.
+            "run_summary": run_summary,
             # The refreshed per-account gallery so the end-screen can light up the
             # ending just earned (and any previously unlocked) without a round-trip.
             # Names only for REACHED designed endings; sealed slots come from the
