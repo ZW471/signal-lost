@@ -528,6 +528,10 @@ def test_l3_reachable_by_conversational_play():
                 {"description": "Sector 7 has multiple levels; the deep labs are on the lower level.", "turn": 10},
             ],
             "rumors": [
+                # Wave 10: TRACE-L3-08 is act-gated now — this hearsay
+                # intentionally no longer counts (you must decrypt/analyze a
+                # fragment yourself); the talker still clears the >=5 bar via
+                # L3-04/05/06/07/10/11.
                 {"description": "Something in the old network tried to communicate before the Severance cut it off — an entity sending a message.", "turn": 11},
                 {"description": "A resistance network operates in the shadows, more cells than just one group.", "turn": 11},
                 {"description": "Dr. Chen leads the extraction program and believes she is saving people.", "turn": 12},
@@ -715,6 +719,140 @@ def test_act_on_evidence_discovery_route():
     assert checks["TRACE-L2-06"](k_scan_static, t, n, p, w), \
         "scan-reading-as-static did not fire TRACE-L2-06 (act route)"
     print("  [PASS] Act-on-evidence route fires L3-05/L3-08/L2-06; talk-only, off-topic and mundane speech/static stay silent")
+
+
+def test_l3_08_act_gated_no_passive_unlock():
+    """TRACE-L3-08 unlocks ONLY by acting on evidence — rich hearsay stays silent.
+
+    Playtest wave 10, friction #1: on both canonical runs the passive
+    _has_evidence branch always beat the act route to the unlock, so the wave-7
+    act-on-evidence mechanism was never load-bearing and T11-20 investigative
+    turns (the verbs the teaching rail pushes) unlocked nothing new. The
+    entity's communication attempt survives only as a voice inside a
+    pre-Severance fragment — in fiction it cannot be learned by hearsay — so
+    the passive fallback is removed and decrypt/analyze/scan/present acts are
+    the only way in.
+    """
+    from engine.game_data import TRACE_CONDITIONS
+
+    check = next(tc for tc in TRACE_CONDITIONS if tc["id"] == "TRACE-L3-08")["check"]
+    t, n, p, w = {"discovered": []}, {"npcs": []}, {"turn": 12}, {}
+    empty = {"facts": [], "rumors": [], "evidence": [], "theories": [], "connections": []}
+
+    # Negative: RICH passive evidence — the exact keywords the old base branch
+    # matched, spread across facts, rumors AND the formal evidence channel,
+    # from three distinct sources — must NOT fire without an act.
+    k_passive = dict(
+        empty,
+        facts=[{"description": "Ghost swears the entity in the old network tried "
+                               "to communicate before it was severed.",
+                "source": "ghost", "turn": 9}],
+        rumors=[{"description": "Bar talk: something was sending a message before "
+                                "the Severance — a last call nobody answered.",
+                 "source": "bartender", "turn": 10}],
+        evidence=[{"description": "Patch repeats the story: a network entity, a "
+                                  "communication attempt, right before severance. "
+                                  "网络中的实体在断离前曾试图沟通。",
+                   "source": "patch", "turn": 11}],
+    )
+    assert not check(k_passive, t, n, p, w), \
+        "TRACE-L3-08 fired from hearsay alone — the act gate is not load-bearing"
+
+    # Positives: the SAME lore learned by acting on a fragment fires — EN with
+    # the act in the `source` field, 中文 with the act named in the text.
+    k_act_en = dict(empty, facts=[{
+        "description": "The recovered fragment carries the entity's attempt to "
+                       "communicate before the Severance.",
+        "source": "fragment decrypt", "turn": 13}])
+    assert check(k_act_en, t, n, p, w), \
+        "decrypt-derived communication evidence did not fire act-gated TRACE-L3-08"
+    k_act_zh = dict(empty, facts=[{
+        "description": "解码信号碎片：断离前，网络中的实体曾试图沟通。",
+        "source": "信号解码", "turn": 13}])
+    assert check(k_act_zh, t, n, p, w), \
+        "中文 解码+实体沟通 entry did not fire act-gated TRACE-L3-08"
+    print("  [PASS] TRACE-L3-08 is act-gated: hearsay silent, decrypt/analyze acts fire (en+中文)")
+
+
+def test_l4_06_requires_spire_locator():
+    """TRACE-L4-06 must not fire on generic 'records'/记录 scenery.
+
+    Playtest wave 10, friction #3: 中文 T2's mundane terminal note "公共终端免费
+    使用，但可能会留下记录" fired the Archive Tower trace and pushed deepest_layer
+    to L4 two turns in. The archive/records/truth term must now co-occur with a
+    Spire/Tower locator in the SAME entry (the L3-07 co-occurrence pattern).
+    """
+    from engine.game_data import TRACE_CONDITIONS
+
+    check = next(tc for tc in TRACE_CONDITIONS if tc["id"] == "TRACE-L4-06")["check"]
+    t, n, p, w = {"discovered": []}, {"npcs": []}, {"turn": 2}, {}
+
+    def K(*descs):
+        return {"facts": [{"description": d, "turn": 2} for d in descs],
+                "rumors": [], "evidence": [], "theories": [], "connections": []}
+
+    # Negatives: the ACTUAL wave-10 offending turn-2 entries (session/wave10_zh
+    # FACT-007 / FACT-028), the EN analogue, and locator + records split across
+    # two entries.
+    assert not check(K("公共终端免费使用，但可能会留下记录"), t, n, p, w), \
+        "wave-10 offending 中文 entry (bare 记录) fired TRACE-L4-06 again"
+    assert not check(K("公共终端记录了这次NEXUS查询"), t, n, p, w), \
+        "mundane 中文 terminal-log 记录 fired TRACE-L4-06"
+    assert not check(K("The public terminal keeps records of every identity query."), t, n, p, w), \
+        "bare EN 'records' fired TRACE-L4-06"
+    assert not check(K("The Spire looms over Chrome Heights tonight.",
+                       "NEXUS keeps records of all public queries."), t, n, p, w), \
+        "TRACE-L4-06 fired from locator and records in SEPARATE entries"
+    # Positives: proper co-occurrence in EN and 中文 — and 档案塔 by itself IS
+    # the named place, so it satisfies both halves.
+    assert check(K("The Archive Tower in The Spire contains all records of the Severance."), t, n, p, w), \
+        "genuine Archive-Tower-in-Spire entry did not fire TRACE-L4-06"
+    assert check(K("尖塔中的档案塔保存着断离的真相。"), t, n, p, w), \
+        "中文 尖塔+档案+真相 entry did not fire TRACE-L4-06"
+    assert check(K("传闻档案塔里保存着所有记录。"), t, n, p, w), \
+        "中文 档案塔 entry did not fire TRACE-L4-06"
+    print("  [PASS] TRACE-L4-06 needs archive/records/truth + Spire/Tower in ONE entry (bare 记录 silent)")
+
+
+def test_zh_keyword_parity_back_half_traces():
+    """中文 phrasing must trip the back-half traces the EN run trips (wave 10, #2).
+
+    Wave-10: EN gained 5 traces in T11-20 (L4-06, L2-08, L3-02, L4-09 among the
+    back-half fires) while 中文 flat-lined T11-18 — their keyword lists carried
+    EN triggers with no natural 中文 equivalent. Each parity addition uses the
+    game's own zh terminology (奥林/总监, 活物/有生命, 回声/共鸣/信号的声音/
+    更加清晰), not machine-literal translations. L4-06's zh coverage is pinned
+    in test_l4_06_requires_spire_locator.
+    """
+    from engine.game_data import TRACE_CONDITIONS
+
+    checks = {tc["id"]: tc["check"] for tc in TRACE_CONDITIONS}
+    t, p, w = {"discovered": []}, {"turn": 14}, {}
+    n_none = {"npcs": []}
+    empty = {"facts": [], "rumors": [], "evidence": [], "theories": [], "connections": []}
+
+    def K(desc):
+        return dict(empty, facts=[{"description": desc, "turn": 14}])
+
+    # L2-08 — 奥林 (the zh alias the resolver actually uses, cf. _NPC_ALIASES)
+    # and 总监 (director) both fire, like EN "orin"/"director".
+    assert checks["TRACE-L2-08"](K("奥林总监领导新九龙的NEXUS运营，行事神秘。"), t, n_none, p, w), \
+        "中文 奥林/总监 entry did not fire TRACE-L2-08"
+    assert checks["TRACE-L2-08"](K("这位总监公开受人尊敬，却从不露面。"), t, n_none, p, w), \
+        "中文 总监 entry did not fire TRACE-L2-08"
+    # L3-02 — 活物 / 有生命 fire with Patch at neutral (same trust gate EN
+    # 'alive' passes through).
+    n_patch = {"npcs": [{"name": "Patch", "trust_level": "neutral"}]}
+    assert checks["TRACE-L3-02"](K("断离之前，旧网络里有个活物在里面呼吸。"), t, n_patch, p, w), \
+        "中文 活物 entry did not fire TRACE-L3-02"
+    assert checks["TRACE-L3-02"](K("断离前的网络里曾有某种有生命的东西。"), t, n_patch, p, w), \
+        "中文 有生命 entry did not fire TRACE-L3-02"
+    # L4-09 — 信号的声音/更加清晰 and 共鸣 fire like EN voice/clearer/resonance.
+    assert checks["TRACE-L4-09"](K("越往下走，信号的声音就变得更加清晰。"), t, n_none, p, w), \
+        "中文 信号的声音+更加清晰 entry did not fire TRACE-L4-09"
+    assert checks["TRACE-L4-09"](K("靠近深处时，植入体的共鸣越来越强。"), t, n_none, p, w), \
+        "中文 共鸣 entry did not fire TRACE-L4-09"
+    print("  [PASS] 中文 parity: 奥林/总监, 活物/有生命, 信号的声音/共鸣/更加清晰 fire L2-08/L3-02/L4-09")
 
 
 def test_ambient_causes_and_bilingual_scarcity_rule():
@@ -1069,6 +1207,9 @@ def main():
         test_listeners_named_by_trusted_npc,
         test_l3_07_requires_sector7_context,
         test_act_on_evidence_discovery_route,
+        test_l3_08_act_gated_no_passive_unlock,
+        test_l4_06_requires_spire_locator,
+        test_zh_keyword_parity_back_half_traces,
         test_ambient_causes_and_bilingual_scarcity_rule,
         test_player_turn_priority_over_world_sim_lock,
         test_endings_history_dedup_and_spoiler_safe,

@@ -190,6 +190,31 @@ def _sector7_depth_in_one_entry(knowledge: dict) -> bool:
     return False
 
 
+# TRACE-L4-06 co-occurrence gate (playtest wave 10, friction #3): the old check
+# fired on ANY entry containing "records"/"记录" — 中文 turn 2's mundane "公共
+# 终端免费使用，但可能会留下记录" ("the public terminal keeps records") pushed
+# deepest_layer to L4 two turns in. Same pattern as the L3-07 gate: the
+# archive/records/truth term must co-occur with a Spire/Tower locator in the
+# SAME entry. "档案塔" satisfies both halves by itself (it IS the named place);
+# bare surveillance-log "记录" stays Layer-1 scenery. 真相 added for EN "truth"
+# parity (wave 10, friction #2).
+_L406_ARCHIVE_RE = re.compile(
+    r"(?<![a-z])(?:archives?|records?|truth)(?![a-z])|档案|记录|真相")
+_L406_SPIRE_RE = re.compile(
+    r"(?<![a-z])(?:spire|tower)(?![a-z])|尖塔|高塔|塔楼|档案塔")
+
+
+def _archive_tower_in_one_entry(knowledge: dict) -> bool:
+    """True when a SINGLE knowledge entry pairs an archive/records/truth term
+    with a Spire/Tower locator (TRACE-L4-06)."""
+    for entry_type in _KNOWLEDGE_TYPES:
+        for entry in knowledge.get(entry_type, []):
+            text = _entry_text(entry)
+            if _L406_ARCHIVE_RE.search(text) and _L406_SPIRE_RE.search(text):
+                return True
+    return False
+
+
 # Act-on-evidence discovery route (playtest wave 6, friction #3b). Discovery
 # cadence was front-loaded keyword luck: by T11-20 the trace panel barely moved
 # even for players actively decrypting/analyzing/scanning what they found — the
@@ -458,7 +483,10 @@ TRACE_CONDITIONS: list[dict] = [
     {"id": "TRACE-L2-08", "layer": 2,
      "description": "Director Orin leads NEXUS operations in Neo-Kowloon — publicly respected but secretive",
      "description_zh": "欧林主管领导新九龙的NEXUS运营——公开受人尊敬但行事神秘",
-     "check": lambda k, t, n, p, w: _has_fact_or_rumor_about(k, ["orin", "欧林", "director", "主管"])},
+     # 中文 parity (wave 10, friction #2): 奥林 is the alias the zh resolver
+     # actually uses for Orin (already in _NPC_ALIASES), and 总监 is the other
+     # natural rendering of "director" alongside 主管.
+     "check": lambda k, t, n, p, w: _has_fact_or_rumor_about(k, ["orin", "欧林", "奥林", "director", "主管", "总监"])},
     {"id": "TRACE-L2-09", "layer": 2,
      "description": "Chrome Heights is the corporate elite district — NEXUS officials and wealthy citizens",
      "description_zh": "镀金台是企业精英区——NEXUS官员和富裕市民居住于此",
@@ -485,9 +513,13 @@ TRACE_CONDITIONS: list[dict] = [
     {"id": "TRACE-L3-02", "layer": 3,
      "description": "Something was alive in the network before the Severance",
      "description_zh": "断离之前，网络中有某种存在是活着的",
+     # 中文 parity (wave 10, friction #2): EN trips this on the bare adjective
+     # "alive", but the natural zh renderings of "something alive in the net"
+     # are 活物 / 有生命 — 活着/活的 alone missed them (中文 back half stalled).
      "check": lambda k, t, n, p, w: (
          _has_evidence(k, ["pre-severance logs", "alive", "network entity",
-                           "断离前日志", "活着", "活的", "网络实体", "存在"])
+                           "断离前日志", "活着", "活的", "活物", "有生命",
+                           "网络实体", "存在"])
          and _npc_trust_at_least(n, "patch", "neutral"))},
     {"id": "TRACE-L3-03", "layer": 3,
      "description": "Fragments of something survive in old implants — 'computational resources'",
@@ -528,15 +560,24 @@ TRACE_CONDITIONS: list[dict] = [
     {"id": "TRACE-L3-08", "layer": 3,
      "description": "The entity in the network tried to communicate before it was severed",
      "description_zh": "网络中的实体在被切断前曾试图沟通",
-     # Act route (wave 6, #3b): analyzing a Signal fragment that carries a
-     # voice/whisper (the analyze_signal fragments literally read "...before the
-     # silence, there was a voice...") IS hearing the entity's attempt. Voice
-     # words are boundary-anchored and spoke/speaking/说话/声音 need signal
-     # context in the same clause (wave 7) so "an outspoken guard" or a vendor
-     # who spoke during an unrelated scan can't leak Layer 3.
+     # ACT-GATED — no passive fallback (playtest wave 10, friction #1). This
+     # truth lives INSIDE the old signal: the entity's attempt to speak only
+     # survives as a voice buried in a pre-Severance fragment, and a buried
+     # voice cannot be learned by hearsay — a bar rumor that "something tried
+     # to talk" is just a rumor until YOU decrypt/analyze a fragment and hear
+     # the attempt yourself (the analyze_signal fragments literally read
+     # "...before the silence, there was a voice..."). Wave 10 showed the old
+     # passive _has_evidence branch always beat the act route to the unlock,
+     # leaving acting-on-evidence decorative; of the act-route trio (L2-06
+     # blind spots and L3-05 live infrastructure CAN credibly be told to you
+     # or seen first-hand) this is the one where the fiction demands the act,
+     # so the act route is now the ONLY way in. Same topic keywords as before,
+     # but they must appear in an act-derived entry (_ACT_MARKERS in text or
+     # source); the wave-7 anchored voice regex stays as the second act path.
      "check": lambda k, t, n, p, w: (
-         _has_evidence(k, ["communicate", "message", "entity", "before severance",
-                           "沟通", "试图沟通", "信息", "实体", "断离前"])
+         _acted_on_evidence(k, ["communicate", "message", "entity",
+                                "before severance", "沟通", "试图沟通", "信息",
+                                "实体", "断离前"])
          or _acted_on_evidence_re(k, _L308_VOICE_RE))},
     {"id": "TRACE-L3-09", "layer": 3,
      "description": "Some extracted fragments have been weaponized by NEXUS — Project Resonance",
@@ -588,7 +629,10 @@ TRACE_CONDITIONS: list[dict] = [
     {"id": "TRACE-L4-06", "layer": 4,
      "description": "The Archive Tower in The Spire contains all records — including the truth about the Severance",
      "description_zh": "尖塔中的档案塔保存着所有记录——包括断离的真相",
-     "check": lambda k, t, n, p, w: _has_fact_or_rumor_about(k, ["archive tower", "档案塔", "records", "记录", "truth"])},
+     # Wave-10 friction #3: bare "records"/"记录" fired this on 中文 turn 2
+     # ("公共终端…会留下记录"). Archive/records/truth must now co-occur with a
+     # Spire/Tower locator in the SAME entry (L3-07 pattern).
+     "check": lambda k, t, n, p, w: _archive_tower_in_one_entry(k)},
     {"id": "TRACE-L4-07", "layer": 4,
      "description": "Dr. Chen knows the full truth but continues the program out of conviction",
      "description_zh": "陈博士知道全部真相但出于信念继续着这个计划",
@@ -601,7 +645,14 @@ TRACE_CONDITIONS: list[dict] = [
     {"id": "TRACE-L4-09", "layer": 4,
      "description": "Echo — the Signal's voice — becomes clearer as you approach the Resonance",
      "description_zh": "回响——信号的声音——在你接近共鸣所时变得更加清晰",
-     "check": lambda k, t, n, p, w: _has_fact_or_rumor_about(k, ["echo", "回响", "voice", "clearer", "resonance"])},
+     # 中文 parity (wave 10, friction #2): EN fired this via voice/clearer/
+     # resonance but zh only listed 回响. Added the game's own zh terms — 回声
+     # (Echo's alias in _NPC_ALIASES), 共鸣 (resonance, cf. 共鸣计划/共鸣室),
+     # 信号的声音 (the Signal's voice, per description_zh) and 更清晰/更加清晰
+     # (clearer). Bare 声音 stays out — it means any sound at all.
+     "check": lambda k, t, n, p, w: _has_fact_or_rumor_about(k, [
+         "echo", "回响", "回声", "voice", "信号的声音", "clearer", "更清晰",
+         "更加清晰", "resonance", "共鸣"])},
 
     # =========================================================================
     # Layer 5: The Full Truth (8 traces)
