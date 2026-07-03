@@ -2702,6 +2702,7 @@ async def _run_turn(sess: PlayerSession, ws: WebSocket, player_input: str | None
                             _session_language(sess.session_dir),
                             get_fast_llm(),
                             feats["suggested_actions_count"],
+                            session_dir=sess.session_dir,
                         ),
                     )
                     result["suggested_actions"] = suggestions

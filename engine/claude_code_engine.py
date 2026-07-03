@@ -252,8 +252,11 @@ realize they can use — decrypt an encrypted item with the cipher tool, analyze
 signal artifact, present what they know to an NPC, hack a terminal, or rest to \
 recover integrity — ONLY when the current inventory/knowledge/scene actually affords \
 it (they hold the tool, have the evidence, or face the encrypted thing). Phrase it \
-in-world as a direct action, never as UI-speak or a tutorial hint. Make each option \
-meaningfully different from the others. Use `[]` only when the game is ending.
+in-world as a direct action, never as UI-speak or a tutorial hint. If the validation \
+context lists recently offered suggestions, NEVER repeat one of them (even reworded) \
+— especially the teaching option: teach a DIFFERENT verb this turn, or offer no \
+teaching option at all. Make each option meaningfully different from the others. \
+Use `[]` only when the game is ending.
 
 ### Validation context:
 {validator_context}
@@ -1529,6 +1532,13 @@ def run_turn(session_dir: str, player_input: str, mode: str = "play") -> dict:
         prompt_state = state
     dynamic_prompt = build_dynamic_state_prompt(prompt_state)
     validator_context = _build_validator_context(state)
+    # Wave-12 friction #3: show the model what it already suggested recently so
+    # the same (teaching) nudge can't repeat turn after turn. The spec's
+    # suggested_actions rules carry the matching no-repeat directive.
+    from engine.suggestions import format_recent_suggestions, read_recent_suggestions
+    _recent_block = format_recent_suggestions(read_recent_suggestions(session_dir))
+    if _recent_block:
+        validator_context = f"{validator_context}\n\n{_recent_block}"
     conversation_history = _read_conversation_history(session_dir, last_n=5)
 
     output_spec = _OUTPUT_FORMAT_SPEC.replace("{validator_context}", validator_context)
@@ -1718,7 +1728,7 @@ def run_turn(session_dir: str, player_input: str, mode: str = "play") -> dict:
     # ── Step 14: Suggested actions ───────────────────────────────────
     # The model emits these inline (see _OUTPUT_FORMAT_SPEC) so there is no
     # extra LLM call. Spoiler-safety is enforced by the prompt rules.
-    from engine.suggestions import read_features, normalize_actions
+    from engine.suggestions import read_features, normalize_actions, record_suggestions
     features = read_features(session_dir)
     suggested_actions: list[dict] = []
     if features["suggested_actions"] and not game_over:
@@ -1726,6 +1736,8 @@ def run_turn(session_dir: str, player_input: str, mode: str = "play") -> dict:
             parsed.get("suggested_actions", []),
             features["suggested_actions_count"],
         )
+        # Remember what we offered so next turn's prompt can forbid repeats.
+        record_suggestions(session_dir, player.get("turn", 1), suggested_actions)
 
     return {
         "narrative": narrative,

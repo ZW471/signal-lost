@@ -118,6 +118,73 @@ def normalize_actions(raw, count: int = 3) -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
+# Recent-suggestion memory (cross-turn de-dupe)
+# ---------------------------------------------------------------------------
+# Playtest wave 12, friction #3: the 中文 run surfaced the identical "buy a
+# decoder tool" teaching nudge on 5 turns (T9-T15). Neither generation path
+# could see what it had already offered, so it re-derived the same nudge every
+# turn. A tiny per-session file (recent_suggestions.json) remembers the last
+# few turns' suggestion lists; both paths inject the recent window into their
+# prompt (with a no-repeat directive) and append to it after generating.
+
+_RECENT_FILE = "recent_suggestions.json"
+_RECENT_KEEP = 6   # entries kept on disk
+RECENT_WINDOW = 3  # turns injected into the prompt
+
+
+def read_recent_suggestions(session_dir: str | None,
+                            last_n: int = RECENT_WINDOW) -> list[str]:
+    """Flat, de-duplicated list of suggestion texts offered in the last *last_n* turns."""
+    if not session_dir:
+        return []
+    data = _read_json(os.path.join(session_dir, _RECENT_FILE))
+    entries = data.get("entries", [])
+    if not isinstance(entries, list):
+        return []
+    texts: list[str] = []
+    seen: set[str] = set()
+    for entry in entries[-last_n:]:
+        actions = entry.get("actions", []) if isinstance(entry, dict) else []
+        for t in actions if isinstance(actions, list) else []:
+            t = " ".join(str(t).split()).strip()
+            if t and t.lower() not in seen:
+                seen.add(t.lower())
+                texts.append(t)
+    return texts
+
+
+def record_suggestions(session_dir: str | None, turn: int, actions: list) -> None:
+    """Append this turn's suggestion texts to the session memory (non-fatal)."""
+    if not session_dir or not actions:
+        return
+    texts = [a.get("text", "") if isinstance(a, dict) else str(a) for a in actions]
+    texts = [" ".join(str(t).split()).strip() for t in texts]
+    texts = [t for t in texts if t]
+    if not texts:
+        return
+    path = os.path.join(session_dir, _RECENT_FILE)
+    data = _read_json(path)
+    entries = data.get("entries", [])
+    if not isinstance(entries, list):
+        entries = []
+    entries.append({"turn": turn, "actions": texts})
+    try:
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump({"entries": entries[-_RECENT_KEEP:]}, f,
+                      ensure_ascii=False, indent=2)
+    except OSError as e:
+        logger.warning("could not persist recent suggestions: %s", e)
+
+
+def format_recent_suggestions(texts: list[str]) -> str:
+    """Compact prompt block listing recently offered suggestions (or '')."""
+    if not texts:
+        return ""
+    lines = "\n".join(f"- {t}" for t in texts)
+    return f"[Recently offered suggestions — do NOT repeat any of these]\n{lines}"
+
+
+# ---------------------------------------------------------------------------
 # Standalone generation (LangGraph fallback path)
 # ---------------------------------------------------------------------------
 
@@ -141,6 +208,9 @@ know to an NPC, hack a terminal, or rest to recover integrity — ONLY when the 
 inventory/knowledge/scene in the context below actually affords it (they hold the \
 tool, have the evidence, or face the encrypted thing). Phrase it in-world as a \
 direct command, never as UI-speak or a tutorial hint.
+- If the context lists recently offered suggestions, NEVER repeat one of them \
+(even reworded) — especially the game-verb teaching option: teach a DIFFERENT \
+verb this turn, or offer no teaching option at all.
 - Use ONLY the people, places, exits, items, and facts listed in the context below. \
 NEVER invent new NPCs, locations, items, or lore.
 - NEVER reference anything the player has not yet discovered. No spoilers, no hidden \
@@ -241,25 +311,34 @@ def parse_actions(raw: str) -> list[str]:
 
 
 def generate_suggested_actions(state: dict, narrative: str, language: str,
-                               llm, count: int = 3) -> list[dict]:
+                               llm, count: int = 3,
+                               session_dir: str | None = None) -> list[dict]:
     """Generate 1-3 spoiler-safe next-action suggestions via a standalone LLM call.
 
     Non-fatal: returns ``[]`` on any failure (parse error, LLM error, etc.).
     Used by the LangGraph path; the bypass engine produces suggestions inline.
+    When *session_dir* is given, recently offered suggestions are injected into
+    the prompt (no-repeat directive) and this turn's output is recorded.
     """
     if not narrative:
         return []
     count = max(1, min(3, int(count)))
     lang_name = "Chinese (简体中文)" if language == "zh" else "English"
     system = _SUGGEST_SYS.format(count=count, lang_name=lang_name)
+    recent_block = format_recent_suggestions(read_recent_suggestions(session_dir))
     user = (
         f"[Scene that just happened]\n{narrative}\n\n"
         f"[What the player can see and already knows]\n{_visible_context(state)}\n\n"
-        f"Return the JSON now."
+        + (f"{recent_block}\n\n" if recent_block else "")
+        + "Return the JSON now."
     )
     try:
         raw = _llm_text(llm, system, user)
     except Exception as e:
         logger.warning("suggested-actions generation failed: %s", e)
         return []
-    return normalize_actions(parse_actions(raw), count)
+    actions = normalize_actions(parse_actions(raw), count)
+    if actions and session_dir:
+        turn = (state.get("player", {}) or {}).get("turn", 0)
+        record_suggestions(session_dir, turn, actions)
+    return actions

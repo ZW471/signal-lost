@@ -1219,6 +1219,80 @@ def test_district_access_carries_unlocked_names_only():
     print("  [PASS] district_access exposes unlocked names only; sealed registry stripped for client")
 
 
+def test_suggestion_recent_memory_and_no_repeat_directive():
+    """Suggestion generators must see — and be told to avoid — recent suggestions.
+
+    Regression (playtest wave 12, friction #3): the 中文 run surfaced the
+    identical "buy a decoder tool" teaching nudge on 5 turns (T9-T15) because
+    neither generation path could see what it had already offered.
+    """
+    from engine.suggestions import (
+        _SUGGEST_SYS, format_recent_suggestions,
+        read_recent_suggestions, record_suggestions,
+    )
+    from engine.claude_code_engine import _OUTPUT_FORMAT_SPEC
+
+    # Round-trip: record 4 turns, read back only the last-3-turn window, de-duped.
+    with tempfile.TemporaryDirectory() as tmpdir:
+        assert read_recent_suggestions(tmpdir) == [], "empty session must yield no recents"
+        record_suggestions(tmpdir, 1, [{"text": "Ask the vendor about the alley"}])
+        record_suggestions(tmpdir, 2, [{"text": "向黑市摊贩买旧式解码工具"}, {"text": "Head north"}])
+        record_suggestions(tmpdir, 3, [{"text": "向黑市摊贩买旧式解码工具"}])
+        record_suggestions(tmpdir, 4, ["Rest at the noodle stall"])
+        recent = read_recent_suggestions(tmpdir)
+        assert recent.count("向黑市摊贩买旧式解码工具") == 1, "recent window must de-dupe repeats"
+        assert "Head north" in recent and "Rest at the noodle stall" in recent
+        assert "Ask the vendor about the alley" not in recent, \
+            "turn outside the 3-turn window must not be injected"
+        block = format_recent_suggestions(recent)
+        assert "do NOT repeat" in block, "prompt block must carry the no-repeat instruction"
+        assert format_recent_suggestions([]) == "", "no recents → no block"
+
+    # Both generation paths' prompts must carry the no-repeat directive,
+    # including the teaching-option variation clause.
+    for name, prompt in (("_SUGGEST_SYS", _SUGGEST_SYS),
+                         ("_OUTPUT_FORMAT_SPEC", _OUTPUT_FORMAT_SPEC)):
+        assert "recently offered suggestions" in prompt, \
+            f"{name} lost the recently-offered-suggestions directive"
+        assert "DIFFERENT verb" in prompt, \
+            f"{name} lost the vary-the-taught-verb clause"
+
+    print("  [PASS] Recent-suggestion memory round-trips; both paths carry no-repeat directive")
+
+
+def test_canonical_script_has_lay_low_beats():
+    """The canonical playthrough script must include alert-bleed lay-low beats.
+
+    Regression (playtest wave 12, friction #1): the DEFAULT_ACTIONS script
+    alert-saturated to the capture death in BOTH languages (EN died T19 at L3)
+    because the restricted-area → source → confront beats stacked alert past
+    100 with no recovery beat between them.
+    """
+    from tests.scenarios.full_playthrough import DEFAULT_ACTIONS
+
+    assert len(DEFAULT_ACTIONS) == 20, \
+        "canonical script must stay at 20 beats so --turns 20 reaches the final choice"
+
+    lows = [i for i, a in enumerate(DEFAULT_ACTIONS)
+            if "lay low" in a.lower() or "let the heat die down" in a.lower()]
+    assert len(lows) >= 1, "script needs at least one lay-low/rest beat"
+
+    restricted = next(i for i, a in enumerate(DEFAULT_ACTIONS) if "restricted" in a.lower())
+    source = next(i for i, a in enumerate(DEFAULT_ACTIONS) if "source of the Signal" in a)
+    confront = next(i for i, a in enumerate(DEFAULT_ACTIONS) if "Confront" in a)
+
+    # One bleed-off immediately after the caught_restricted (+15) spike…
+    assert any(i == restricted + 1 for i in lows), \
+        "a lay-low beat must directly follow the restricted-area attempt"
+    # …and one before the endgame alert stack (source + confront).
+    assert any(restricted + 1 < i < source for i in lows), \
+        "a lay-low beat must sit between the mid-game spike and the endgame run"
+    # The script must still exercise the alert system: the provocative beats stay.
+    assert restricted < source < confront, "alert-provoking endgame beats must remain in order"
+
+    print("  [PASS] Canonical script keeps 20 beats with lay-low bleed-offs at both spike points")
+
+
 def main():
     print("=" * 60)
     print("Signal Lost — Regression Tests")
@@ -1227,6 +1301,8 @@ def main():
 
     tests = [
         test_flag_bleed_between_turns,
+        test_suggestion_recent_memory_and_no_repeat_directive,
+        test_canonical_script_has_lay_low_beats,
         test_area_field_in_initial_state,
         test_prompt_includes_dialogue_rules,
         test_prompt_includes_economy_engagement,

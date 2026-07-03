@@ -28,7 +28,19 @@ from engine.graph import compile_graph, set_llm
 from engine.state import create_new_session, initial_state
 from engine.llm_factory import create_llm, default_model_for, load_env, load_provider_config, SETTINGS_DIR
 
-# Default action sequence for reproducible testing
+# Default action sequence for reproducible testing.
+#
+# Wave-12 friction #1: the back-half beats (restricted areas → source → confront)
+# stacked NEXUS alert past 100 before deep-layer content unlocked
+# (`caught_restricted` +15, `attacking_nexus` +20 — game_data.ALERT_INCREASES),
+# so both languages hit the designed alert-100 capture death (EN@T19) at L3.
+# Two lay-low beats bleed off heat at the two spike points — one right after
+# the restricted-area attempt, one right before the endgame run — replacing the
+# two lowest-value beats (a duplicate "talk to the knowledgeable one" and a pure
+# "plan my next move" reflection). A 20-turn run should now stay under the
+# 90+ full-manhunt band (game_data.ALERT_THRESHOLDS) and reach L4 content,
+# while alert still climbs visibly through the 25/50/75 thresholds. The list
+# stays at exactly 20 entries so `--turns 20` still reaches the final choice.
 DEFAULT_ACTIONS = [
     "Look around. Where am I?",
     "Talk to the nearest person",
@@ -40,13 +52,13 @@ DEFAULT_ACTIONS = [
     "Ask about the Severance",
     "Look for encrypted data or signals",
     "Head deeper into the district — follow any leads",
-    "Talk to whoever seems most knowledgeable here",
     "Present what I've learned and ask for their theory",
     "Search for evidence of the conspiracy",
     "Try to access restricted areas",
+    "Lay low at a quiet food stall until the patrols thin — rest and recover",
     "Analyze any signal artifacts I've found",
     "Look for allies who share my goals",
-    "Plan my next move based on everything I know",
+    "Find somewhere safe to sleep and let the heat die down before the final push",
     "Head toward the source of the Signal",
     "Confront what I find",
     "Make my final choice",
