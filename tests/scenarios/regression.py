@@ -528,10 +528,10 @@ def test_l3_reachable_by_conversational_play():
                 {"description": "Sector 7 has multiple levels; the deep labs are on the lower level.", "turn": 10},
             ],
             "rumors": [
-                # Wave 10: TRACE-L3-08 is act-gated now — this hearsay
-                # intentionally no longer counts (you must decrypt/analyze a
-                # fragment yourself); the talker still clears the >=5 bar via
-                # L3-04/05/06/07/10/11.
+                # Wave 11 review: the wave-10 act gate on TRACE-L3-08 made the
+                # trace unreachable in real play (the resolver files this lore
+                # as hearsay, never as act-tagged entries), so hearsay counts
+                # again and this rumor fires L3-08.
                 {"description": "Something in the old network tried to communicate before the Severance cut it off — an entity sending a message.", "turn": 11},
                 {"description": "A resistance network operates in the shadows, more cells than just one group.", "turn": 11},
                 {"description": "Dr. Chen leads the extraction program and believes she is saving people.", "turn": 12},
@@ -721,17 +721,23 @@ def test_act_on_evidence_discovery_route():
     print("  [PASS] Act-on-evidence route fires L3-05/L3-08/L2-06; talk-only, off-topic and mundane speech/static stay silent")
 
 
-def test_l3_08_act_gated_no_passive_unlock():
-    """TRACE-L3-08 unlocks ONLY by acting on evidence — rich hearsay stays silent.
+def test_l3_08_reachable_on_certified_wave10_knowledge():
+    """TRACE-L3-08 must keep firing on the certified wave-10 knowledge — the
+    passive route is load-bearing.
 
-    Playtest wave 10, friction #1: on both canonical runs the passive
-    _has_evidence branch always beat the act route to the unlock, so the wave-7
-    act-on-evidence mechanism was never load-bearing and T11-20 investigative
-    turns (the verbs the teaching rail pushes) unlocked nothing new. The
-    entity's communication attempt survives only as a voice inside a
-    pre-Severance fragment — in fiction it cannot be learned by hearsay — so
-    the passive fallback is removed and decrypt/analyze/scan/present acts are
-    the only way in.
+    Wave-11 review, critical #1: wave 10's friction-#1 change act-gated this
+    trace (topic keywords only counted inside an entry that ALSO carried an
+    _ACT_MARKER). But in the certified wave-10 runs — and in every recorded
+    session that ever discovered L3-08 — the resolver files the topic keywords
+    as passive hearsay/observation, while its act-tagged entries (signal
+    scans, Signal分析) are about other topics entirely. The two sets are
+    disjoint, so the act-only gate silently made the trace unreachable on the
+    canonical script; the old hand-crafted act-gate test stayed green because
+    it invented entries that co-locate act + topic, a shape real play never
+    produced. This test replays the REAL recorded entries — verbatim from
+    session/wave10_{en,zh}/knowledge.json, whose traces.json shows L3-08
+    discovered on turns 3 (EN) and 7 (中文) — and pins that they still unlock
+    the trace, in addition to the genuine-hearsay and act routes.
     """
     from engine.game_data import TRACE_CONDITIONS
 
@@ -739,39 +745,71 @@ def test_l3_08_act_gated_no_passive_unlock():
     t, n, p, w = {"discovered": []}, {"npcs": []}, {"turn": 12}, {}
     empty = {"facts": [], "rumors": [], "evidence": [], "theories": [], "connections": []}
 
-    # Negative: RICH passive evidence — the exact keywords the old base branch
-    # matched, spread across facts, rumors AND the formal evidence channel,
-    # from three distinct sources — must NOT fire without an act.
-    k_passive = dict(
-        empty,
-        facts=[{"description": "Ghost swears the entity in the old network tried "
-                               "to communicate before it was severed.",
-                "source": "ghost", "turn": 9}],
-        rumors=[{"description": "Bar talk: something was sending a message before "
-                                "the Severance — a last call nobody answered.",
-                 "source": "bartender", "turn": 10}],
-        evidence=[{"description": "Patch repeats the story: a network entity, a "
-                                  "communication attempt, right before severance. "
-                                  "网络中的实体在断离前曾试图沟通。",
-                   "source": "patch", "turn": 11}],
-    )
-    assert not check(k_passive, t, n, p, w), \
-        "TRACE-L3-08 fired from hearsay alone — the act gate is not load-bearing"
+    # session/wave10_en/knowledge.json — every entry carrying an L3-08 topic
+    # keyword, verbatim. All passive: no act marker in text or source.
+    k_wave10_en = dict(empty, facts=[
+        {"id": "FACT-007",
+         "description": "The public NEXUS terminal may log identity queries.",
+         "source": "Mira", "turn": 2},
+        {"id": "FACT-084",
+         "description": "The transfer bay reader links your presence to "
+                        "ACQ-SPECIAL / S7 but fails to resolve your identity.",
+         "source": "observed", "turn": 19},
+    ])
+    assert check(k_wave10_en, t, n, p, w), \
+        "certified wave10_en knowledge no longer unlocks TRACE-L3-08 (passive route regressed)"
 
-    # Positives: the SAME lore learned by acting on a fragment fires — EN with
-    # the act in the `source` field, 中文 with the act named in the text.
+    # session/wave10_zh/knowledge.json — same extraction, verbatim.
+    k_wave10_zh = dict(
+        empty,
+        facts=[
+            {"id": "FACT-025",
+             "description": "NEXUS企业安全部负责协查失踪人口并控制相关公共信息",
+             "source": "NEXUS公共终端", "turn": 6},
+            {"id": "FACT-038",
+             "description": "断离前的旧音频设备可能仍会接收到异常频段",
+             "source": "老周", "turn": 8},
+            {"id": "FACT-062",
+             "description": "蔓城下面有断离前留下的旧城骨架",
+             "source": "observed", "turn": 12},
+        ],
+        rumors=[
+            {"id": "RUMOR-007",
+             "description": "蔓城下面还有断离前留下的旧城骨架，有人能躲进去，也有人再没出来",
+             "source": "黄婆", "turn": 12},
+        ],
+    )
+    assert check(k_wave10_zh, t, n, p, w), \
+        "certified wave10_zh knowledge no longer unlocks TRACE-L3-08 (passive route regressed)"
+
+    # Genuine hearsay of the lore itself — the shape the resolver actually
+    # produces for this topic (NPC-sourced facts/rumors) — must fire too.
+    k_hearsay = dict(empty, rumors=[{
+        "description": "Something in the old network tried to communicate before "
+                       "the Severance cut it off — an entity sending a message.",
+        "source": "patch", "turn": 11}])
+    assert check(k_hearsay, t, n, p, w), \
+        "entity-communication hearsay did not fire TRACE-L3-08"
+    k_hearsay_zh = dict(empty, facts=[{
+        "description": "网络中的实体在断离前曾试图沟通。",
+        "source": "补丁", "turn": 11}])
+    assert check(k_hearsay_zh, t, n, p, w), \
+        "中文 实体试图沟通 hearsay did not fire TRACE-L3-08"
+
+    # The act route still works on top — EN with the act in the `source`
+    # field, 中文 with the act named in the text.
     k_act_en = dict(empty, facts=[{
         "description": "The recovered fragment carries the entity's attempt to "
                        "communicate before the Severance.",
         "source": "fragment decrypt", "turn": 13}])
     assert check(k_act_en, t, n, p, w), \
-        "decrypt-derived communication evidence did not fire act-gated TRACE-L3-08"
+        "decrypt-derived communication evidence did not fire TRACE-L3-08"
     k_act_zh = dict(empty, facts=[{
         "description": "解码信号碎片：断离前，网络中的实体曾试图沟通。",
         "source": "信号解码", "turn": 13}])
     assert check(k_act_zh, t, n, p, w), \
-        "中文 解码+实体沟通 entry did not fire act-gated TRACE-L3-08"
-    print("  [PASS] TRACE-L3-08 is act-gated: hearsay silent, decrypt/analyze acts fire (en+中文)")
+        "中文 解码+实体沟通 entry did not fire TRACE-L3-08"
+    print("  [PASS] TRACE-L3-08 fires on certified wave-10 knowledge (en+中文); hearsay and act routes both live")
 
 
 def test_l4_06_requires_spire_locator():
@@ -1207,7 +1245,7 @@ def main():
         test_listeners_named_by_trusted_npc,
         test_l3_07_requires_sector7_context,
         test_act_on_evidence_discovery_route,
-        test_l3_08_act_gated_no_passive_unlock,
+        test_l3_08_reachable_on_certified_wave10_knowledge,
         test_l4_06_requires_spire_locator,
         test_zh_keyword_parity_back_half_traces,
         test_ambient_causes_and_bilingual_scarcity_rule,

@@ -560,24 +560,22 @@ TRACE_CONDITIONS: list[dict] = [
     {"id": "TRACE-L3-08", "layer": 3,
      "description": "The entity in the network tried to communicate before it was severed",
      "description_zh": "网络中的实体在被切断前曾试图沟通",
-     # ACT-GATED — no passive fallback (playtest wave 10, friction #1). This
-     # truth lives INSIDE the old signal: the entity's attempt to speak only
-     # survives as a voice buried in a pre-Severance fragment, and a buried
-     # voice cannot be learned by hearsay — a bar rumor that "something tried
-     # to talk" is just a rumor until YOU decrypt/analyze a fragment and hear
-     # the attempt yourself (the analyze_signal fragments literally read
-     # "...before the silence, there was a voice..."). Wave 10 showed the old
-     # passive _has_evidence branch always beat the act route to the unlock,
-     # leaving acting-on-evidence decorative; of the act-route trio (L2-06
-     # blind spots and L3-05 live infrastructure CAN credibly be told to you
-     # or seen first-hand) this is the one where the fiction demands the act,
-     # so the act route is now the ONLY way in. Same topic keywords as before,
-     # but they must appear in an act-derived entry (_ACT_MARKERS in text or
-     # source); the wave-7 anchored voice regex stays as the second act path.
+     # PASSIVE ROUTE RESTORED (wave 11 review, critical #1). Wave 10's
+     # friction-#1 change act-gated this trace: the topic keywords only
+     # counted inside an entry that ALSO carried an _ACT_MARKER. Replaying the
+     # certified wave-10 runs (and the full session corpus) showed that gate
+     # makes the trace unreachable in real play: the resolver reliably files
+     # this lore as passive NPC hearsay/observation (sources "Patch", "老周",
+     # "observed"), while its act-tagged entries (signal scans, Signal分析)
+     # are about other topics entirely — the act-marker set and the topic set
+     # were disjoint in EVERY certified session, so every recorded run that
+     # had discovered L3-08 stopped discovering it. Hearsay therefore counts
+     # again; the wave-7 anchored voice regex stays as the act path for
+     # fragments that literally carry the voice (the analyze_signal fragments
+     # read "...before the silence, there was a voice...").
      "check": lambda k, t, n, p, w: (
-         _acted_on_evidence(k, ["communicate", "message", "entity",
-                                "before severance", "沟通", "试图沟通", "信息",
-                                "实体", "断离前"])
+         _has_evidence(k, ["communicate", "message", "entity", "before severance",
+                           "沟通", "试图沟通", "信息", "实体", "断离前"])
          or _acted_on_evidence_re(k, _L308_VOICE_RE))},
     {"id": "TRACE-L3-09", "layer": 3,
      "description": "Some extracted fragments have been weaponized by NEXUS — Project Resonance",
