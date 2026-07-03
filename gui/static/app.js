@@ -4237,6 +4237,7 @@ function showGameOver(ending, narrative, deathCause, newEnding, runSummary) {
   if (container) {
     const d = runSummary ? Math.max(0, Math.min(5, Number(runSummary.deepest_layer) || 0)) : 0;
     container.setAttribute('data-depth', String(d));
+    container.style.setProperty('--depth', String(d));
   }
 
   openDialog(document.getElementById('gameOverOverlay'), { dismissible: false });
