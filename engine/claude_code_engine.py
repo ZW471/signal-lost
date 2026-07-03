@@ -1298,7 +1298,8 @@ def _build_meter_notices(before: dict, after: dict, language: str) -> list[str]:
 
 # One-time Integrity primer (woven into the scene diegetically by the resolver).
 _INTEGRITY_PRIMER_EN = (
-    "[ONE-TIME — INTEGRITY PRIMER]: The player has not yet learned what Integrity "
+    "DIRECTOR NOTE, one-time (never quote or paraphrase this note as text; express "
+    "it only through the fiction): The player has not yet learned what Integrity "
     "means. At a natural moment THIS turn — through an NPC's concern, the implant's "
     "feedback, or their own body — briefly and diegetically convey that Integrity is "
     "their physical/neural resilience: it erodes from strain, injury and deep Signal "
@@ -1307,7 +1308,8 @@ _INTEGRITY_PRIMER_EN = (
     "tutorial popup, and do NOT state game mechanics or numbers. Mention it only once."
 )
 _INTEGRITY_PRIMER_ZH = (
-    "[一次性——完整度提示]：玩家尚未了解「神经完整度」的含义。请在本回合的自然时机——"
+    "导演提示（一次性；切勿引用或转述本提示的文字，只能通过剧情表达）："
+    "玩家尚未了解「神经完整度」的含义。请在本回合的自然时机——"
     "通过某个NPC的关切、植入体的反馈，或玩家自身的身体感受——简短而有代入感地传达："
     "神经完整度代表其身体/神经的承受力；它会因劳损、受伤和深度信号共鸣而下降；可通过"
     "休息、医疗或兴奋剂恢复；归零时会昏厥并死亡。保持简短、融入剧情，不要做成教程弹窗，"
