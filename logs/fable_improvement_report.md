@@ -1,9 +1,12 @@
 # Signal Lost — `fable-improvement` Campaign Report
 
 **Branch:** `fable-improvement` (branched from `main` @ `75fdc9e`)
-**Span:** 39 commits, 9 review-gated waves
-**Diff vs `main`:** 17 files changed, +8479 / −1055 lines
-**Test status at close:** smoke 7/7, regression 25/25, good-ending reachability all-pass, `node --check gui/static/app.js` clean, `import gui.server` clean
+**Span:** 53 commits, 16 review-gated waves
+**Diff vs `main`:** 20 files changed, +9649 / −1079 lines
+**Test status at close:** smoke 7/7, regression 31/31, good-ending reachability all-pass, `node --check gui/static/app.js` clean, `import gui.server` clean
+**Current asset cache-bust tag:** `w12`
+
+> **Waves 1–9** (§§1–7) are the original campaign report. **Waves 10–16** — the narrative-cadence tuning track validated turn-by-turn against the codex bypass path — are recorded in **§8**, with the honest harness trade-offs in **§8.3**. The wave-1–9 figures below are unchanged; where a later wave superseded a claim it is annotated inline (e.g. the no-totals purge notes in §1, §4.6).
 
 This report is for the maintainer. It records what the campaign set out to do, what each wave shipped, the outcomes that were measured, the full list of bugs fixed, the known gaps that remain open, and how to run and test the result. No claims here are unmeasured; validation figures are cited to the artifact that produced them.
 
@@ -238,4 +241,78 @@ tests/scripts/codex_llm.py             14      CLI process registration
 tests/scripts/play_headless_agent.py    8
 ```
 
-Total: 17 files, +8479 / −1055.
+Total (Waves 1–9): 17 files, +8479 / −1055.
+
+The Waves 10–16 track (§8) added `engine/suggestions.py` (recent-suggestion memory + de-dupe), touched `engine/claude_code_engine.py` (bypass teaching-verb + DIRECTOR-NOTE primer), `tests/scripts/model_sweep.py` (ACTIONS re-sync), and grew `game_data.py` / `regression.py` / the frontend for the act-gated traces, death screen, and no-totals purge. Whole-branch total at close: **20 files, +9649 / −1079**.
+
+---
+
+## 8. Waves 10–16 — narrative-cadence tuning track
+
+Waves 10–16 ran the gameplay/narrative track forward against a stable GUI. Every wave was graded turn-by-turn with two 20-turn playthroughs (one **EN**, one **中文**) driven through the **real codex-CLI bypass turn** (`engine/claude_code_engine.run_turn`) on the canonical `DEFAULT_ACTIONS` script, with metrics computed by per-wave `metrics_w*.py` (repetition, meter-move legibility, suggestion de-dupe/streak) and narrative grades by the repo's own `grade_narratives.RUBRIC` (anonymous codex judge). Full per-turn artifacts are in `scratchpad/playtest_wave{10,12,14,16}_validation.md`; `settings/` was git-clean at the start and end of every pass (only `session/wave*` + scratchpad artifacts written).
+
+### 8.1 Metric trajectory (wave-6 → 10 → 12 → 14 → 16)
+
+Figures are EN / 中文, from the graded validations. "Back-half" = traces gained T11–20; deepest = deepest *reached* layer; grade = overall on the repo rubric.
+
+| Metric | wave-6 | wave-10 | wave-12 | wave-14 | wave-16 |
+|---|---|---|---|---|---|
+| Run outcome | 20/20 · 20/20 | 20/20 · 20/20 | **death@T19** · death@T20 | **20/20 SURV** · **20/20 SURV** | **death@T19** · 20/20 SURV |
+| implant / turn | 0.75 / 0.55 | **0.45 / 0.00** | 0.68 / 0.40 | 0.55 / 0.25 | **0.47 / 0.10** |
+| rain / neon / turn (low target) | 0.10·0.00 / 0.35·0.20 | 0.10·0.00 / 0.30·0.00 | 0.05 / 0.05 | 0.25·0.00 / 0.20·0.05 | 0.21·0.00 / 0.10·0.10 |
+| Meter moves explained | 100% / 86% | **100% / 100%** | 100% / 100% | 100% / 100% | 100% (16/16) / 100% (14/14) |
+| Suggestion — max identical streak | — | — | 2 / **3** | **1 / 1** | 1 / 1 |
+| Back-half traces (T11–20) | 3 / 2 | **5 / 1** | 1 / **3** | 1 / 1 | **3** / 1 |
+| Deepest layer reached | L4 / L4 | L4 / L4 | L3 / L4 | L4 / L3 | L4 / L3 |
+| Narrative grade (overall) | 8 / 9 | 8 / 9 | 8 / 9 | 8 / 9 | 8 / 9 |
+| Meta / DIRECTOR-NOTE leaks | 0 / 0 | 0 / 0 | 0 / 0 | 0 / 0 | 0 / 0 |
+| Scope-total / unreached-layer leaks | — | — | — | — | **0 / 0** (no-totals confirmed) |
+
+**Reading the trajectory:** repetition kept dropping (implant reached the < 0.5/turn target in both languages by wave-16), meter legibility held at 100% both languages from wave-10 on (including passive ambient settles), and suggestion de-dupe eliminated the wave-12 中文 5×-repeat monotony (max streak 1 from wave-14 on). Narrative grades were flat at **8 EN / 9 中文** throughout — the tuning did not dent prose quality. The one thing that moved *around* rather than *up* is the survival ⇄ back-half-depth axis in the **script** — see §8.3.
+
+### 8.2 Wave-by-wave
+
+**Wave 10 — re-validation after waves 7–9 (`playtest_wave10_validation.md`).** No code wave of its own; a graded re-check that waves 7–9 held. Confirmed: implant rationing (friction #1) fixed to < 0.5/turn both languages (中文 essentially eliminated the image); **100% meter-move explanations in both languages** incl. ambient settles via the `AMBIENT_CAUSE_LABELS` fallback; the turn-1 L3-07 false positive gone via the co-occurrence gate. Surfaced three carry-forward frictions that drove waves 11–13: (1) the act-on-evidence route fired but was never the *deciding* unlock on the evidence-rich script; (2) 中文 discovery flat-lined T11–18; (3) `deepest_layer` still over-read via generic-phrase keyword hits (L4-06 on 中文 T2).
+
+**Wave 11 — cadence tuning (`7e67a97`, `3fbb078`) + two user-merged bypass tasks, gated by review fixes (`5c9a130`).**
+- `7e67a97` "Cadence tuning: act-gated trace, zh keyword parity, L4-06 gate": added a `_L406_SPIRE_RE` co-occurrence gate (archive/records term must share the entry with a Spire/Tower locator) so 中文 T2 mundane phrasing no longer inflates `deepest_layer` to L4; and 中文 back-half keyword parity on L2-08/L3-02/L4-09/L4-06.
+- **Process note — the act-gate attempt was REFUTED by review.** The same commit tried to make `TRACE-L3-08` **act-only** (removing the passive `_has_evidence` fallback so a decrypt/analyze act became the sole unlock — the "make the act-route load-bearing" idea from the wave-10 friction). The Wave 11 review (`5c9a130`) **reverted it on evidence**: replaying the certified wave-10 sessions *and all 8 recorded sessions that ever discovered L3-08* showed the resolver files the entity-communication topic as passive NPC hearsay/observation, while the act-tagged entries cover disjoint topics — so the act gate turned **every historical unlock into a non-discovery**. The review also found the *original* act-gate regression test only exercised hand-crafted entries that co-locate act-marker + topic (a shape real play never produces), so it green-lit a broken gate. Fix: passive branch restored, wave-7 anchored-voice regex kept as the *additional* act path, and the test replaced with `test_l3_08_reachable_on_certified_wave10_knowledge` replaying the verbatim `session/wave10_{en,zh}/knowledge.json` entries. **Lesson recorded:** a cadence gate must be validated against recorded real-play knowledge, not synthetic co-located fixtures — an 8-session replay caught what a hand-crafted test missed.
+- **User-merged bypass task — teaching verb (`1c48a02` → merge `ebec11e`).** Extended wave-4 C6 (teaching suggestions) to the CLI-bypass path: the bypass `suggested_actions` spec and the standalone `_SUGGEST_SYS` generator had still hard-forced "mundane and obvious," overriding the resolver `prompts.py` guidance; aligned all three so exactly one suggestion MAY surface an afforded game verb, in-world, never UI-speak.
+- **User-merged bypass task — DIRECTOR NOTE primer (`9300ab5` → merge `9300ab5`/`0d69987`).** Reframed the one-time integrity primer (`_INTEGRITY_PRIMER_EN/_ZH`) from a bracketed UI-looking prefix — which weaker models pasted verbatim into narration (the top immersion complaint in the 70-model sweep) — into an explicit DIRECTOR-NOTE envelope instructing the model never to quote or paraphrase it. Semantic content unchanged; `graph.py`'s trajectory-warning site left alone per the no-`engine/graph.py`-edits campaign constraint.
+
+**Wave 12 — graded validation (`playtest_wave12_validation.md`).** Confirmed the wave-11 targets: 中文 back-half discovery went flat(1) → **3 traces incl. a real `TRACE-L4-09`**; the L4-06 spire gate made the 中文 `deepest_layer` honest (L3-until-T15, no spurious T2 L4); the DIRECTOR-NOTE primer conveyed integrity diegetically at T4 in **both** languages with **0 meta leaks**; the teaching-verb suggestion worked and never emitted > 1 option per set. Two new frictions drove wave 13: (1) the canonical script now **alert-saturates to a `death` in both languages** (EN@T19, 中文@T20) — designed behavior, but it turns the back half into an alert-death race rather than a discovery arc; (2) the 中文 teaching rail repeated the identical *"buy a decoder tool"* nudge on **5 turns** (T9/11/12/13/15).
+
+**Wave 13 — de-dupe + lay-low (`6b6726b`), review fixes (`9eda602`).**
+- `6b6726b` "Suggestion de-dupe + canonical script lay-low beat": added a per-session `recent_suggestions.json` (last 6 turns, 3-turn window injected) threaded into **both** suggestion paths (the bypass, which sees only `conversation.jsonl`; and the LangGraph fallback, which sees only narrative + visible state) with a compact no-repeat directive — closing the wave-12 中文 5×-repeat. Same commit inserted two **lay-low alert-bleed beats** into `DEFAULT_ACTIONS` (right after the `caught_restricted` +15 spike and before the source/confront endgame stack), replacing the two lowest-value beats so the list stays at 20 and `--turns 20` still reaches the final choice.
+- Review fixes (`9eda602`) re-synced `model_sweep.py` ACTIONS with `DEFAULT_ACTIONS` (so the "Mirrors" comment is true and the sweep exercises the same mitigation), and **corrected a rationale comment**: `ALERT_INCREASES` is reference-only (a `game_data.py` NOTE); alert moves only via model-volunteered `nexus_alert_delta`, so the wave-12 saturation was *model-emergent*, not a deterministic +15/+20 — an important honesty correction (see §8.3).
+
+**Wave 14 — death screen + graded validation (`a5c67de`, `0313145`; `playtest_wave14_validation.md`).**
+- `a5c67de` "Run-summary death screen + gallery detail": rebuilt the bare game-over overlay into a roguelike run epitaph — an additive `run_summary` (turns/days, deepest reached layer + its name, knowledge counts, final meters, cause + bilingual epitaph) built from the already-spoiler-filtered session data, riding the `game_over` frame and persisted per-ending so the endings gallery can re-show it. *(Note: this wave shipped the summary with a `traces_found/total` "X/47" line and a fixed 5-band depth bar; the wave-15 no-totals purge removed both — see below.)*
+- Review fixes (`0313145`) set the `--depth` CSS custom property alongside the `data-depth` attribute so the depth-scaled game-over glow actually varies with `deepest_layer`; asset bump w10 → w11.
+- Validation confirmed **both languages now SURVIVE 20/20** (wave-12 both died): the lay-low beats measurably arrest the alert climb (held < 90 through T18: EN 54, 中文 37), and suggestion de-dupe is **fully met** (0 consecutive repeats, 0 within-3, max streak 1 both languages). The genuine trade-off it surfaced: buying survival cost back-half depth — 中文 back-half traces fell 3 → 1 and its deepest layer L4 → L3 (EN conversely *gained* L4 by surviving long enough to reach `TRACE-L4-09`@T19). This directly motivated wave 15's script change.
+
+**Wave 15 — canonical-script T16 social→decrypt beat (`cb7d81b`).** "Convert T16 social beat to a deep decrypt act": wave-14 validation showed survival and back-half depth in tension — the two lay-low beats that arrest alert saturation cost the back half its discovery density. Replaced the low-yield *"look for allies"* social beat at T16 with a **decrypt act** ("Decrypt any encrypted data I'm carrying — dig for what's underneath"), keeping both lay-low placements while restoring an act-driven deep beat to T11–20. `model_sweep.py` ACTIONS re-synced byte-identical.
+
+**Wave 15 (cont.) — no-totals spoiler purge (`61a2074`).** The load-bearing wave-15 change, on an explicit **user directive**. **Root cause:** the trace/endings scaffold shipped *verbatim* to the client — the run-summary "X/47" line, per-layer "3/8" denominators, the fixed 5-segment depth gauge, and `endings_total`/`traces_total` in payloads all revealed the *size* of undiscovered content, which is itself a spoiler. The purge makes every client payload **discovered-only**:
+- Server: `_present_traces` strips the persisted scaffold to `{discovered, reached_layers:[{num,name,name_zh}], title}` — no total, no per-layer denominator, no unreached-layer names; `run_summary` drops `traces_total`; endings payloads drop `endings_total` (constant deleted); stored `run_summary` blobs are scrubbed on the way out.
+- Client: descent gauge grows with reached depth (+ one unquantified `▸` affordance); bands render reached layers only with bare discovered counts; one count-free `▓ ???` sealed hint; run-summary epitaph shows "Traces 14" / "L3 <name>" (no /47, no /5); endings gallery flows to content with exactly one sealed `▓ ???` card; district-map latent sealed-count path removed. Deep-layer names removed from client `LABELS` (reached names ship from the server).
+- The engine scaffold (`reconcile_trace_presentation`, `LIVE_TRACE_TOTAL`, `LIVE_TRACES_PER_LAYER`) stays intact — engine-internal gating only, never transmitted.
+- Tests: the two regressions that pinned `endings_total` were rewritten to assert its *absence*; a new test pins the discovered-only client payload (**regression 31**); the perf rubric now grades denominator-free bars as PASS. CLAUDE.md gained THE SPOILER RULE; asset bump w11 → w12.
+
+**Wave 16 — confirmation (`playtest_wave16_validation.md`).** Graded validation of the T16 decrypt swap + the no-totals purge under real play. **The no-totals purge is fully confirmed:** across all 39 narrated turns, suggestions, and notices in both languages — 0 "47"/x-of-N totals, 0 "/9"/"/8" progress strings, 0 unreached-layer names; the client traces blob is exactly `{discovered, reached_layers, title}` with `reached_layers` correctly gated to reached depth (中文 at L3 correctly *hides* L4 "The Mirror"/"镜像"; EN at L4 legitimately shows it; neither shows L5 "Full Truth"/"完整真相"). Standing metrics all held (100% meter explanations, grades 8/9, 0 leaks/stalls/retry-deaths, implant now < 0.5/turn EN). The T16 swap **partially met its targets**: it lifted EN back-half traces 1 → 3 and kept EN at L4 with strong act-driven decrypt prose — but the added alert from the active decrypt/analyze beats pushed EN to an alert-100 **death@T19** (中文 absorbed the same script and survived, but its back-half depth did *not* improve — still 1 trace, still L3). That residual tension is documented honestly in §8.3.
+
+### 8.3 Known trade-offs & harness notes
+
+These are honest limitations of the **validation harness and canonical script**, not engine defects. They are recorded so a future maintainer reads the wave-16 numbers correctly.
+
+- **The alert curve is model-volunteered, not deterministic.** On the codex bypass path, NEXUS alert moves *only* via the model-emitted `nexus_alert_delta` — `ALERT_INCREASES` in `game_data.py` is a **reference-only NOTE**, not a live deterministic nudge (corrected in the wave-13 review, `9eda602`). So the run-to-run alert outcome on the *identical* `DEFAULT_ACTIONS` script is genuinely variable. The graded validations show this directly: on the canonical script the model volunteered **died/died (w12) → survived/survived (w14) → died/survived (w16)** across EN/中文. The lay-low beats measurably arrest the climb every time (verified per-turn in each wave's alert-curve block), but whether the endgame confrontation tips past alert-100 depends on the model's volunteered deltas that run.
+- **Survival vs back-half depth are in tension in the SCRIPT, not the engine.** The canonical script has a fixed 20-beat budget. The two lay-low beats that keep a run alive past T19 are the same beats that, in the alternative, drove the deep 中文 discoveries; converting a zero-alert social beat to an alert-bearing decrypt beat (wave 15) restored EN back-half depth (1 → 3, L4) but removed EN's survival headroom (death@T19). No single 20-beat script yet satisfies *both* "survive 20 turns, alert < 90 through T18" *and* "≥ 2 back-half traces in both languages" — it needs either a third alert-bleed beat in the T15–T18 window or an earlier endgame. This is a **beat-budget** problem in `tests/scenarios/full_playthrough.py`'s `DEFAULT_ACTIONS`; the engine mechanics (lay-low heals, alert accrues, deep traces gate on evidence) each work as designed.
+- **The T16 decrypt beat yields *knowledge*, not *traces*, by design.** The decrypt act drives the knowledge-gain route (4–5 facts/evidence added to `knowledge.json` per run) but trips **0 trace `check()`s** and fires 0 discovery notifications in either language — the act-on-evidence traces (`TRACE-L4-09` etc.) fired on *other* beats. So the decrypt beat delivers *knowledge depth*, not *trace depth*. This is consistent with how traces gate (on accumulated evidence / source counts), but it means "the decrypt beat unlocked a trace" is **not** a claim the harness supports.
+
+### 8.4 Remaining backlog (post-wave-16)
+
+Carried forward from §5 and the wave-16 validation:
+
+1. **Streaming narrative (API providers).** Narration is still delivered per-turn as a completed block with a client-side typewriter, not token-streamed from the model. A true streaming path over the API providers remains a stretch item, unimplemented.
+2. **中文 back-half trace depth.** 中文 discovery stays front-loaded (13–14 of its traces land by T8; the T9–T18 stretch adds ~1). The wave-15 decrypt swap lifted EN back-half depth but did **not** move 中文 — a 中文-effective deep beat (or 中文 keyword parity on the back-half act-on-evidence traces) is still open.
+3. **EN endgame prose polish.** The EN grader consistently docks the final turn for cutting off mid-sentence (a transcript-length-cap artifact) plus occasional mechanical-exposition / action-paraphrasing lines. Polish-level, consistent with the standing 8/9 grade — not a mechanical defect, but the named path to a 9 in EN.

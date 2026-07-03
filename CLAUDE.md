@@ -24,8 +24,9 @@ uv run tests/scripts/play_headless.py
 # trace/ending validation, factory, turn-flag reset)
 uv run tests/scenarios/smoke_test.py
 
-# Regression tests — no LLM required (20 tests incl. ending-correctness fixtures:
-# consensual bridge → the_bridge, forced merge → ascension, conversational L3 reach)
+# Regression tests — no LLM required (31 tests incl. ending-correctness fixtures:
+# consensual bridge → the_bridge, forced merge → ascension, conversational L3 reach,
+# discovered-only client payload / no-totals, endings-history dedup, priority lock)
 uv run tests/scenarios/regression.py
 
 # Good-ending reachability (no LLM required): a deep run first-matches the_bridge
@@ -84,7 +85,7 @@ FastAPI + WebSocket backend driving a single-page frontend (`index.html` / `app.
 
 **Unified managers:** one toast stack (`#toastStack`, `dismissToast`), one dialog manager (`openDialog`/`closeDialog` with a deterministic z-index-ordered `_dialogStack`, focus trap, ARIA), and one SFX bus (`MusicEngine.sfx`, single mute state + persisted volume; `playBeep` is a category-tagged shim over it).
 
-**Cache-busting discipline:** every `gui/static/` asset URL in `index.html` carries a `?v=<tag>` query and all three (`style.css`, `music.js`, `app.js`) bump together on any frontend edit. Current tag: **`w7a`**.
+**Cache-busting discipline:** every `gui/static/` asset URL in `index.html` carries a `?v=<tag>` query and all three (`style.css`, `music.js`, `app.js`) bump together on any frontend edit. Current tag: **`w12`**.
 
 ### Directory Structure
 
