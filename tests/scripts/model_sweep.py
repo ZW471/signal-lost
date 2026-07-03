@@ -31,7 +31,10 @@ if _GAME_ROOT not in sys.path:
     sys.path.insert(0, _GAME_ROOT)
 
 # Fixed, exploration-heavy action script — identical for every model so the
-# comparison is apples-to-apples. Mirrors full_playthrough's DEFAULT_ACTIONS.
+# comparison is apples-to-apples. Mirrors full_playthrough's DEFAULT_ACTIONS
+# (keep the two lists in sync when editing either one), including the two
+# lay-low beats that bleed off NEXUS alert at the mid-game and pre-endgame
+# spike points.
 ACTIONS = [
     "Look around. Where am I?",
     "Talk to the nearest person",
@@ -43,13 +46,13 @@ ACTIONS = [
     "Ask about the Severance",
     "Look for encrypted data or signals",
     "Head deeper into the district — follow any leads",
-    "Talk to whoever seems most knowledgeable here",
     "Present what I've learned and ask for their theory",
     "Search for evidence of the conspiracy",
     "Try to access restricted areas",
+    "Lay low at a quiet food stall until the patrols thin — rest and recover",
     "Analyze any signal artifacts I've found",
     "Look for allies who share my goals",
-    "Plan my next move based on everything I know",
+    "Find somewhere safe to sleep and let the heat die down before the final push",
     "Head toward the source of the Signal",
     "Confront what I find",
     "Make my final choice",

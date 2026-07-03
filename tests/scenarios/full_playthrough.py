@@ -31,9 +31,12 @@ from engine.llm_factory import create_llm, default_model_for, load_env, load_pro
 # Default action sequence for reproducible testing.
 #
 # Wave-12 friction #1: the back-half beats (restricted areas → source → confront)
-# stacked NEXUS alert past 100 before deep-layer content unlocked
-# (`caught_restricted` +15, `attacking_nexus` +20 — game_data.ALERT_INCREASES),
-# so both languages hit the designed alert-100 capture death (EN@T19) at L3.
+# provoked the model into stacking NEXUS alert past 100 before deep-layer content
+# unlocked, so both languages hit the designed alert-100 capture death (EN@T19)
+# at L3. Note the engine does NOT apply alert amounts deterministically —
+# game_data.ALERT_INCREASES is reference-only (see the NOTE above it); alert
+# moves only when the model volunteers a `nexus_alert_delta`. The saturation
+# was model-emergent, but consistent enough on provocative beats to kill runs.
 # Two lay-low beats bleed off heat at the two spike points — one right after
 # the restricted-area attempt, one right before the endgame run — replacing the
 # two lowest-value beats (a duplicate "talk to the knowledgeable one" and a pure

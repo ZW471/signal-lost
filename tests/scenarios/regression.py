@@ -1265,8 +1265,11 @@ def test_canonical_script_has_lay_low_beats():
 
     Regression (playtest wave 12, friction #1): the DEFAULT_ACTIONS script
     alert-saturated to the capture death in BOTH languages (EN died T19 at L3)
-    because the restricted-area → source → confront beats stacked alert past
-    100 with no recovery beat between them.
+    because the restricted-area → source → confront beats provoked the model
+    into stacking alert past 100 with no recovery beat between them. (Alert is
+    model-volunteered via `nexus_alert_delta`, not engine-applied —
+    game_data.ALERT_INCREASES is reference-only — but the spikes were
+    consistent enough to be a scripted-run killer.)
     """
     from tests.scenarios.full_playthrough import DEFAULT_ACTIONS
 
@@ -1281,7 +1284,8 @@ def test_canonical_script_has_lay_low_beats():
     source = next(i for i, a in enumerate(DEFAULT_ACTIONS) if "source of the Signal" in a)
     confront = next(i for i, a in enumerate(DEFAULT_ACTIONS) if "Confront" in a)
 
-    # One bleed-off immediately after the caught_restricted (+15) spike…
+    # One bleed-off immediately after the restricted-area alert spike
+    # (model-volunteered, typically echoing the reference caught_restricted value)…
     assert any(i == restricted + 1 for i in lows), \
         "a lay-low beat must directly follow the restricted-area attempt"
     # …and one before the endgame alert stack (source + confront).
