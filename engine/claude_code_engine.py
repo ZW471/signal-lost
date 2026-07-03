@@ -246,9 +246,14 @@ actions the player could take, written as direct commands in the player's langua
 has ALREADY discovered (the scene, exits, points of interest, present/known NPCs, \
 inventory, and discovered knowledge). NEVER reference undiscovered people, places, \
 items, secrets, or deeper-layer lore — these options must not spoil anything. Keep \
-them mundane and obvious — things a player would naturally try next — not clever or \
-cryptic. Make each option meaningfully different from the others. Use `[]` only when \
-the game is ending.
+most of them grounded and obvious — things a player would naturally try next. But \
+exactly ONE suggestion MAY surface an available game verb the player might not \
+realize they can use — decrypt an encrypted item with the cipher tool, analyze a \
+signal artifact, present what they know to an NPC, hack a terminal, or rest to \
+recover integrity — ONLY when the current inventory/knowledge/scene actually affords \
+it (they hold the tool, have the evidence, or face the encrypted thing). Phrase it \
+in-world as a direct action, never as UI-speak or a tutorial hint. Make each option \
+meaningfully different from the others. Use `[]` only when the game is ending.
 
 ### Validation context:
 {validator_context}
