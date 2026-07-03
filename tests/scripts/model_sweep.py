@@ -51,7 +51,7 @@ ACTIONS = [
     "Try to access restricted areas",
     "Lay low at a quiet food stall until the patrols thin — rest and recover",
     "Analyze any signal artifacts I've found",
-    "Look for allies who share my goals",
+    "Decrypt any encrypted data I'm carrying — dig for what's underneath",
     "Find somewhere safe to sleep and let the heat die down before the final push",
     "Head toward the source of the Signal",
     "Confront what I find",

@@ -44,6 +44,10 @@ from engine.llm_factory import create_llm, default_model_for, load_env, load_pro
 # 90+ full-manhunt band (game_data.ALERT_THRESHOLDS) and reach L4 content,
 # while alert still climbs visibly through the 25/50/75 thresholds. The list
 # stays at exactly 20 entries so `--turns 20` still reaches the final choice.
+# Beat 16 is a deep act (decrypt) rather than a social beat: with two rest
+# turns in T14/T17, the back half needs enough act-driven discovery beats to
+# exercise deep-layer content (wave-14 validation: survival and back-half
+# depth are otherwise in tension).
 DEFAULT_ACTIONS = [
     "Look around. Where am I?",
     "Talk to the nearest person",
@@ -60,7 +64,7 @@ DEFAULT_ACTIONS = [
     "Try to access restricted areas",
     "Lay low at a quiet food stall until the patrols thin — rest and recover",
     "Analyze any signal artifacts I've found",
-    "Look for allies who share my goals",
+    "Decrypt any encrypted data I'm carrying — dig for what's underneath",
     "Find somewhere safe to sleep and let the heat die down before the final push",
     "Head toward the source of the Signal",
     "Confront what I find",
