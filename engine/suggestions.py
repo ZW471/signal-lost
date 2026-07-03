@@ -133,8 +133,14 @@ STRICT RULES:
 be clearly DISTINCT from the others.
 - Each action is at most 12 words, phrased as a direct command the player would \
 type (e.g. "Ask the noodle vendor about the alley", "Head north toward the market").
-- Keep them mundane and grounded — things any player would naturally try next. Do \
-NOT be clever, cryptic, dramatic, or surprising.
+- Keep most of them mundane and grounded — things any player would naturally try \
+next. Do NOT be dramatic or surprising. But exactly ONE action MAY surface an \
+available game verb the player might not realize they can use — decrypt an \
+encrypted item with the cipher tool, analyze a signal artifact, present what they \
+know to an NPC, hack a terminal, or rest to recover integrity — ONLY when the \
+inventory/knowledge/scene in the context below actually affords it (they hold the \
+tool, have the evidence, or face the encrypted thing). Phrase it in-world as a \
+direct command, never as UI-speak or a tutorial hint.
 - Use ONLY the people, places, exits, items, and facts listed in the context below. \
 NEVER invent new NPCs, locations, items, or lore.
 - NEVER reference anything the player has not yet discovered. No spoilers, no hidden \
