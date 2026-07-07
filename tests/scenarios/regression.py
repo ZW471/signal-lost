@@ -1336,6 +1336,15 @@ def test_meter_reveals_gate_and_persist():
             f"unrevealed meter finals leaked to the run summary: {rs}"
         assert isinstance(rs["integrity_final"], (int, float)), \
             "integrity is always visible and its final must ship"
+        # Wire gate: a state_delta built from fresh (hidden-meter) snapshots
+        # must omit the hidden meters entirely — even a static {from:0,to:0}
+        # pair leaks the meter's NAME and live value in the network frame.
+        snap = srv._meter_snapshot_from_data(data)
+        assert snap["meter_reveals"] == {"alert": False, "decay": False}, snap
+        delta = srv._build_state_delta(snap, snap)
+        assert "nexus_alert" not in delta and "fragment_decay" not in delta, \
+            f"hidden meters leaked onto the state_delta wire: {delta}"
+        assert "integrity" in delta, "integrity (always visible) must still ship"
 
         # NEXUS-surveillance trace discovered → alert reveals, decay stays hidden.
         traces_path = os.path.join(session_dir, "traces.json")
@@ -1371,6 +1380,11 @@ def test_meter_reveals_gate_and_persist():
         rs = srv._build_run_summary(data, None)
         assert rs["alert_final"] == 0 and rs["decay_final"] == 0, \
             f"revealed meter finals must ship: {rs}"
+        # …and revealed meters ride the state_delta wire again.
+        snap = srv._meter_snapshot_from_data(data)
+        delta = srv._build_state_delta(snap, snap)
+        assert delta["nexus_alert"] == {"from": 0, "to": 0}, delta
+        assert delta["fragment_decay"] == {"from": 0, "to": 0}, delta
 
         # Legacy session (no sidecar, past turn 1) → both default to REVEALED.
         os.remove(os.path.join(session_dir, srv._HUD_REVEALS_FILE))
@@ -1428,6 +1442,13 @@ def test_error_frames_carry_debug_detail():
     assert "boom" not in frame["message"], "raw exception text must not leak into the headline"
     # Detail: class + message + location, additive field.
     assert "ValueError" in frame.get("detail", "") and "boom from regression test" in frame["detail"]
+
+    # LLM-creation failures (new game / resume / load) follow the same contract:
+    # a bilingual generic headline constant with no exception interpolation.
+    msg = srv._LLM_CREATE_FAILED_MSG
+    assert " / " in msg and "无法启动" in msg, f"LLM-error headline must be bilingual: {msg}"
+    assert "{" not in msg and "Failed to create LLM" not in msg, \
+        f"LLM-error headline must be a generic, not raw exception text: {msg}"
 
     print("  [PASS] error frames carry debug detail; headline stays the bilingual generic")
 

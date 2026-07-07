@@ -820,10 +820,21 @@ def _meter_snapshot_from_data(data: dict) -> dict:
                 if title:
                     know_titles.add(str(title))
 
+    # Carry the discovery-reveal flags (stamped by _apply_meter_reveals) so the
+    # state_delta builder can keep an unrevealed meter OFF the wire entirely —
+    # the HUD gate alone would still leak the meter's name + value in the frame.
+    # Missing flags (defensive: world_state absent/malformed) default to
+    # revealed, preserving the pre-gating behavior.
+    reveals = world.get("meter_reveals")
+    if not isinstance(reveals, dict):
+        reveals = {}
+
     return {
         "integrity": integ if isinstance(integ, (int, float)) else None,
         "nexus_alert": alert.get("current") if isinstance(alert, dict) else None,
         "fragment_decay": decay.get("current") if isinstance(decay, dict) else None,
+        "meter_reveals": {"alert": bool(reveals.get("alert", True)),
+                          "decay": bool(reveals.get("decay", True))},
         "trace_ids": trace_ids,
         "know_titles": know_titles,
     }
@@ -1589,7 +1600,7 @@ async def _handle_new_game(ws: WebSocket, sess: PlayerSession, msg: dict):
         _ensure_llm(provider_cfg, uid=sess.uid)
         _bind_session_llm(sess)
     except Exception as e:
-        await ws.send_json({"type": "error", "message": f"Failed to create LLM: {e}",
+        await ws.send_json({"type": "error", "message": _LLM_CREATE_FAILED_MSG,
                             "detail": _error_detail(e)})
         return
 
@@ -1662,6 +1673,14 @@ _PREV_TURN_BUSY_MSG = (
     "上一回合仍在服务器上收尾——请稍后再试。"
 )
 
+# Player-facing headline for LLM-creation failures (new game / resume / load).
+# Bilingual generic only — the raw exception rides in the additive `detail`
+# field (see _error_detail), matching the save/delete error-headline contract.
+_LLM_CREATE_FAILED_MSG = (
+    "Couldn't start the AI provider — check your provider settings. / "
+    "无法启动 AI 供应商——请检查供应商设置。"
+)
+
 
 def _load_state_locked(sess: PlayerSession, *, copy_from: str | None = None):
     """Read (and for load-game, first restore) the on-disk session under the
@@ -1701,7 +1720,7 @@ async def _handle_resume(ws: WebSocket, sess: PlayerSession, msg: dict):
         _ensure_llm(provider_cfg, uid=sess.uid)
         _bind_session_llm(sess)
     except Exception as e:
-        await ws.send_json({"type": "error", "message": f"Failed to create LLM: {e}",
+        await ws.send_json({"type": "error", "message": _LLM_CREATE_FAILED_MSG,
                             "detail": _error_detail(e)})
         return
 
@@ -1734,7 +1753,7 @@ async def _handle_load_game(ws: WebSocket, sess: PlayerSession, msg: dict):
         _ensure_llm(provider_cfg, uid=sess.uid)
         _bind_session_llm(sess)
     except Exception as e:
-        await ws.send_json({"type": "error", "message": f"Failed to create LLM: {e}",
+        await ws.send_json({"type": "error", "message": _LLM_CREATE_FAILED_MSG,
                             "detail": _error_detail(e)})
         return
 
@@ -2389,14 +2408,27 @@ def _build_state_delta(prev: dict | None, cur: dict,
     traces_added = sorted((cur.get("trace_ids") or set()) - (prev.get("trace_ids") or set()))
     knowledge_added = sorted((cur.get("know_titles") or set()) - (prev.get("know_titles") or set()))
 
+    # Discovery gate, wire-level: an UNREVEALED meter's pair is omitted from the
+    # frame entirely — shipping even a static {from:0,to:0} would leak the
+    # meter's name and live value to anyone inspecting network frames before
+    # the fiction introduces it (mirrors the client's HUD render gate). The
+    # current snapshot's flags suffice: any 0→N move flips the flag true in the
+    # same payload build (and the session_update carrying it is sent first), so
+    # a revealing move still ships its pair + reason on the reveal turn.
+    reveals = cur.get("meter_reveals")
+    if not isinstance(reveals, dict):
+        reveals = {}
+
     delta = {
         "type": "state_delta",
         "integrity": _pair("integrity"),
-        "nexus_alert": _pair("nexus_alert"),
-        "fragment_decay": _pair("fragment_decay"),
         "traces_added": traces_added,
         "knowledge_added": knowledge_added,
     }
+    if reveals.get("alert", True):
+        delta["nexus_alert"] = _pair("nexus_alert")
+    if reveals.get("decay", True):
+        delta["fragment_decay"] = _pair("fragment_decay")
 
     # Attach a reason for every meter that actually MOVED this turn: the resolver's
     # supplied cause when present, else an ambient default. A supplied reason for a
@@ -2406,7 +2438,9 @@ def _build_state_delta(prev: dict | None, cur: dict,
     out_reasons: dict = {}
     _meter_key = {"alert": "nexus_alert", "integrity": "integrity", "decay": "fragment_decay"}
     for meter, snap_key in _meter_key.items():
-        pair = delta[snap_key]
+        pair = delta.get(snap_key)
+        if pair is None:
+            continue  # meter unrevealed → gated off the wire above
         frm, to = pair["from"], pair["to"]
         if frm == to:
             continue  # meter static this turn — no reason at all
