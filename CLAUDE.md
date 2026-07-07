@@ -85,7 +85,7 @@ FastAPI + WebSocket backend driving a single-page frontend (`index.html` / `app.
 
 **Unified managers:** one toast stack (`#toastStack`, `dismissToast`), one dialog manager (`openDialog`/`closeDialog` with a deterministic z-index-ordered `_dialogStack`, focus trap, ARIA), and one SFX bus (`MusicEngine.sfx`, single mute state + persisted volume; `playBeep` is a category-tagged shim over it).
 
-**Cache-busting discipline:** every `gui/static/` asset URL in `index.html` carries a `?v=<tag>` query and all three (`style.css`, `music.js`, `app.js`) bump together on any frontend edit. Current tag: **`w12`**.
+**Cache-busting discipline:** every `gui/static/` asset URL in `index.html` carries a `?v=<tag>` query and all three (`style.css`, `music.js`, `app.js`) bump together on any frontend edit. Current tag: **`w13`**.
 
 ### Directory Structure
 

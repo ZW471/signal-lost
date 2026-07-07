@@ -624,6 +624,124 @@ def _present_traces(traces: dict) -> dict:
     return out
 
 
+# ---------------------------------------------------------------------------
+# Discovery-gated HUD meters
+# ---------------------------------------------------------------------------
+# A turn-1 player must not see the NEXUS-alert / fragment-decay gauges before
+# the fiction introduces surveillance or decay — the gauge labels themselves
+# pre-announce that an entity called NEXUS hunts the player and that fragment
+# decay exists. Each meter carries a reveal flag the client gates rendering on:
+#
+#   ALERT reveals when the meter has EVER moved above 0 this run, OR
+#   TRACE-L1-05 ("NEXUS monitors all communications") is discovered, OR any
+#   discovered knowledge entry mentions NEXUS in a surveillance context
+#   (nexus + surveillance/monitor/scanner/camera/监控/监视/摄像 — deliberately
+#   NOT bare "nexus": the starting rumors name NEXUS on turn 1).
+#
+#   DECAY reveals when the meter has EVER moved above 0 this run, OR
+#   TRACE-L3-03 ("Fragments of something survive in old implants") — the first
+#   fragment lore — is discovered.
+#
+# "Ever revealed" is persisted in a server-owned sidecar (hud_reveals.json in
+# the session dir). It is deliberately NOT a SESSION_FILES member: the engine's
+# per-turn save_session() rewrites those files from in-memory state and would
+# clobber a server-added world_state key. Save slots copy the whole session
+# dir, so the sidecar travels with saves/loads. Flags are monotonic — a meter
+# that returned to 0 stays visible.
+#
+# LEGACY DEFAULT: a session with NO sidecar that is already past turn 1
+# predates this feature (sessions created/served since always get the sidecar
+# on their first payload build, at turn 1). Such mid-campaign sessions default
+# to REVEALED — never hide data the player has already been shown.
+_HUD_REVEALS_FILE = "hud_reveals.json"
+_ALERT_REVEAL_TRACE = "TRACE-L1-05"   # NEXUS monitors all communications
+_DECAY_REVEAL_TRACE = "TRACE-L3-03"   # fragments survive in old implants
+# NEXUS-surveillance knowledge context. No bare "nexus", no "eyes"/"眼线":
+# street-runner/corp-exile STARTING rumors ("NEXUS has eyes in The Sprawl" /
+# "NEXUS在蔓城安插了眼线") must not reveal the gauge on turn 1.
+_ALERT_KNOWLEDGE_CONTEXT = (
+    "surveillance", "monitor", "scanner", "camera", "监控", "监视", "摄像",
+)
+
+
+def _meter_current(meter) -> float:
+    """The numeric `current` of a {current,status} meter blob (0.0 on junk)."""
+    try:
+        if isinstance(meter, dict):
+            return float(meter.get("current") or 0)
+        return float(meter or 0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _compute_meter_reveals(data: dict) -> dict:
+    """Reveal conditions computed from ALREADY-FILTERED session data — only
+    discovered traces and present knowledge feed this, so nothing undiscovered
+    can influence (or leak through) the flags."""
+    world = data.get("world_state") or {}
+    trace_ids = {
+        str(t.get("id")) for t in ((data.get("traces") or {}).get("discovered") or [])
+        if isinstance(t, dict)
+    }
+    nexus_surveillance_known = False
+    knowledge = data.get("knowledge") or {}
+    for bucket in ("facts", "rumors", "evidence", "theories", "connections"):
+        for entry in (knowledge.get(bucket) or []):
+            if isinstance(entry, dict):
+                text = " ".join(
+                    str(v) for v in (entry.get("description"), entry.get("statement"),
+                                     entry.get("name"))
+                    if v).lower()
+            elif isinstance(entry, str):
+                text = entry.lower()
+            else:
+                continue
+            if "nexus" in text and any(kw in text for kw in _ALERT_KNOWLEDGE_CONTEXT):
+                nexus_surveillance_known = True
+                break
+        if nexus_surveillance_known:
+            break
+    return {
+        "alert": (_meter_current(world.get("nexus_alert")) > 0
+                  or _ALERT_REVEAL_TRACE in trace_ids
+                  or nexus_surveillance_known),
+        "decay": (_meter_current(world.get("fragment_decay")) > 0
+                  or _DECAY_REVEAL_TRACE in trace_ids),
+    }
+
+
+def _apply_meter_reveals(session_dir: str, data: dict) -> None:
+    """Attach ``world_state.meter_reveals = {alert, decay}`` to the client
+    payload, merging the persisted ever-revealed sidecar with this payload's
+    computed conditions, and persist any newly-true flag (monotonic)."""
+    world = data.get("world_state")
+    if not isinstance(world, dict):
+        return
+    path = os.path.join(session_dir, _HUD_REVEALS_FILE)
+    had_file = os.path.exists(path)
+    persisted = _read_json(path) if had_file else {}
+    if not isinstance(persisted, dict):
+        persisted = {}
+    if not had_file:
+        # No sidecar: fresh session (turn 1 → hidden until earned) vs legacy
+        # mid-campaign session (past turn 1 → revealed; see block comment).
+        turn = (data.get("player") or {}).get("turn")
+        legacy = isinstance(turn, int) and turn > 1
+        persisted = {"alert": legacy, "decay": legacy}
+    computed = _compute_meter_reveals(data)
+    flags = {
+        "alert": bool(persisted.get("alert")) or computed["alert"],
+        "decay": bool(persisted.get("decay")) or computed["decay"],
+    }
+    if not had_file or flags != {k: bool(persisted.get(k)) for k in ("alert", "decay")}:
+        try:
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(flags, f)
+        except OSError:
+            pass  # best-effort: conditions recompute next payload anyway
+    world["meter_reveals"] = flags
+
+
 def _get_session_data(sess: PlayerSession) -> dict:
     """Read all of *sess*'s session JSON files, filter hidden fields, return dict."""
     sd = sess.session_dir
@@ -637,6 +755,9 @@ def _get_session_data(sess: PlayerSession) -> dict:
     # content-scope information. Replace it with the discovered-only view.
     if isinstance(data.get("traces"), dict):
         data["traces"] = _present_traces(data["traces"])
+    # Discovery-gated HUD meters: stamp world_state.meter_reveals (computed from
+    # the just-filtered discovered data + the persisted ever-revealed sidecar).
+    _apply_meter_reveals(sd, data)
     conv_path = os.path.join(sd, "conversation.jsonl")
     conversation = []
     if os.path.exists(conv_path):
@@ -775,6 +896,15 @@ def _build_run_summary(session_data: dict, death_cause) -> dict:
         v = knowledge.get(name)
         return len(v) if isinstance(v, list) else 0
 
+    # Discovery-gated meters: a final for a meter the run never revealed would
+    # itself pre-announce that meter on the death screen. Flags come from the
+    # session payload (stamped by _apply_meter_reveals); an absent block means
+    # a legacy blob → revealed (same default as the client). Integrity is
+    # always visible, so its final always ships.
+    reveals = world.get("meter_reveals")
+    if not isinstance(reveals, dict):
+        reveals = {"alert": True, "decay": True}
+
     return {
         "turns": turn if isinstance(turn, int) else None,
         "days": day if isinstance(day, int) else None,
@@ -790,8 +920,10 @@ def _build_run_summary(session_data: dict, death_cause) -> dict:
             "connections": _bucket("connections"),
         },
         "integrity_final": integ if isinstance(integ, (int, float)) else None,
-        "alert_final": alert.get("current") if isinstance(alert, dict) else None,
-        "decay_final": decay.get("current") if isinstance(decay, dict) else None,
+        "alert_final": (alert.get("current") if isinstance(alert, dict) else None)
+                       if reveals.get("alert") else None,
+        "decay_final": (decay.get("current") if isinstance(decay, dict) else None)
+                       if reveals.get("decay") else None,
         "cause": death_cause,
         # Localized cause phrase mirrors the client death-cause LABELS keys; only
         # the three known death causes get a zh phrase, else None (client falls
@@ -1179,10 +1311,30 @@ def _on_disconnect(sess: PlayerSession | None, ws: WebSocket) -> None:
         sess.ws = None
 
 
+def _error_detail(e: BaseException) -> str:
+    """Compact debug detail for client error frames: exception class + str(e)
+    + the last traceback frame (file:line in func, when available).
+
+    The player-facing headline of every error frame STAYS the bilingual
+    generic; this string rides along in an additive ``detail`` field that the
+    client renders as a collapsed, dim monospace '▸ debug' line — the user
+    debugs from the game chat. Server-side logging is unchanged."""
+    import traceback
+    parts = [f"{type(e).__name__}: {e}".strip().rstrip(":")]
+    try:
+        frames = traceback.extract_tb(e.__traceback__)
+        if frames:
+            last = frames[-1]
+            parts.append(f"at {os.path.basename(last.filename)}:{last.lineno} in {last.name}")
+    except Exception:
+        pass
+    return " — ".join(parts)
+
+
 async def _report_ws_loop_error(ws: WebSocket, e: Exception) -> None:
     """Handle an unexpected websocket-loop error: log the real error + traceback
-    server-side only (never leak raw exception text to the browser) and send the
-    client a generic bilingual error, tolerating a dead socket."""
+    server-side, send the client a generic bilingual headline plus an additive
+    ``detail`` debug field (rendered collapsed), tolerating a dead socket."""
     import logging
     import traceback
     traceback.print_exc()
@@ -1193,6 +1345,7 @@ async def _report_ws_loop_error(ws: WebSocket, e: Exception) -> None:
             "message": (
                 "Something went wrong on the server. / 服务器发生了错误。"
             ),
+            "detail": _error_detail(e),
         })
     except Exception:
         pass
@@ -1221,7 +1374,7 @@ async def websocket_endpoint(ws: WebSocket):
                 raw = await ws.receive_text()
             try:
                 msg = json.loads(raw)
-            except (json.JSONDecodeError, TypeError):
+            except (json.JSONDecodeError, TypeError) as e:
                 # One malformed frame must not kill the whole connection: reply
                 # with a generic bilingual error and keep the receive loop alive
                 # (mirrors the companion channel's per-frame guard).
@@ -1231,6 +1384,7 @@ async def websocket_endpoint(ws: WebSocket):
                         "Bad request — the message could not be read. / "
                         "请求无效——无法读取该消息。"
                     ),
+                    "detail": _error_detail(e),
                 })
                 continue
             # A syntactically-valid but non-object frame (e.g. `5`, `true`,
@@ -1244,6 +1398,7 @@ async def websocket_endpoint(ws: WebSocket):
                         "Bad request — the message could not be read. / "
                         "请求无效——无法读取该消息。"
                     ),
+                    "detail": f"frame is {type(msg).__name__}, expected a JSON object",
                 })
                 continue
             action = msg.get("action")
@@ -1365,7 +1520,11 @@ async def websocket_endpoint(ws: WebSocket):
                     path = save_game_to_slot(sess.session_dir, save_name, sess.saves_root)
                     await ws.send_json({"type": "saved", "save_name": save_name, "path": path})
                 except Exception as e:
-                    await ws.send_json({"type": "error", "message": f"Save failed: {e}"})
+                    await ws.send_json({
+                        "type": "error",
+                        "message": "Save failed — try again. / 保存失败——请重试。",
+                        "detail": _error_detail(e),
+                    })
 
             elif action == "delete_save":
                 await _handle_delete_save(ws, sess, msg)
@@ -1430,7 +1589,8 @@ async def _handle_new_game(ws: WebSocket, sess: PlayerSession, msg: dict):
         _ensure_llm(provider_cfg, uid=sess.uid)
         _bind_session_llm(sess)
     except Exception as e:
-        await ws.send_json({"type": "error", "message": f"Failed to create LLM: {e}"})
+        await ws.send_json({"type": "error", "message": f"Failed to create LLM: {e}",
+                            "detail": _error_detail(e)})
         return
 
     lang = config.get("language", "en")
@@ -1541,7 +1701,8 @@ async def _handle_resume(ws: WebSocket, sess: PlayerSession, msg: dict):
         _ensure_llm(provider_cfg, uid=sess.uid)
         _bind_session_llm(sess)
     except Exception as e:
-        await ws.send_json({"type": "error", "message": f"Failed to create LLM: {e}"})
+        await ws.send_json({"type": "error", "message": f"Failed to create LLM: {e}",
+                            "detail": _error_detail(e)})
         return
 
     sess.session_dir = sess_path
@@ -1573,7 +1734,8 @@ async def _handle_load_game(ws: WebSocket, sess: PlayerSession, msg: dict):
         _ensure_llm(provider_cfg, uid=sess.uid)
         _bind_session_llm(sess)
     except Exception as e:
-        await ws.send_json({"type": "error", "message": f"Failed to create LLM: {e}"})
+        await ws.send_json({"type": "error", "message": f"Failed to create LLM: {e}",
+                            "detail": _error_detail(e)})
         return
 
     os.makedirs(sess.session_root, exist_ok=True)
@@ -1644,7 +1806,7 @@ async def _handle_delete_save(ws: WebSocket, sess: PlayerSession, msg: dict) -> 
 
     try:
         await asyncio.to_thread(shutil.rmtree, real_save)
-    except Exception:
+    except Exception as e:
         import logging
         logging.getLogger(__name__).warning("delete_save failed for %r", save_name)
         await ws.send_json({
@@ -1652,6 +1814,7 @@ async def _handle_delete_save(ws: WebSocket, sess: PlayerSession, msg: dict) -> 
             "message": (
                 "Delete failed — try again. / 删除失败——请重试。"
             ),
+            "detail": _error_detail(e),
         })
         return
 
@@ -1845,7 +2008,8 @@ async def companion_endpoint(ws: WebSocket):
             # the executor lambda below) pins this reply to one consistent path.
             session_dir = sess.session_dir if sess else None
             if not session_dir:
-                await ws.send_json({"type": "companion_reply", "error": True, "code": "no_session"})
+                await ws.send_json({"type": "companion_reply", "error": True, "code": "no_session",
+                                    "detail": "no active game session bound to this token"})
                 continue
 
             try:
@@ -1853,7 +2017,8 @@ async def companion_endpoint(ws: WebSocket):
             except Exception:
                 llm = None
             if llm is None:
-                await ws.send_json({"type": "companion_reply", "error": True, "code": "no_session"})
+                await ws.send_json({"type": "companion_reply", "error": True, "code": "no_session",
+                                    "detail": "no LLM configured/available for the companion"})
                 continue
 
             history = msg.get("history") or []
@@ -1864,7 +2029,8 @@ async def companion_endpoint(ws: WebSocket):
             except Exception as e:
                 import logging
                 logging.getLogger(__name__).warning("companion ask failed: %s", e)
-                await ws.send_json({"type": "companion_reply", "error": True, "code": "failed"})
+                await ws.send_json({"type": "companion_reply", "error": True, "code": "failed",
+                                    "detail": _error_detail(e)})
                 continue
 
             await ws.send_json({"type": "companion_reply", "text": answer or ""})
@@ -2921,6 +3087,7 @@ async def _run_turn(sess: PlayerSession, ws: WebSocket, player_input: str | None
         try:
             await ws.send_json({
                 "type": "error", "message": in_fiction, "recoverable": True,
+                "detail": _error_detail(e),
             })
         except Exception:
             pass  # socket may already be gone

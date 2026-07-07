@@ -207,6 +207,9 @@ const LABELS = {
     hud_nexus: 'NEXUS', hud_signal: 'SIGNAL', hud_time: 'TIME',
     hud_day: 'Day', hud_next: 'next', hud_band_max: 'critical band',
     hud_coherence: 'SIGNAL COHERENCE',
+    meter_reveal_alert: 'New readout patched into the HUD: NEXUS alert',
+    meter_reveal_decay: 'New readout patched into the HUD: signal coherence',
+    debug_toggle: 'debug',
     // Chat
     chat_placeholder: 'What do you do?', processing: 'PROCESSING NEURAL INPUT',
     thinking_hint: '// link resolving — review your INTEL panels while you wait',
@@ -471,6 +474,9 @@ const LABELS = {
     hud_nexus: 'NEXUS', hud_signal: '信号', hud_time: '时间',
     hud_day: '第', hud_next: '下一级', hud_band_max: '危险区间',
     hud_coherence: '信号一致性',
+    meter_reveal_alert: '新读数接入HUD：NEXUS警报',
+    meter_reveal_decay: '新读数接入HUD：信号一致性',
+    debug_toggle: '调试',
     chat_placeholder: '你想做什么？', processing: '正在处理神经输入',
     thinking_hint: '// 链路解析中 —— 可在等待时查看右侧情报面板',
     // 回合进度阶段（服务器 'phase' 帧）—— 诚实的、融入剧情的状态提示。
@@ -1237,8 +1243,18 @@ function connectWebSocket() {
   ws.onmessage = (event) => {
     let msg;
     try { msg = JSON.parse(event.data); }
-    catch (e) { console.warn('[ws] dropping malformed frame', e); return; }
-    handleServerMessage(msg);
+    catch (e) {
+      // Surface client-side caught exceptions the same way as server errors:
+      // generic headline + collapsed debug detail in the chat.
+      console.warn('[ws] dropping malformed frame', e);
+      showClientErrorCard(_jsErrorDetail(e));
+      return;
+    }
+    try { handleServerMessage(msg); }
+    catch (e) {
+      console.error('[ws] handler failed for frame type', msg && msg.type, e);
+      showClientErrorCard(_jsErrorDetail(e));
+    }
   };
   ws.onclose = () => {
     if (wasKicked) return;  // kicked elsewhere — don't fight the new session
@@ -1718,7 +1734,13 @@ function connectCompanionWS() {
   const protocol = location.protocol === 'https:' ? 'wss' : 'ws';
   companionWS = new WebSocket(`${protocol}://${location.host}/ws/companion`);
   companionWS.onmessage = (event) => {
-    let msg; try { msg = JSON.parse(event.data); } catch (e) { return; }
+    let msg;
+    try { msg = JSON.parse(event.data); }
+    catch (e) {
+      // Same debuggability as the main channel: dim collapsed detail line.
+      addCompanionMessage(L('companion_error'), 'error', _jsErrorDetail(e));
+      return;
+    }
     if (msg.type === 'companion_reply') handleCompanionReply(msg);
   };
   companionWS.onclose = () => {
@@ -1781,14 +1803,15 @@ function closeCompanion() {
   if (fab) fab.classList.remove('hidden');
 }
 
-function addCompanionMessage(text, role) {
+function addCompanionMessage(text, role, detail) {
   const box = document.getElementById('companionMessages');
   if (!box) return null;
   const prefixes = { user: L('companion_you'), implant: L('companion_implant'), system: '◈', error: '◈' };
   const el = document.createElement('div');
   el.className = `companion-msg ${role}`;
   el.innerHTML = `<div class="companion-msg-prefix">${esc(prefixes[role] || '')}</div>` +
-                 `<div class="companion-msg-body">${esc(text)}</div>`;
+                 `<div class="companion-msg-body">${esc(text)}</div>` +
+                 debugDetailHtml(detail);
   box.appendChild(el);
   box.scrollTop = box.scrollHeight;
   return el;
@@ -1860,7 +1883,8 @@ function handleCompanionReply(msg) {
   // A reply landed → cancel the watchdog and re-enable the composer.
   _companionResetPending();
   if (msg.error) {
-    addCompanionMessage(msg.code === 'no_session' ? L('companion_no_session') : L('companion_error'), 'error');
+    addCompanionMessage(msg.code === 'no_session' ? L('companion_no_session') : L('companion_error'),
+      'error', msg.detail);
     return;
   }
   const text = (msg.text || '').trim() || L('companion_error');
@@ -2186,8 +2210,9 @@ function handleServerMessage(msg) {
       // restoring-signal placeholder — otherwise it sits above the retry card.
       removeResumeSkeleton();
       // Recoverable turn error → an inline retry card in the chat (not a
-      // vanishing toast) so the player can re-send their last action.
-      showRetryCard(msg.message);
+      // vanishing toast) so the player can re-send their last action. The
+      // frame's additive debug detail renders collapsed under the headline.
+      showRetryCard(msg.message, msg.detail);
       break;
 
     case 'auth_result':
@@ -3328,6 +3353,9 @@ function _applyMeterReasons() {
     ['decay', 'statDecayGauge'],
   ];
   for (const [key, id] of hud) {
+    // Discovery gate: no tooltip/reason for a still-hidden meter (its WORLD
+    // subtext host isn't rendered either, so _patchWorldReasonSubtext no-ops).
+    if (_meterRevealState[key] === false) continue;
     const el = document.getElementById(id);
     if (!el) continue;
     const reason = _reasonText(_meterReasons[key]);
@@ -3375,7 +3403,14 @@ function flashChangedMeters(delta) {
     ['nexus_alert', 'statNexusGauge'],
     ['fragment_decay', 'statDecayGauge'],
   ];
+  // Discovery gate: never pulse a meter the HUD hasn't revealed yet (the
+  // session_update in the same turn flips the flag before the gauge exists).
+  const hiddenByReveal = {
+    nexus_alert: _meterRevealState.alert === false,
+    fragment_decay: _meterRevealState.decay === false,
+  };
   for (const [key, id] of map) {
+    if (hiddenByReveal[key]) continue;
     const pair = delta[key];
     if (!pair || pair.from === pair.to) continue;
     const el = document.getElementById(id);
@@ -3739,8 +3774,64 @@ function _sendPlayerInput(text) {
 
 let _retryCardEl = null;
 
-/** Render (or replace) the inline retry card at the end of the chat log. */
-function showRetryCard(message) {
+// ----------------------------------------------------------------------------
+// DEBUG ERROR DETAIL — the user debugs from the game chat, so every error
+// frame's additive `detail` field (exception class + message + last traceback
+// frame, built server-side by _error_detail) renders as a collapsed, dim
+// monospace '▸ debug' line under the bilingual generic headline. Client-side
+// caught exceptions (frame parse, handler throws) surface the same way.
+// Always esc()'d; the toggle is a plain disclosure button (aria-expanded).
+// ----------------------------------------------------------------------------
+
+/** One-line-ish detail string for a caught CLIENT-side exception. */
+function _jsErrorDetail(e) {
+  if (e == null) return '';
+  const stack = e.stack ? String(e.stack).split('\n').slice(0, 2).join(' — ') : '';
+  const head = (e.name || e.message) ? `${e.name || 'Error'}: ${e.message || ''}` : String(e);
+  return stack && stack.indexOf(head) === 0 ? stack : [head, stack].filter(Boolean).join(' — ');
+}
+
+/** Collapsed '▸ debug' disclosure markup for an error detail ('' when none). */
+function debugDetailHtml(detail) {
+  if (!detail) return '';
+  return `<div class="err-debug">` +
+    `<button type="button" class="err-debug-toggle" onclick="toggleErrDebug(this)" ` +
+    `aria-expanded="false">\u25b8 ${esc(L('debug_toggle'))}</button>` +
+    `<pre class="err-debug-detail" hidden>${esc(String(detail))}</pre></div>`;
+}
+
+/** Expand/collapse an err-debug block (▸ closed / ▾ open). */
+function toggleErrDebug(btn) {
+  const pre = btn && btn.parentNode && btn.parentNode.querySelector('.err-debug-detail');
+  if (!pre) return;
+  const show = pre.hidden;
+  pre.hidden = !show;
+  btn.setAttribute('aria-expanded', show ? 'true' : 'false');
+  btn.textContent = (show ? '\u25be ' : '\u25b8 ') + L('debug_toggle');
+}
+
+/** Chat card for a CLIENT-side caught exception: generic bilingual headline +
+ *  the debug detail, no retry button (there is nothing to re-send). Guarded so
+ *  a failure here can never cascade into another error. */
+function showClientErrorCard(detail) {
+  try {
+    const container = document.getElementById('chatMessages');
+    if (!container) return;
+    const card = document.createElement('div');
+    card.className = 'chat-msg retry-card client-error-card';
+    card.setAttribute('role', 'alert');
+    card.innerHTML =
+      `<div class="msg-prefix">${esc(L('chat_system'))}</div>` +
+      `<div class="msg-content">${esc(L('error_generic'))}</div>` +
+      debugDetailHtml(detail);
+    container.appendChild(card);
+    container.scrollTop = container.scrollHeight;
+  } catch (_) { /* never cascade */ }
+}
+
+/** Render (or replace) the inline retry card at the end of the chat log.
+ *  `detail` (optional) is the server's debug string → collapsed '▸ debug'. */
+function showRetryCard(message, detail) {
   _dismissRetryCard();
   const container = document.getElementById('chatMessages');
   if (!container) return;
@@ -3755,6 +3846,7 @@ function showRetryCard(message) {
   card.innerHTML =
     `<div class="msg-prefix">${esc(L('chat_system'))}</div>` +
     `<div class="msg-content">${esc(message || '')}</div>` +
+    debugDetailHtml(detail) +
     btnHtml;
   container.appendChild(card);
   _retryCardEl = card;
@@ -4759,6 +4851,50 @@ function updateAllPanels(session) {
   }
 }
 
+// ----------------------------------------------------------------------------
+// DISCOVERY-GATED HUD METERS — the NEXUS-alert and signal-coherence gauges are
+// spoilers on turn 1 (they pre-announce surveillance and fragment decay before
+// the fiction introduces either). The server stamps
+// world_state.meter_reveals = {alert, decay} on every session payload
+// (monotonic once true; see gui/server.py _apply_meter_reveals). Until a meter
+// is revealed the client renders NOTHING for it — no greyed slot, which would
+// itself hint. INTEGRITY is always visible. A payload WITHOUT the flags block
+// (old server / legacy cached blob) defaults to REVEALED so a mid-campaign
+// player never has already-seen data hidden from them.
+// ----------------------------------------------------------------------------
+// Last-known reveal flags (null until the first session payload); consulted by
+// flashChangedMeters/_applyMeterReasons so a state_delta for a still-hidden
+// meter never pulses or annotates an invisible gauge.
+let _meterRevealState = { alert: null, decay: null };
+
+/** Resolve {alert, decay} reveal flags from a world_state blob. */
+function meterReveals(w) {
+  const mr = w && w.meter_reveals;
+  if (!mr || typeof mr !== 'object') return { alert: true, decay: true }; // legacy → revealed
+  return { alert: mr.alert !== false, decay: mr.decay !== false };
+}
+
+/** Show/hide a HUD status-bar meter item and, on a false→true transition
+ *  mid-run, play the earned reveal moment: a subtle materialize animation
+ *  (skipped under prefers-reduced-motion) + a one-line bilingual system
+ *  notice in the chat. Initial paints (prev unknown) never animate. */
+function _syncHudMeterVisibility(key, revealed, itemId) {
+  const item = document.getElementById(itemId);
+  const prev = _meterRevealState[key];
+  _meterRevealState[key] = revealed;
+  if (item) item.style.display = revealed ? '' : 'none';
+  if (revealed && prev === false) {
+    if (item && !prefersReducedMotion) {
+      item.classList.remove('meter-materialize');
+      void item.offsetWidth;                 // restart cleanly if mid-animation
+      item.classList.add('meter-materialize');
+      item.addEventListener('animationend',
+        () => item.classList.remove('meter-materialize'), { once: true });
+    }
+    showSystemNotice(L(key === 'alert' ? 'meter_reveal_alert' : 'meter_reveal_decay'));
+  }
+}
+
 // ---------- STATUS BAR (matches TUI StatusBar) ----------
 
 function updateStatusBar(session) {
@@ -4784,18 +4920,27 @@ function updateStatusBar(session) {
   }
 
   // --- Banded mini-gauges (mirror WORLD panel semantics) ---
-  const alert = w.nexus_alert || {};
-  const alertVal = Math.max(0, Math.min(100, Number(alert.current) || 0));
-  const alertStatus = (currentLang === 'zh' && alert.status_zh) ? alert.status_zh : localizeAlertStatus(alert.status);
-  renderBandedGauge('statNexusGauge', alertVal,
-    L('hud_nexus') + ' · ' + alertStatus + ' · ' + alertVal + '%');
+  // Discovery-gated: each gauge renders ONLY once its meter is revealed
+  // (until then the whole status item is display:none — not a greyed slot).
+  const reveals = meterReveals(w);
+  _syncHudMeterVisibility('alert', reveals.alert, 'statItemNexus');
+  _syncHudMeterVisibility('decay', reveals.decay, 'statItemDecay');
+  if (reveals.alert) {
+    const alert = w.nexus_alert || {};
+    const alertVal = Math.max(0, Math.min(100, Number(alert.current) || 0));
+    const alertStatus = (currentLang === 'zh' && alert.status_zh) ? alert.status_zh : localizeAlertStatus(alert.status);
+    renderBandedGauge('statNexusGauge', alertVal,
+      L('hud_nexus') + ' · ' + alertStatus + ' · ' + alertVal + '%');
+  }
 
-  // Fragment decay — always shown (no >0 guard), framed as signal coherence.
-  const decay = w.fragment_decay || {};
-  const decayVal = Math.max(0, Math.min(100, Number(decay.current) || 0));
-  const decayStatus = (currentLang === 'zh' && decay.status_zh) ? decay.status_zh : localizeDecayStatus(decay.status);
-  renderBandedGauge('statDecayGauge', decayVal,
-    L('hud_coherence') + ' · ' + decayStatus + ' · ' + decayVal + '%');
+  // Fragment decay — framed as signal coherence (discovery-gated like alert).
+  if (reveals.decay) {
+    const decay = w.fragment_decay || {};
+    const decayVal = Math.max(0, Math.min(100, Number(decay.current) || 0));
+    const decayStatus = (currentLang === 'zh' && decay.status_zh) ? decay.status_zh : localizeDecayStatus(decay.status);
+    renderBandedGauge('statDecayGauge', decayVal,
+      L('hud_coherence') + ' · ' + decayStatus + ' · ' + decayVal + '%');
+  }
 
   // --- In-world clock: "Day N · <period> · HH:MM" with a thin fill
   //     for the progress through the current 360-min period. ---
@@ -5695,12 +5840,15 @@ function updateWorldPanel(worldState) {
   const alert = w.nexus_alert || {};
   const decay = w.fragment_decay || {};
   const time = w.time || {};
+  // Discovery-gated (same flags as the HUD gauges): an unrevealed meter's
+  // section — bar, band caption, reason subtext — is not rendered at all.
+  const reveals = meterReveals(w);
 
   let html = '';
 
-  // NEXUS Alert — always shown (a primary fail meter; capture at 100). Runs 0-100.
-  const alertVal = Math.max(0, Math.min(100, alert.current || 0));
-  {
+  // NEXUS Alert — a primary fail meter (capture at 100), once revealed. 0-100.
+  if (reveals.alert) {
+    const alertVal = Math.max(0, Math.min(100, alert.current || 0));
     const alertPct = alertVal;
     // Prefer server-supplied status_zh in 中文; fall back to the label map.
     const alertStatusDisplay = (currentLang === 'zh' && alert.status_zh)
@@ -5715,9 +5863,9 @@ function updateWorldPanel(worldState) {
     </div>`;
   }
 
-  // Fragment Decay — always shown, framed as signal coherence (no >0 guard).
-  const decayVal = Math.max(0, Math.min(100, decay.current || 0));
-  {
+  // Fragment Decay — framed as signal coherence, once revealed.
+  if (reveals.decay) {
+    const decayVal = Math.max(0, Math.min(100, decay.current || 0));
     const decayStatusDisplay = (currentLang === 'zh' && decay.status_zh)
       ? decay.status_zh : localizeDecayStatus(decay.status);
     html += `<div class="panel-section"><div class="panel-section-title">${L('fragment_decay')}</div>

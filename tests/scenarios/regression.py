@@ -1298,6 +1298,140 @@ def test_client_payload_reveals_no_content_totals():
     print("  [PASS] client payload ships discovered scope only — no totals, denominators, or deep names")
 
 
+def test_meter_reveals_gate_and_persist():
+    """Discovery-gated HUD meters: the session payload must carry spoiler-safe
+    world_state.meter_reveals flags.
+
+    A fresh session hides BOTH gauges (the turn-1 starting rumors mention
+    NEXUS by name, but only surveillance-context knowledge / TRACE-L1-05 / an
+    alert that has actually moved may reveal the alert meter). Reveals are
+    monotonic: a meter that ticked above 0 stays revealed after returning to 0
+    (persisted in the server-owned hud_reveals.json sidecar — NOT a
+    SESSION_FILES member, so engine saves can't clobber it). Legacy sessions
+    (no sidecar, already past turn 1 — created before this feature) default to
+    REVEALED so mid-campaign players never lose data they were already shown.
+    The death-screen run summary ships alert/decay finals only when revealed.
+    """
+    from engine.state import create_new_session
+    import gui.server as srv
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        session_dir = os.path.join(tmpdir, "reveals")
+        create_new_session(session_dir=session_dir, name="R", alias="R",
+                           background="street_runner", difficulty="standard", language="en")
+        sess = srv.PlayerSession("mr-user", "mr-uid")
+        sess.session_dir = session_dir
+
+        # Fresh session: both hidden — even though the street_runner starting
+        # rumor literally says "NEXUS has eyes in The Sprawl".
+        data = srv._get_session_data(sess)
+        mr = data["world_state"]["meter_reveals"]
+        assert mr == {"alert": False, "decay": False}, \
+            f"fresh session must hide both meters: {mr}"
+        assert os.path.exists(os.path.join(session_dir, srv._HUD_REVEALS_FILE)), \
+            "sidecar must be stamped on the first payload build"
+        # Run summary: unrevealed finals are withheld; integrity always ships.
+        rs = srv._build_run_summary(data, None)
+        assert rs["alert_final"] is None and rs["decay_final"] is None, \
+            f"unrevealed meter finals leaked to the run summary: {rs}"
+        assert isinstance(rs["integrity_final"], (int, float)), \
+            "integrity is always visible and its final must ship"
+
+        # NEXUS-surveillance trace discovered → alert reveals, decay stays hidden.
+        traces_path = os.path.join(session_dir, "traces.json")
+        with open(traces_path, encoding="utf-8") as f:
+            traces = json.load(f)
+        traces["discovered"] = [{"id": srv._ALERT_REVEAL_TRACE,
+                                 "description": "NEXUS monitors all communications", "turn": 3}]
+        with open(traces_path, "w", encoding="utf-8") as f:
+            json.dump(traces, f, ensure_ascii=False)
+        mr = srv._get_session_data(sess)["world_state"]["meter_reveals"]
+        assert mr == {"alert": True, "decay": False}, \
+            f"TRACE-L1-05 must reveal alert only: {mr}"
+
+        # Decay ticks above 0 → decay reveals…
+        ws_path = os.path.join(session_dir, "world_state.json")
+        with open(ws_path, encoding="utf-8") as f:
+            world = json.load(f)
+        world["fragment_decay"]["current"] = 5
+        with open(ws_path, "w", encoding="utf-8") as f:
+            json.dump(world, f, ensure_ascii=False)
+        mr = srv._get_session_data(sess)["world_state"]["meter_reveals"]
+        assert mr == {"alert": True, "decay": True}, f"decay>0 must reveal decay: {mr}"
+
+        # …and STAYS revealed when the meter settles back to 0 (persisted).
+        world["fragment_decay"]["current"] = 0
+        with open(ws_path, "w", encoding="utf-8") as f:
+            json.dump(world, f, ensure_ascii=False)
+        data = srv._get_session_data(sess)
+        mr = data["world_state"]["meter_reveals"]
+        assert mr == {"alert": True, "decay": True}, \
+            f"'ever revealed' must persist across the meter returning to 0: {mr}"
+        # Revealed finals now ship in the run summary.
+        rs = srv._build_run_summary(data, None)
+        assert rs["alert_final"] == 0 and rs["decay_final"] == 0, \
+            f"revealed meter finals must ship: {rs}"
+
+        # Legacy session (no sidecar, past turn 1) → both default to REVEALED.
+        os.remove(os.path.join(session_dir, srv._HUD_REVEALS_FILE))
+        traces["discovered"] = []
+        with open(traces_path, "w", encoding="utf-8") as f:
+            json.dump(traces, f, ensure_ascii=False)
+        player_path = os.path.join(session_dir, "player.json")
+        with open(player_path, encoding="utf-8") as f:
+            player = json.load(f)
+        player["turn"] = 12
+        with open(player_path, "w", encoding="utf-8") as f:
+            json.dump(player, f, ensure_ascii=False)
+        mr = srv._get_session_data(sess)["world_state"]["meter_reveals"]
+        assert mr == {"alert": True, "decay": True}, \
+            f"legacy mid-campaign session must default to revealed: {mr}"
+
+    print("  [PASS] meter_reveals: fresh hidden, trace/mechanical reveals, monotonic persist, legacy revealed")
+
+
+def test_error_frames_carry_debug_detail():
+    """Error frames must carry an additive debug `detail` field while the
+    player-facing headline stays the bilingual generic.
+
+    The user debugs from the game chat: wave-1 made client error headlines
+    generic-only, so `detail` (exception class + str(e) + last traceback
+    frame) now rides along for the client's collapsed '▸ debug' line.
+    Server logs are unchanged.
+    """
+    import asyncio
+    import gui.server as srv
+
+    try:
+        raise ValueError("boom from regression test")
+    except ValueError as e:
+        err = e
+        detail = srv._error_detail(e)
+    assert "ValueError" in detail and "boom from regression test" in detail, detail
+    assert "regression.py" in detail and "in test_error_frames_carry_debug_detail" in detail, \
+        f"detail must carry the last traceback frame: {detail}"
+
+    class _WS:
+        def __init__(self):
+            self.frames = []
+
+        async def send_json(self, obj):
+            self.frames.append(obj)
+
+    ws = _WS()
+    asyncio.run(srv._report_ws_loop_error(ws, err))
+    assert ws.frames, "an error frame must be sent"
+    frame = ws.frames[-1]
+    assert frame["type"] == "error"
+    # Headline: bilingual generic, never the raw exception text.
+    assert "服务器" in frame["message"] and "Something went wrong" in frame["message"]
+    assert "boom" not in frame["message"], "raw exception text must not leak into the headline"
+    # Detail: class + message + location, additive field.
+    assert "ValueError" in frame.get("detail", "") and "boom from regression test" in frame["detail"]
+
+    print("  [PASS] error frames carry debug detail; headline stays the bilingual generic")
+
+
 def test_suggestion_recent_memory_and_no_repeat_directive():
     """Suggestion generators must see — and be told to avoid — recent suggestions.
 
@@ -1384,6 +1518,8 @@ def main():
 
     tests = [
         test_flag_bleed_between_turns,
+        test_meter_reveals_gate_and_persist,
+        test_error_frames_carry_debug_detail,
         test_suggestion_recent_memory_and_no_repeat_directive,
         test_canonical_script_has_lay_low_beats,
         test_area_field_in_initial_state,

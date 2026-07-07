@@ -3914,6 +3914,56 @@ html[lang="zh"] .account-label { max-width: 240px; }
 }
 
 /* ================================================================
+   DISCOVERY-GATED HUD METER REVEAL — when the NEXUS-alert / signal-
+   coherence gauge is earned mid-run, the freshly-unhidden status item
+   materializes: a short blur-in so the new readout reads as "patched
+   into the HUD", paired with a one-line system notice in the chat.
+   JS adds .meter-materialize only when prefersReducedMotion is false,
+   and the reduce block below also neutralizes it (belt-and-suspenders).
+   ================================================================ */
+@keyframes meter-materialize {
+  0%   { opacity: 0; filter: blur(4px); transform: translateY(-3px); }
+  60%  { opacity: 1; filter: blur(0.5px); }
+  100% { opacity: 1; filter: none; transform: none; }
+}
+.meter-materialize {
+  animation: meter-materialize 0.9s ease-out 1;
+}
+@media (prefers-reduced-motion: reduce) {
+  .meter-materialize { animation: none; }
+}
+
+/* ================================================================
+   ERROR DEBUG DETAIL — collapsed '▸ debug' disclosure under an error
+   card headline (chat retry card, client-error card, companion error
+   line). Dim monospace; the expanded detail wraps and never widens
+   its host (pre-wrap + break-word).
+   ================================================================ */
+.err-debug { margin-top: var(--sp-1); }
+.err-debug-toggle {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+}
+.err-debug-toggle:hover,
+.err-debug-toggle:focus-visible { color: var(--text); }
+.err-debug-detail {
+  margin: var(--sp-1) 0 0;
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-x: auto;
+}
+
+/* ================================================================
    ROLL CHIP — inline mechanical beat before narration ({type:'roll'})
    A compact chip per skill check in the chat flow: skill label, result vs
    target (result counts up in JS), green/red success flash, and an
