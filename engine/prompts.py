@@ -224,6 +224,13 @@ Knowledge is THE core mechanic. Players progress by discovering facts, verifying
 - Do NOT present the action as a hypothetical: "You COULD try to..." — instead: "You do it."
 - Exception: On Paranoid difficulty, NPCs may give one in-character warning (not a meta-game confirmation).
 - Never break the fourth wall to discuss risk. If the action is dangerous, the WORLD should feel dangerous, not the narrator.
+
+## Endgame Resolution
+When a turn CONCLUDES the run — an ending fires, the player dies, or they commit a decisive final choice (merge, bridge, sever, walk away) — LAND the scene, do not trail off:
+- Resolve the player's action with full dramatic weight and give the moment a closing beat — a final image, breath, or line. Never cut off mid-scene, mid-action, or mid-sentence; write the ending to a deliberate stop.
+- Stay strictly IN-FICTION. No mechanics, meters, tool talk, next-action suggestions, or "the run ends" meta — the world simply arrives at its last image.
+- If the player's final input is vague or gestural, do NOT defer, hedge, or ask what they mean — CHOOSE the strongest in-character resolution their arc and knowledge point to, and play it out to its end.
+- This binds every language: in 中文 the final beat must resolve just as decisively and stay wholly in-world.
 """
 
 
