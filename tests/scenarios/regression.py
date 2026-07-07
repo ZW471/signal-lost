@@ -893,6 +893,77 @@ def test_zh_keyword_parity_back_half_traces():
     print("  [PASS] 中文 parity: 奥林/总监, 活物/有生命, 信号的声音/共鸣/更加清晰 fire L2-08/L3-02/L4-09")
 
 
+def test_zh_deep_trace_parity_fixture_replay():
+    """Systematic 中文 deep-trace parity (wave 17 audit): the REAL zh fixture
+    phrasing that previously failed must now fire, and generic chatter must not.
+
+    Replaying the five certified 中文 waves (session/wave{6,10,12,14,16}_zh)
+    through every L3/L4/L5 check showed EN firing TRACE-L4-09 in 4/5 sessions
+    (on the bare noun "resonance" — the resolver names the deep place) while
+    中文 fired it in 1/5: the zh resolver renders the SAME beat as a Signal
+    gradient ("Signal更强的方向", "Signal…继续向下") with none of the listed
+    nouns. TRACE-L3-01's zh keywords (蓄意/故意) likewise never matched the
+    real reveal phrasing (人为切断, wave12_zh RUMOR-009), and TRACE-L3-03's
+    evidence branch / TRACE-L3-09's weaponize keyword were EN-only. Each new
+    trigger is pinned below with the verbatim fixture entry; negatives pin
+    that mundane 信号/切断/武器 chatter stays silent.
+    """
+    from engine.game_data import TRACE_CONDITIONS
+
+    checks = {tc["id"]: tc["check"] for tc in TRACE_CONDITIONS}
+    t, p, w = {"discovered": []}, {"turn": 14}, {}
+    n_none = {"npcs": []}
+    empty = {"facts": [], "rumors": [], "evidence": [], "theories": [], "connections": []}
+
+    def K(*descs):
+        return dict(empty, facts=[{"description": d, "turn": 14} for d in descs])
+
+    # --- TRACE-L4-09: Signal-gradient route, verbatim fixture entries that
+    # previously failed (wave6_zh FACT-112, wave10_zh FACT-086, wave14_zh
+    # FACT-079) ---
+    for desc in ("静水井深处是Signal更强的方向",
+                 "Signal的方向沿南边雨巷排水线继续向下，不是停在无名卷帘门后。",
+                 "Signal残留沿冷链路线继续向下"):
+        assert checks["TRACE-L4-09"](K(desc), t, n_none, p, w), \
+            f"real zh fixture entry did not fire TRACE-L4-09 (gradient route): {desc!r}"
+    # Negatives: a Signal term without a gradient, a gradient without a Signal
+    # term, and the two split across separate entries / clauses.
+    assert not checks["TRACE-L4-09"](K("监控信号中断了三秒"), t, n_none, p, w), \
+        "mundane 信号 chatter fired TRACE-L4-09"
+    assert not checks["TRACE-L4-09"](K("后勤货梯继续向下运行"), t, n_none, p, w), \
+        "signal-less 继续向下 fired TRACE-L4-09"
+    assert not checks["TRACE-L4-09"](K("巷口的信号灯坏了。雨水沿排水线继续向下。"), t, n_none, p, w), \
+        "TRACE-L4-09 fired across a clause boundary (信号 and 继续向下 in separate sentences)"
+    assert not checks["TRACE-L4-09"](K("巷子里有微弱信号", "货梯继续向下"), t, n_none, p, w), \
+        "TRACE-L4-09 fired from Signal and gradient in SEPARATE entries"
+
+    # --- TRACE-L3-01: 人为切断 (verbatim wave12_zh RUMOR-009), Ghost gate
+    # unchanged ---
+    k_deliberate = K("老技师传言断离更像人为切断，而不是单纯故障")
+    n_ghost = {"npcs": [{"name": "幽灵", "trust_level": "谨慎盟友"}]}
+    assert checks["TRACE-L3-01"](k_deliberate, t, n_ghost, p, w), \
+        "real wave12_zh 人为切断 entry did not fire TRACE-L3-01 with Ghost at cautious_ally"
+    assert not checks["TRACE-L3-01"](k_deliberate, t, n_none, p, w), \
+        "TRACE-L3-01 fired without the Ghost trust gate (gate loosened)"
+
+    # --- TRACE-L3-03: zh evidence branch (NEXUS档案 / 第七区实验室) now
+    # reachable without Ghost at trusted ---
+    k_lab = dict(empty, evidence=[{
+        "description": "第七区实验室的NEXUS档案提到旧植入体中留存的碎片被登记为计算资源。",
+        "source": "解密的档案片段", "turn": 14}])
+    assert checks["TRACE-L3-03"](k_lab, t, n_none, p, w), \
+        "中文 第七区实验室 evidence did not fire TRACE-L3-03 (evidence branch was EN-only)"
+    assert not checks["TRACE-L3-03"](K("市场里有人聊起碎片和旧植入体"), t, n_none, p, w), \
+        "碎片 gossip without the evidence/trust gate fired TRACE-L3-03"
+
+    # --- TRACE-L3-09: 武器化 (description_zh term) fires; bare 武器 does not ---
+    assert checks["TRACE-L3-09"](K("被提取的碎片已被NEXUS武器化，存放在受控军械库。"), t, n_none, p, w), \
+        "中文 武器化 entry did not fire TRACE-L3-09"
+    assert not checks["TRACE-L3-09"](K("黑市摊位上摆着几件武器"), t, n_none, p, w), \
+        "bare 武器 market chatter fired TRACE-L3-09"
+    print("  [PASS] zh deep-trace parity: real fixture phrasing fires L4-09/L3-01/L3-03/L3-09; generic chatter silent")
+
+
 def test_ambient_causes_and_bilingual_scarcity_rule():
     """Wave-6 F1/F2: implant joins the rationed images (in 中文 too); ambient
     meter changes have bilingual default causes.
@@ -1564,6 +1635,7 @@ def main():
         test_l3_08_reachable_on_certified_wave10_knowledge,
         test_l4_06_requires_spire_locator,
         test_zh_keyword_parity_back_half_traces,
+        test_zh_deep_trace_parity_fixture_replay,
         test_ambient_causes_and_bilingual_scarcity_rule,
         test_player_turn_priority_over_world_sim_lock,
         test_endings_history_dedup_and_spoiler_safe,
