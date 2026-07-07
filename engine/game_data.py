@@ -287,31 +287,69 @@ _L206_STATIC_RE = re.compile(
     + r"|(?<![a-z])static(?![a-z])" + _CLAUSE_GAP + _L206_SCAN_PART)
 
 
-# TRACE-L4-09 中文 gradient route (zh deep-trace parity audit, wave 17). EN
-# trips this trace on the bare noun "resonance": in the certified EN waves the
-# resolver names the deep destination ("an old service descent leads from cold
-# storage toward the resonance" — wave10_en FACT-093; "the resonance lies
-# beneath the old transit shrine" — wave14_en FACT-086). The zh resolver
-# renders the SAME beat as a Signal gradient instead of a place name:
-# "静水井深处是Signal更强的方向" (wave6_zh FACT-112), "Signal的方向沿南边雨巷
-# 排水线继续向下" (wave10_zh FACT-086), "Signal残留沿冷链路线继续向下"
-# (wave14_zh FACT-079) — none contain 共鸣/回响/清晰, so 中文 runs fired L4-09
-# in 1/5 certified sessions vs EN 4/5. The route requires a Signal term sharing
-# a clause with a stronger/clearer/leads-deeper term — STRICTER than EN's bare
-# noun, so mundane 信号 chatter ("监控信号中断", "信号很弱") stays silent.
-_L409_SIGNAL_TERM = r"(?:signal|信号)"
-_L409_GRADIENT_PART = r"(?:更强|越来越强|更清晰|越来越清晰|继续向下)"
-_L409_GRADIENT_RE = re.compile(
-    _L409_SIGNAL_TERM + _CLAUSE_GAP + _L409_GRADIENT_PART
-    + "|" + _L409_GRADIENT_PART + _CLAUSE_GAP + _L409_SIGNAL_TERM)
+# TRACE-L4-09 中文 gradient route (zh deep-trace parity audit, wave 17;
+# depth-anchored, wave 20). EN trips this trace on the bare noun "resonance":
+# in the certified EN waves the resolver names the deep destination ("an old
+# service descent leads from cold storage toward the resonance" — wave10_en
+# FACT-093; "the resonance lies beneath the old transit shrine" — wave14_en
+# FACT-086). The zh resolver renders the SAME beat as a Signal gradient
+# instead of a place name: "静水井深处是Signal更强的方向" (wave6_zh FACT-112),
+# "Signal的方向沿南边雨巷排水线继续向下" (wave10_zh FACT-086), "Signal残留沿
+# 冷链路线继续向下" (wave14_zh FACT-079) — none contain 共鸣/回响/清晰, so
+# 中文 runs fired L4-09 in 1/5 certified sessions vs EN 4/5.
+#
+# 信号+更强/更清晰 alone is NOT enough: 信号 is everyday telecom Chinese and
+# 越来越强/更清晰 is the ordinary way to say a phone/wifi/radio signal improved
+# ("手机信号越来越强", "wifi信号更清晰了"). Within ONE clause the route needs
+# the Signal term plus EITHER a descent-phrased gradient (继续向下 — the
+# gradient IS the downward direction) OR a strength/clarity gradient AND a
+# depth anchor (深处/更深/越深/深入/向下/往下). Mundane telecom chatter names
+# no downward direction, so it stays silent.
+_L409_SIGNAL_RE = re.compile(r"signal|信号")
+_L409_DESCENT_RE = re.compile(r"继续向下")
+_L409_STRENGTH_RE = re.compile(r"更强|越来越强|更清晰|更加清晰|越来越清晰")
+_L409_DEPTH_RE = re.compile(r"深处|更深|越深|深入|向下|往下")
+_L409_CLAUSE_SPLIT_RE = re.compile(r"[.。;；!?！？\n]")
 
 
 def _signal_gradient_in_one_entry(knowledge: dict) -> bool:
-    """True when a SINGLE knowledge entry records the Signal strengthening /
-    clarifying / leading deeper as one approaches (TRACE-L4-09 中文 route)."""
+    """True when a SINGLE clause of one knowledge entry records the Signal
+    strengthening / clarifying / leading DEEPER (TRACE-L4-09 中文 route).
+
+    The depth anchor is load-bearing: 信号更强/更清晰 without a downward
+    direction is a literal telecom signal improving, not deep lore."""
     for entry_type in _KNOWLEDGE_TYPES:
         for entry in knowledge.get(entry_type, []):
-            if _L409_GRADIENT_RE.search(_entry_text(entry)):
+            for clause in _L409_CLAUSE_SPLIT_RE.split(_entry_text(entry)):
+                if not _L409_SIGNAL_RE.search(clause):
+                    continue
+                if _L409_DESCENT_RE.search(clause):
+                    return True
+                if (_L409_STRENGTH_RE.search(clause)
+                        and _L409_DEPTH_RE.search(clause)):
+                    return True
+    return False
+
+
+# TRACE-L3-01 中文 route (wave 17 audit; topic-anchored, wave 20). The zh
+# resolver phrases the deliberate-severance reveal as 人为切断 / 并非意外
+# (wave12_zh RUMOR-009: "老技师传言断离更像人为切断，而不是单纯故障"). But
+# 并非意外/不是意外/故意/蓄意 are everyday Chinese for ANY non-accident
+# ("这不是意外，是有人故意撞的车"), so those phrases only count when the same
+# entry names the Severance topic (断离/切断/severance) — matching this
+# trace's description_zh, 断离并非意外, not the bare consequence phrase.
+_L301_TOPIC_TERMS = ("断离", "切断", "severance")
+_L301_DELIBERATE_TERMS = ("蓄意", "故意", "并非意外", "不是意外")
+
+
+def _deliberate_severance_in_one_entry(knowledge: dict) -> bool:
+    """True when a SINGLE knowledge entry ties the Severance topic to a
+    deliberate / not-an-accident phrase (TRACE-L3-01 中文 route)."""
+    for entry_type in _KNOWLEDGE_TYPES:
+        for entry in knowledge.get(entry_type, []):
+            text = _entry_text(entry)
+            if (any(term in text for term in _L301_TOPIC_TERMS)
+                    and any(term in text for term in _L301_DELIBERATE_TERMS)):
                 return True
     return False
 
@@ -535,15 +573,17 @@ TRACE_CONDITIONS: list[dict] = [
     {"id": "TRACE-L3-01", "layer": 3,
      "description": "The Severance wasn't an accident — it was deliberate",
      "description_zh": "断离并非意外——而是蓄意为之",
-     # 中文 parity (wave 17 audit): the zh resolver phrases the deliberate-
-     # severance reveal as 人为切断 / 并非意外 (wave12_zh RUMOR-009: "老技师传言
-     # 断离更像人为切断，而不是单纯故障") — 蓄意/故意 never appear in real play.
-     # 并非意外 comes straight from this trace's description_zh. The Ghost trust
-     # gate is unchanged, so the keywords stay as guarded as EN "deliberate".
+     # 中文 parity (wave 17 audit; topic-anchored, wave 20): the zh resolver
+     # phrases the deliberate-severance reveal as 人为切断 / 并非意外 (wave12_zh
+     # RUMOR-009: "老技师传言断离更像人为切断，而不是单纯故障"). 人为切断/网络终止/
+     # 断离证据 are specific enough to stand alone; the everyday phrases
+     # 并非意外/不是意外/故意/蓄意 fire only anchored to the Severance topic
+     # (see _deliberate_severance_in_one_entry). Ghost trust gate unchanged.
      "check": lambda k, t, n, p, w: (
-         _has_evidence(k, ["deliberate", "network termination", "severance evidence",
-                           "蓄意", "故意", "人为切断", "并非意外", "不是意外",
-                           "网络终止", "断离证据"])
+         (_has_evidence(k, ["deliberate", "network termination",
+                            "severance evidence", "人为切断",
+                            "网络终止", "断离证据"])
+          or _deliberate_severance_in_one_entry(k))
          and _npc_trust_at_least(n, "ghost", "cautious_ally"))},
     {"id": "TRACE-L3-02", "layer": 3,
      "description": "Something was alive in the network before the Severance",
@@ -693,16 +733,19 @@ TRACE_CONDITIONS: list[dict] = [
      # 中文 parity (wave 10, friction #2): EN fired this via voice/clearer/
      # resonance but zh only listed 回响. Added the game's own zh terms — 回声
      # (Echo's alias in _NPC_ALIASES), 共鸣 (resonance, cf. 共鸣计划/共鸣室),
-     # 信号的声音 (the Signal's voice, per description_zh) and 更清晰/更加清晰
-     # (clearer). Bare 声音 stays out — it means any sound at all.
+     # 信号的声音 (the Signal's voice, per description_zh). Bare 声音 stays
+     # out — it means any sound at all — and (wave 20) so do the bare
+     # adjectives 更清晰/更加清晰: "电视信号更清晰了" is everyday telecom
+     # Chinese. The zh clearer/stronger shape lives in the depth-anchored
+     # gradient route instead.
      # Wave-17 audit: the zh resolver also renders this beat as a Signal
      # GRADIENT without any of those nouns ("静水井深处是Signal更强的方向",
-     # "Signal残留沿冷链路线继续向下") — the clause-gated regex route catches
-     # that shape (see _signal_gradient_in_one_entry).
+     # "Signal残留沿冷链路线继续向下") — the clause-gated route catches that
+     # shape (see _signal_gradient_in_one_entry).
      "check": lambda k, t, n, p, w: (
          _has_fact_or_rumor_about(k, [
-             "echo", "回响", "回声", "voice", "信号的声音", "clearer", "更清晰",
-             "更加清晰", "resonance", "共鸣"])
+             "echo", "回响", "回声", "voice", "信号的声音", "clearer",
+             "resonance", "共鸣"])
          or _signal_gradient_in_one_entry(k))},
 
     # =========================================================================

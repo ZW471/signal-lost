@@ -936,6 +936,22 @@ def test_zh_deep_trace_parity_fixture_replay():
         "TRACE-L4-09 fired across a clause boundary (信号 and 继续向下 in separate sentences)"
     assert not checks["TRACE-L4-09"](K("巷子里有微弱信号", "货梯继续向下"), t, n_none, p, w), \
         "TRACE-L4-09 fired from Signal and gradient in SEPARATE entries"
+    # Negatives (wave 20): 信号+更强/更清晰 with no depth direction is ordinary
+    # telecom Chinese — the strength/clarity gradient only counts alongside a
+    # depth anchor (深处/更深/向下/…) in the same clause, and the bare
+    # adjectives 更清晰/更加清晰 are out of the noun list entirely.
+    for desc in ("手机信号越来越强，终于能打电话了",
+                 "换了新路由器，wifi信号更强了",
+                 "电视信号更清晰了",
+                 "5G信号越来越强",
+                 "导航信号更清晰，定位准了",
+                 "调整天线后收音机信号更强",
+                 "屏幕分辨率调高后画面更加清晰"):
+        assert not checks["TRACE-L4-09"](K(desc), t, n_none, p, w), \
+            f"mundane telecom 信号 gradient fired TRACE-L4-09: {desc!r}"
+    # …while the depth-anchored shape (wave-10 pin) still fires.
+    assert checks["TRACE-L4-09"](K("越往下走，信号变得更加清晰。"), t, n_none, p, w), \
+        "depth-anchored 信号+更加清晰 entry did not fire TRACE-L4-09"
 
     # --- TRACE-L3-01: 人为切断 (verbatim wave12_zh RUMOR-009), Ghost gate
     # unchanged ---
@@ -945,6 +961,16 @@ def test_zh_deep_trace_parity_fixture_replay():
         "real wave12_zh 人为切断 entry did not fire TRACE-L3-01 with Ghost at cautious_ally"
     assert not checks["TRACE-L3-01"](k_deliberate, t, n_none, p, w), \
         "TRACE-L3-01 fired without the Ghost trust gate (gate loosened)"
+    # Topic anchor (wave 20): 并非意外/不是意外/故意/蓄意 are everyday Chinese
+    # for ANY non-accident — they only count in an entry that names the
+    # Severance topic (断离/切断/severance), even with Ghost trusted.
+    assert checks["TRACE-L3-01"](K("幽灵确认：断离并非意外，是有人下令的。"), t, n_ghost, p, w), \
+        "on-topic 断离+并非意外 entry did not fire TRACE-L3-01 with Ghost at cautious_ally"
+    for desc in ("他强调这不是意外，是有人故意撞的车",
+                 "她说封锁并非意外，而是演习",
+                 "今天迟到并非意外，是堵车"):
+        assert not checks["TRACE-L3-01"](K(desc), t, n_ghost, p, w), \
+            f"off-topic 不是意外/故意 chatter fired TRACE-L3-01: {desc!r}"
 
     # --- TRACE-L3-03: zh evidence branch (NEXUS档案 / 第七区实验室) now
     # reachable without Ghost at trusted ---
