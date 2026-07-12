@@ -782,6 +782,56 @@ def test_examine_implant_does_not_firehose_deep_layers():
     print("  [PASS] Examine-implant stays at L1; over-generic pre-Severance/Signal tokens no longer leak L1-08/L2-01/L3-05")
 
 
+def test_difficulty_overrides_do_not_leak_deep_layers():
+    """The per-difficulty trace overrides REPLACE the base check (see
+    _run_trace_checker), and "standard" is the DEFAULT — so their keyword gates
+    must be as tight as the base ones. A play-test found the standard overrides
+    re-introduced the turn-1 firehose (L2-01 on bare "signal", L2-04 on bare
+    "implant"/"pre-severance") and leaked L2-03 on "sector" (from "Sectors 4-9
+    are under curfew"); the base deep gates L4-09/L3-06 leaked on "voice" (the
+    model's own anti-injection line) and "fatal" (the integrity primer). All
+    surfaced deep layer NAMES + descriptions into the client payload and raised
+    deepest_layer. Gates now key on each trace's real subject.
+    """
+    from engine.game_data import TRACE_CONDITIONS, TRACE_DIFFICULTY_OVERRIDES
+
+    std = TRACE_DIFFICULTY_OVERRIDES["standard"]
+    checks = {tc["id"]: tc["check"] for tc in TRACE_CONDITIONS}
+    n = {"npcs": [{"name": "Mira", "trust_level": "neutral"}]}
+    p, w, t = {"background": "netrunner"}, {}, {"discovered": []}
+
+    def K(*facts, evidence=None):
+        r = {"facts": [{"description": d, "source": "s"} for d in facts],
+             "rumors": [], "evidence": [], "theories": [], "connections": []}
+        if evidence:
+            r["evidence"] = [{"description": d, "source": "act"} for d in evidence]
+        return r
+
+    implant = K("The implant is a pre-Severance receiver that passively picks up ambient signals")
+    # Standard-difficulty overrides must NOT fire deep off turn-1 implant facts.
+    assert not std["TRACE-L2-01"](implant, t, n, p, w), "L2-01 standard override leaked on implant/signal"
+    assert not std["TRACE-L2-04"](implant, t, n, p, w), "L2-04 standard override leaked on implant/pre-severance"
+    # ...nor L2-03 off a mundane "sector" mention.
+    assert not std["TRACE-L2-03"](K("Sectors 4 through 9 are under posted curfew"), t, n, p, w), \
+        "L2-03 standard override leaked on a bare 'sector' mention"
+    # Base deep gates must not leak on generic words.
+    assert not checks["TRACE-L4-09"](K("never give a faceless voice what it demands"), t, n, p, w), \
+        "L4-09 leaked on bare 'voice' (anti-injection narration)"
+    assert not checks["TRACE-L3-06"](K("each strain wears you down, and too much is fatal"), {}, n, p, w), \
+        "L3-06 leaked on the integrity primer's 'fatal'"
+    assert not checks["TRACE-L2-09"](K("the neural implant is old, from before the corporate era"), t, n, p, w), \
+        "L2-09 (Chrome Heights) leaked on bare 'corporate'"
+
+    # Positive controls — each still fires once the real subject is present.
+    assert std["TRACE-L2-01"](K("Three people who could hear the signal have vanished; they are disappearing"), t, n, p, w)
+    assert std["TRACE-L2-03"](K("NEXUS runs a facility in Sector 7 for special acquisitions"), t, n, p, w)
+    assert std["TRACE-L2-04"](K("the scan says the implant is unique and shouldn't exist"), t, n, p, w)
+    assert checks["TRACE-L4-09"](K("Echo, the Signal's voice, grows clearer near the resonance"), t, n, p, w)
+    assert checks["TRACE-L3-06"](K("the extraction pulls fragments from living victims"), {}, n, p, w)
+    assert checks["TRACE-L2-09"](K("Chrome Heights is where NEXUS officials and the corporate elite live"), t, n, p, w)
+    print("  [PASS] Difficulty overrides + deep base gates no longer leak on signal/implant/sector/voice/fatal/corporate; real subjects still fire")
+
+
 def test_l3_08_reachable_on_certified_wave10_knowledge():
     """TRACE-L3-08 must keep firing on the certified wave-10 knowledge — the
     passive route is load-bearing.
@@ -1720,6 +1770,7 @@ def main():
         test_l3_07_requires_sector7_context,
         test_act_on_evidence_discovery_route,
         test_examine_implant_does_not_firehose_deep_layers,
+        test_difficulty_overrides_do_not_leak_deep_layers,
         test_l3_08_reachable_on_certified_wave10_knowledge,
         test_l4_06_requires_spire_locator,
         test_zh_keyword_parity_back_half_traces,

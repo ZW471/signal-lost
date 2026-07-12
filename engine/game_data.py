@@ -568,7 +568,10 @@ TRACE_CONDITIONS: list[dict] = [
     {"id": "TRACE-L2-09", "layer": 2,
      "description": "Chrome Heights is the corporate elite district — NEXUS officials and wealthy citizens",
      "description_zh": "镀金台是企业精英区——NEXUS官员和富裕市民居住于此",
-     "check": lambda k, t, n, p, w: _has_fact_or_rumor_about(k, ["chrome heights", "镀金台", "corporate", "elite", "精英"])},
+     # Anchor to the district name / "corporate elite" phrase. Bare "corporate"
+     # fired this L2 trace off any corporate-dystopia flavor text ("before the
+     # corporate era"), and the whole world is corporate — a premature reveal.
+     "check": lambda k, t, n, p, w: _has_fact_or_rumor_about(k, ["chrome heights", "镀金台", "corporate elite", "企业精英", "精英区"])},
     {"id": "TRACE-L2-10", "layer": 2,
      "description": "The Listeners use a network of symbols to communicate — a spiral with two arcs",
      "description_zh": "聆听者使用符号网络通讯——双弧交叉的螺旋",
@@ -647,8 +650,12 @@ TRACE_CONDITIONS: list[dict] = [
     {"id": "TRACE-L3-06", "layer": 3,
      "description": "Fragment extraction is painful and often fatal — NEXUS doesn't care",
      "description_zh": "碎片提取过程痛苦且往往致命——NEXUS对此毫不在意",
-     "check": lambda k, t, n, p, w: _has_evidence(k, ["extraction", "painful", "fatal", "victim",
-                                                      "提取", "痛苦", "致命", "受害者"])},
+     # Anchor to the extraction/harvest ACT — the trace's real subject. Bare
+     # "fatal"/"painful" leaked this Layer-3 trace off the integrity primer
+     # ("each strain wears you down, and too much is fatal") and generic danger
+     # talk; the "painful/fatal" wording is the framing, not the trigger.
+     "check": lambda k, t, n, p, w: _has_evidence(k, ["extraction", "harvest", "harvesting",
+                                                      "提取", "收割"])},
     {"id": "TRACE-L3-07", "layer": 3,
      "description": "Sector 7 has multiple levels — the deeper labs are where extraction happens",
      "description_zh": "第七区有多层结构——提取行动发生在更深层的实验室",
@@ -750,7 +757,10 @@ TRACE_CONDITIONS: list[dict] = [
      # resonance but zh only listed 回响. Added the game's own zh terms — 回声
      # (Echo's alias in _NPC_ALIASES), 共鸣 (resonance, cf. 共鸣计划/共鸣室),
      # 信号的声音 (the Signal's voice, per description_zh). Bare 声音 stays
-     # out — it means any sound at all — and (wave 20) so do the bare
+     # out — it means any sound at all — and (play-test) so does bare EN "voice":
+     # it leaked this Layer-4 trace off the model's own anti-injection narration
+     # ("never give a faceless voice what it demands"), so it is now the specific
+     # phrase "signal's voice". (wave 20) The bare
      # adjectives 更清晰/更加清晰: "电视信号更清晰了" is everyday telecom
      # Chinese. The zh clearer/stronger shape lives in the depth-anchored
      # gradient route instead.
@@ -760,7 +770,7 @@ TRACE_CONDITIONS: list[dict] = [
      # shape (see _signal_gradient_in_one_entry).
      "check": lambda k, t, n, p, w: (
          _has_fact_or_rumor_about(k, [
-             "echo", "回响", "回声", "voice", "信号的声音", "clearer",
+             "echo", "回响", "回声", "signal's voice", "信号的声音", "clearer",
              "resonance", "共鸣"])
          or _signal_gradient_in_one_entry(k))},
 
@@ -1479,32 +1489,40 @@ ITEM_SKILL_PENALTIES: dict[str, dict] = {
 # ---------------------------------------------------------------------------
 
 TRACE_DIFFICULTY_OVERRIDES: dict[str, dict] = {
+    # NOTE: these REPLACE the base check on their difficulty (see
+    # _run_trace_checker), and "standard" is the DEFAULT — so any over-generic
+    # keyword here leaks on the default difficulty regardless of the base-check
+    # gating. Play-test fix: each override was tightened to its trace's real
+    # subject (was leaking L2 on turn-1 implant facts / "sector" curfew notes).
     "standard": {
         "TRACE-L2-01": lambda k, t, n, p, w: (
-            # Require evidence or 3+ sources, not just a single rumor
-            _has_evidence(k, ["disappear", "missing", "signal"])
-            or (_count_sources_about(k, ["disappear", "missing"]) >= 3)
+            # Real disappearance evidence or 3+ sources — NOT the bare "signal"
+            # topic (every Signal fact carries it; leaked on turn-1 implant examine).
+            _has_evidence(k, ["disappear", "missing", "失踪", "消失"])
+            or (_count_sources_about(k, ["disappear", "missing", "失踪", "消失"]) >= 3)
         ),
         "TRACE-L2-03": lambda k, t, n, p, w: (
-            # Require sector7 evidence — obtained by paying Ghost or decrypting cipher
-            _has_evidence(k, ["sector", "facility", "acquisition"])
+            # Sector-7 / acquisitions evidence (paid from Ghost or decrypted cipher).
+            # Bare "sector" leaked off "Sectors 4-9 are under curfew".
+            _has_evidence(k, ["sector 7", "第七区", "acquisition", "acquisitions", "征集"])
         ),
         "TRACE-L2-04": lambda k, t, n, p, w: (
-            # Require analyze_signal usage on implant
-            _has_evidence(k, ["implant", "unique", "pre-severance"])
+            # The "unique / shouldn't exist" finding from analyzing the implant —
+            # NOT bare "implant"/"pre-severance", which fire on any implant fact.
+            _has_evidence(k, ["unique", "shouldn't exist", "独一无二", "不应存在", "不该存在"])
         ),
     },
     "reckless": {
         "TRACE-L2-01": lambda k, t, n, p, w: (
-            _has_evidence(k, ["disappear", "missing", "signal"])
-            and _count_sources_about(k, ["disappear", "missing"]) >= 3
+            _has_evidence(k, ["disappear", "missing", "失踪", "消失"])
+            and _count_sources_about(k, ["disappear", "missing", "失踪", "消失"]) >= 3
         ),
         "TRACE-L2-03": lambda k, t, n, p, w: (
-            _has_evidence(k, ["sector", "facility"])
+            _has_evidence(k, ["sector 7", "第七区", "acquisition", "acquisitions", "征集"])
             and _npc_trust_at_least(n, "ghost", "cautious_ally")
         ),
         "TRACE-L2-04": lambda k, t, n, p, w: (
-            _has_evidence(k, ["implant", "unique"])
+            _has_evidence(k, ["unique", "shouldn't exist", "独一无二", "不应存在"])
             and _has_evidence(k, ["analysis", "scan", "resonance"])
         ),
         "TRACE-L3-01": lambda k, t, n, p, w: (
