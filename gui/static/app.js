@@ -1975,9 +1975,16 @@ function handleServerMessage(msg) {
       if (msg.provider) prefillProviderSettings(msg.provider);
       if (msg.langsmith) prefillLangsmithSettings(msg.langsmith);
       if (msg.settings && msg.settings.features) _cachedFeatures = msg.settings.features;
-      // Read language from settings
+      // Read language from settings. A device-local UI-language choice (menu
+      // toggle / char-creation / a prior in-game switch — setLanguage() persists
+      // it to localStorage) takes precedence over the account default, so picking
+      // EN on the menu and THEN registering/logging-in no longer flips the UI back
+      // to the account's zh default. The account language only SEEDS the display
+      // when no local choice exists yet (fresh device / cleared storage).
       if (msg.settings && msg.settings.language) {
-        const lang = msg.settings.language.display || msg.settings.language.tui || 'en';
+        const acctLang = msg.settings.language.display || msg.settings.language.tui || 'en';
+        const savedLang = localStorage.getItem('signal_lost_ui_lang');
+        const lang = (savedLang === 'en' || savedLang === 'zh') ? savedLang : acctLang;
         document.getElementById('selectMenuLanguage').value = lang;
         setLanguage(lang);
       }

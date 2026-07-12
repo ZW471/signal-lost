@@ -996,7 +996,14 @@ def _safe_name(name: str) -> str | None:
     """Reduce a client-supplied save/session name to a single safe path
     component. Returns None if it can't be made safe (prevents traversal into
     another user's namespace via '..' or path separators)."""
-    name = (name or "").strip()
+    # A malformed client can send a non-string here (e.g. new_game with
+    # alias/save_name as a JSON list/number). ``.strip()`` on it would
+    # AttributeError out of _handle_new_game — which sits outside the handler's
+    # try/except — tearing down the WS connection with no error frame. Treat any
+    # non-string as unsafe so it routes to the normal "invalid name" error path.
+    if not isinstance(name, str):
+        return None
+    name = name.strip()
     if not name:
         return None
     name = os.path.basename(name)  # strip any directory components
