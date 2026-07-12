@@ -721,6 +721,67 @@ def test_act_on_evidence_discovery_route():
     print("  [PASS] Act-on-evidence route fires L3-05/L3-08/L2-06; talk-only, off-topic and mundane speech/static stay silent")
 
 
+def test_examine_implant_does_not_firehose_deep_layers():
+    """Examining your own implant on turn 1 records only grounded implant facts —
+    it must NOT leak deep lore via over-generic keyword gates.
+
+    Live-play regression: a turn-1 "examine the implant" wrote 4 grounded facts
+    (pre-Severance receiver, obsolete alloy, passively receives signals) and Mira
+    auto-seeds at `neutral` from the opening scene. That alone fired L1-08
+    (confiscation, on bare "pre-severance"), L2-01 (disappearances, on the bare
+    "signal" topic + neutral Mira) and L3-05 (Undercroft, on bare "pre-severance"
+    evidence) — jumping deepest_layer to 3 and unlocking L3 background narration on
+    turn 1. The gates now require the trace's ACTUAL subject, not the game's
+    ubiquitous pre-Severance/Signal vocabulary.
+    """
+    from engine.game_data import TRACE_CONDITIONS
+    from engine.prompts import extract_deepest_layer
+
+    checks = {tc["id"]: tc["check"] for tc in TRACE_CONDITIONS}
+    empty = {"facts": [], "rumors": [], "evidence": [], "theories": [], "connections": []}
+    # Mira is auto-created at neutral the moment the opening scene mentions her.
+    n = {"npcs": [{"name": "Mira — behind the counter of her noodle shop.", "trust_level": "neutral"},
+                  {"name": "Various unnamed pedestrians.", "trust_level": "neutral"}]}
+    p, w = {"background": "netrunner"}, {}
+
+    k_implant = dict(empty, facts=[
+        {"description": "The implant behind your ear is a pre-Severance receiver in an "
+                        "obsolete alloy casing — it passively picks up ambient signals "
+                        "the dead network shouldn't carry.", "source": "self_examination"},
+        {"description": "The implant is a pre-Severance receiver in an obsolete alloy casing.",
+         "source": "observed"},
+        {"description": "The implant passively picks up ambient city signals — it acts as a receiver.",
+         "source": "observed"},
+    ], rumors=[
+        {"description": "The old network didn't just crash — something was in it.", "source": "net_memory"},
+    ])
+
+    # The three over-fire traces must stay silent on this grounded implant-only state.
+    for tid in ("TRACE-L1-08", "TRACE-L2-01", "TRACE-L3-05"):
+        assert not checks[tid](k_implant, {}, n, p, w), \
+            f"{tid} fired from implant-only knowledge (deep-layer firehose regressed)"
+    # The legitimate L1 implant/signal traces DO still fire (positive control).
+    assert checks["TRACE-L1-06"](k_implant, {}, n, p, w), "L1-06 (Signal) should still fire from implant facts"
+    fired_layers = [tc["layer"] for tc in TRACE_CONDITIONS if tc["check"](k_implant, {}, n, p, w)]
+    assert max(fired_layers) == 1, f"examine-implant reached layer {max(fired_layers)}, expected to stay at L1"
+
+    # ...but each trace STILL fires once the player earns its real subject matter.
+    k_confiscate = dict(empty, rumors=[{"description": "A fence warns that NEXUS will confiscate "
+                                        "any pre-Severance tech it finds on you.", "source": "fence"}])
+    assert checks["TRACE-L1-08"](k_confiscate, {}, n, p, w), "L1-08 must fire on genuine confiscation content"
+
+    k_disappear = dict(empty, facts=[{"description": "Mira says three of her regulars just "
+                                      "vanished — people who could hear the signal are disappearing.",
+                                      "source": "mira"}])
+    assert checks["TRACE-L2-01"](k_disappear, {}, n, p, w), "L2-01 must fire on genuine disappearance content"
+
+    k_under = dict(empty, evidence=[{"description": "Undercroft relay still hums — pre-Severance "
+                                    "infrastructure is active down here.", "source": "site survey"}])
+    assert checks["TRACE-L3-05"](k_under, {}, n, p, w), "L3-05 must fire on genuine Undercroft evidence"
+
+    print("  [PASS] Examine-implant stays at L1; over-generic pre-Severance/Signal tokens no longer leak L1-08/L2-01/L3-05")
+
+
 def test_l3_08_reachable_on_certified_wave10_knowledge():
     """TRACE-L3-08 must keep firing on the certified wave-10 knowledge — the
     passive route is load-bearing.
@@ -1658,6 +1719,7 @@ def main():
         test_listeners_named_by_trusted_npc,
         test_l3_07_requires_sector7_context,
         test_act_on_evidence_discovery_route,
+        test_examine_implant_does_not_firehose_deep_layers,
         test_l3_08_reachable_on_certified_wave10_knowledge,
         test_l4_06_requires_spire_locator,
         test_zh_keyword_parity_back_half_traces,

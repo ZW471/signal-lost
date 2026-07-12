@@ -486,7 +486,12 @@ TRACE_CONDITIONS: list[dict] = [
     {"id": "TRACE-L1-08", "layer": 1,
      "description": "Pre-Severance technology is rare and valuable — NEXUS confiscates it",
      "description_zh": "断离前的技术稀有且珍贵——NEXUS会没收这些东西",
-     "check": lambda k, t, n, p, w: _has_fact_or_rumor_about(k, ["pre-severance", "断离前", "confiscate", "没收", "rare tech", "稀有"])},
+     # This trace is about CONFISCATION/rarity, not pre-Severance tech in general.
+     # The bare "pre-severance"/"断离前" anchors over-fired on any implant mention
+     # (the whole game is pre-Severance) — e.g. examining your own implant on turn
+     # 1 leaked this. Gate on the confiscation/value terms the fiction actually
+     # surfaces when the player learns NEXUS seizes such tech.
+     "check": lambda k, t, n, p, w: _has_fact_or_rumor_about(k, ["confiscate", "没收", "rare tech", "稀有", "valuable", "珍贵"])},
 
     # =========================================================================
     # Layer 2: The Conspiracy (11 traces)
@@ -494,9 +499,15 @@ TRACE_CONDITIONS: list[dict] = [
     {"id": "TRACE-L2-01", "layer": 2,
      "description": "People who hear the Signal are disappearing",
      "description_zh": "能听到信号的人正在消失",
+     # Branch A must require DISAPPEARANCE content, not the Signal topic itself.
+     # "signal" here made the gate trivially loose: Mira auto-seeds at `neutral`
+     # from the opening scene, so any Signal-related knowledge (the game's central
+     # topic) fired this L2 trace with zero disappearance evidence — collapsing the
+     # mystery on turn 1. Keep the two earned routes: a neutral-or-better Mira who
+     # speaks of the vanishings, or ≥2 independent sources reporting them.
      "check": lambda k, t, n, p, w: (
-         _npc_trust_at_least(n, "mira", "neutral") and _has_fact_or_rumor_about(k, ["disappear", "消失", "missing", "signal"])
-     ) or _count_sources_about(k, ["disappear", "消失", "missing"]) >= 2},
+         _npc_trust_at_least(n, "mira", "neutral") and _has_fact_or_rumor_about(k, ["disappear", "消失", "missing", "失踪"])
+     ) or _count_sources_about(k, ["disappear", "消失", "missing", "失踪"]) >= 2},
     {"id": "TRACE-L2-02", "layer": 2,
      "description": "The Listeners exist and protect Signal-sensitive people",
      "description_zh": "聆听者组织存在，并保护对信号敏感的人",
@@ -622,9 +633,14 @@ TRACE_CONDITIONS: list[dict] = [
      # Act route (wave 6, #3b): a scan/analysis act on the under-city hardware
      # itself — e.g. wave-6's "M-17 passive signal scan" evidence — verifies the
      # old infrastructure is live even without the exact lore words.
+     # Evidence branch must name the under-city itself. Bare "pre-severance"/"断离前"
+     # over-fired on any implant/tech fact (the whole game is pre-Severance), so
+     # examining your implant on turn 1 leaked this L3 Undercroft trace. Keep the
+     # Undercroft/infrastructure locators; the act route below still covers scans
+     # of the under-city hardware even without the exact lore words.
      "check": lambda k, t, n, p, w: (
-         _has_evidence(k, ["undercroft", "infrastructure", "active", "pre-severance",
-                           "底渊", "基础设施", "运作", "断离前"])
+         _has_evidence(k, ["undercroft", "infrastructure", "active",
+                           "底渊", "基础设施", "运作"])
          or _acted_on_evidence(k, ["undercroft", "tunnel", "conduit", "relay box",
                                    "hatch", "under-market", "底渊", "隧道", "导管",
                                    "中继", "检修口"]))},
