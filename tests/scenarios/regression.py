@@ -832,6 +832,57 @@ def test_difficulty_overrides_do_not_leak_deep_layers():
     print("  [PASS] Difficulty overrides + deep base gates no longer leak on signal/implant/sector/voice/fatal/corporate; real subjects still fire")
 
 
+def test_cancel_kills_only_this_threads_cli_child():
+    """cli_process_registry.kill_thread must kill exactly the CLI child spawned
+    by the addressed thread — the mechanism behind the mid-turn CANCEL on the
+    CLI-bypass path (gui/server.py _kill_inflight_cli). Before this, cancel was
+    a pure flag checked at the next boundary, i.e. a no-op until the full
+    multi-minute model call finished anyway. Two sessions run their calls in
+    different executor threads, so the kill must be precise: session A's cancel
+    must never take down session B's in-flight call.
+    """
+    import subprocess
+    import threading
+    import time
+    from tests.scripts import cli_process_registry as reg
+
+    procs, tids = {}, {}
+
+    def spawn(key):
+        p = subprocess.Popen(["sleep", "60"], start_new_session=True,
+                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        reg.register(p)
+        procs[key] = p
+        tids[key] = threading.get_ident()
+        # park like a real call would (communicate) until killed or told to stop
+        p.wait()
+        reg.unregister(p)
+
+    ta = threading.Thread(target=spawn, args=("a",), daemon=True)
+    tb = threading.Thread(target=spawn, args=("b",), daemon=True)
+    ta.start(); tb.start()
+    deadline = time.time() + 5
+    while time.time() < deadline and ("a" not in tids or "b" not in tids):
+        time.sleep(0.02)
+    assert "a" in tids and "b" in tids, "test threads failed to spawn children"
+
+    try:
+        # Kill A's call by thread id: A dies fast, B keeps running.
+        assert reg.kill_thread(tids["a"]), "kill_thread found no child for thread A"
+        ta.join(timeout=5)
+        assert not ta.is_alive(), "thread A still parked — its child was not killed"
+        assert procs["a"].poll() is not None, "proc A survived kill_thread"
+        assert procs["b"].poll() is None, "proc B was collaterally killed — kill must be per-thread"
+        # Addressing a thread with no in-flight call is a graceful no-op.
+        assert reg.kill_thread(tids["a"]) is False, "second kill on same thread should be a no-op"
+    finally:
+        for p in procs.values():
+            if p.poll() is None:
+                p.kill()
+        tb.join(timeout=5)
+    print("  [PASS] kill_thread kills exactly the addressed thread's CLI child (cancel is now a real mid-call abort)")
+
+
 def test_l3_08_reachable_on_certified_wave10_knowledge():
     """TRACE-L3-08 must keep firing on the certified wave-10 knowledge — the
     passive route is load-bearing.
@@ -1771,6 +1822,7 @@ def main():
         test_act_on_evidence_discovery_route,
         test_examine_implant_does_not_firehose_deep_layers,
         test_difficulty_overrides_do_not_leak_deep_layers,
+        test_cancel_kills_only_this_threads_cli_child,
         test_l3_08_reachable_on_certified_wave10_knowledge,
         test_l4_06_requires_spire_locator,
         test_zh_keyword_parity_back_half_traces,

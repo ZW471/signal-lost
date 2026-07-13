@@ -50,6 +50,15 @@ def _clean_env() -> dict[str, str]:
     return {k: v for k, v in os.environ.items() if k not in _NESTING_GUARD_VARS}
 
 
+class CLIChildKilled(Exception):
+    """The CLI child was terminated by an external signal (SIGKILL/SIGTERM),
+    not a normal CLI error. Raised on a negative returncode so the retry loop
+    does NOT respawn — a signal-kill is deliberate (a mid-turn cancel via
+    cli_process_registry.kill_thread, or server shutdown), so retrying would
+    defeat the very cancel that killed it. Not a RuntimeError subclass, so it
+    propagates past the wrapper's transient-retry handler untouched."""
+
+
 def _run_cli_pg(cmd, input_text, timeout, env):
     """Run *cmd* in its own process group and return (returncode, stdout, stderr).
 
@@ -379,6 +388,12 @@ class ClaudeCodeLLM(BaseChatModel):
                 returncode, stdout_text, stderr_text = _run_cli_pg(
                     cmd, stdin_text, self.timeout, env,
                 )
+
+                if returncode < 0:
+                    # Terminated by a signal — a deliberate external kill (mid-turn
+                    # cancel or shutdown), never a transient CLI error. Abort now;
+                    # retrying would just spawn a fresh child and defeat the cancel.
+                    raise CLIChildKilled(f"claude CLI child killed by signal {-returncode}")
 
                 if returncode != 0:
                     stderr = stderr_text[:500] if stderr_text else ""

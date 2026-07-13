@@ -398,6 +398,13 @@ class CodexCLILLM(BaseChatModel):
                     cmd, stdin_text, self.timeout, env,
                 )
 
+                if returncode < 0:
+                    # Killed by a signal — deliberate external kill (mid-turn
+                    # cancel via cli_process_registry, or shutdown), not a
+                    # transient error. Abort now; retrying would defeat the cancel.
+                    from tests.scripts.claude_llm import CLIChildKilled
+                    raise CLIChildKilled(f"codex CLI child killed by signal {-returncode}")
+
                 if returncode != 0:
                     stderr = (stderr_text or "")[:500]
                     raise RuntimeError(f"codex CLI exited {returncode}: {stderr}")

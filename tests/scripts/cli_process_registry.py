@@ -37,18 +37,55 @@ import threading
 
 _lock = threading.Lock()
 _live: set[subprocess.Popen] = set()
+# Thread-keyed view of _live: the executor thread that spawned (and is blocked
+# reaping) each child. A CLI call runs synchronously in its caller's thread, so
+# "the proc this thread is waiting on" is exactly "this session's in-flight CLI
+# call" — which lets a mid-turn cancel kill ITS OWN call without touching other
+# players' turns (see kill_thread / gui/server.py cancel path).
+_by_thread: dict[int, subprocess.Popen] = {}
 
 
 def register(proc: subprocess.Popen) -> None:
     """Track *proc* (spawned with ``start_new_session=True``) as a live child."""
     with _lock:
         _live.add(proc)
+        _by_thread[threading.get_ident()] = proc
 
 
 def unregister(proc: subprocess.Popen) -> None:
     """Stop tracking *proc* once its call completed (or was killed)."""
     with _lock:
         _live.discard(proc)
+        tid = threading.get_ident()
+        if _by_thread.get(tid) is proc:
+            del _by_thread[tid]
+
+
+def kill_thread(tid: int) -> bool:
+    """SIGKILL the process group of the CLI child spawned by thread *tid*.
+
+    Used by the GUI server's mid-turn cancel: the turn's executor thread is
+    parked in ``proc.communicate()``; killing the child's process group makes
+    that call return immediately, so the wrapper raises and the turn aborts at
+    a pre-commit point instead of burning out the rest of a cancelled model
+    run. Returns True if a live child was signalled; False when that thread has
+    no in-flight CLI call (already finished, or not a CLI turn) — the caller
+    then simply falls back to the next cooperative cancel seam. Never raises.
+    """
+    with _lock:
+        proc = _by_thread.get(tid)
+    if proc is None:
+        return False
+    try:
+        if proc.poll() is not None:
+            return False  # already exited; its wrapper is reaping it
+        try:
+            os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+        except (ProcessLookupError, PermissionError, OSError):
+            proc.kill()
+        return True
+    except Exception:
+        return False
 
 
 def kill_all() -> int:

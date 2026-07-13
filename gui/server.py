@@ -419,6 +419,13 @@ class PlayerSession:
         # finishes normally and the flag is ignored (a half-written turn must
         # never persist). Reset at the head of every turn so it can't bleed.
         self.cancel_requested: bool = False
+        # Executor thread currently running this session's CLI-bypass call
+        # (None outside the call). Lets a mid-turn cancel SIGKILL exactly this
+        # session's in-flight `claude -p`/`codex exec` child via
+        # cli_process_registry.kill_thread — a true mid-call abort (the CLI call
+        # is otherwise opaque; nothing durable is written before it returns) —
+        # without ever touching another player's turn.
+        self.turn_thread_id: int | None = None
 
     @property
     def session_root(self) -> str:
@@ -2866,6 +2873,26 @@ def _stream_graph_turn(graph, state: dict, emit, is_cancelled):
     return last_values
 
 
+def _kill_inflight_cli(sess: PlayerSession) -> None:
+    """Best-effort SIGKILL of *this session's* in-flight CLI-bypass call.
+
+    Turns a mid-turn cancel from "flag checked at the next boundary" (i.e. after
+    the full multi-minute model run finished anyway) into a real mid-call abort:
+    the executor thread's communicate() returns immediately and the turn's retry
+    loop translates the resulting error into a clean pre-commit cancel. Precise
+    by construction — the kill is addressed by the turn's executor thread id, so
+    concurrent players' CLI calls are untouched. No-op when no CLI call is in
+    flight (LangGraph path, pure-Python phase, or the call just finished)."""
+    tid = sess.turn_thread_id
+    if tid is None:
+        return
+    try:
+        from tests.scripts import cli_process_registry
+        cli_process_registry.kill_thread(tid)
+    except Exception:
+        pass  # cancel must never take the reader down; next seam still aborts
+
+
 async def _read_frames_during_turn(ws: WebSocket, sess: PlayerSession, rx_state: dict) -> None:
     """Concurrently drain WS frames while a turn is in flight.
 
@@ -2898,11 +2925,15 @@ async def _read_frames_during_turn(ws: WebSocket, sess: PlayerSession, rx_state:
                 pass  # malformed frame — requeue; the main loop owns the error reply
             if action == "cancel_turn":
                 sess.cancel_requested = True
+                _kill_inflight_cli(sess)
             else:
                 sess.pending_frames.append(raw)
     except WebSocketDisconnect:
         rx_state["disconnected"] = True
         sess.cancel_requested = True
+        # Nobody is listening — also stop the in-flight CLI call itself (it
+        # would otherwise burn tokens to completion before the abort landed).
+        _kill_inflight_cli(sess)
     except Exception:
         # Receive machinery failed some other way — stop reading; the main
         # loop's own receive will surface the real condition after the turn.
@@ -2962,23 +2993,33 @@ async def _run_turn(sess: PlayerSession, ws: WebSocket, player_input: str | None
             # routed to the bypass.
             _use_bypass = bool(_bypass and sess.session_dir and _current_llm)
             if _use_bypass:
-                # The bypass is a single opaque CLI/LLM call in engine (read-only
-                # to us), so we can only bracket it with COARSE phases at the
-                # visible call boundary: 'resolving' while the model runs, then
-                # 'writing' as pure-Python post-processing commits state. A cancel
-                # requested BEFORE the call aborts cleanly (nothing ran yet); once
-                # cc_run_turn is entered we cannot interrupt the in-flight CLI
-                # from here (the wrapper owns its own subprocess/hung-CLI kill via
-                # its timeout), so a mid-call cancel lands at this next boundary —
-                # i.e. it takes effect on the following turn, not this one.
+                # The bypass is a single opaque CLI/LLM call in engine, so we
+                # bracket it with COARSE phases at the visible call boundary:
+                # 'resolving' while the model runs, then 'writing' as pure-Python
+                # post-processing commits state. A cancel requested BEFORE the
+                # call aborts cleanly (nothing ran yet). A cancel DURING the call
+                # is delivered by _read_frames_during_turn killing this thread's
+                # registered CLI child (cli_process_registry.kill_thread): the
+                # wrapper's communicate() returns, cc_run_turn raises, and the
+                # retry loop translates the failure into _TURN_ABORTED (nothing
+                # durable is written before the call returns, so this is a true
+                # pre-commit abort). turn_thread_id is the kill's address — set
+                # for exactly the duration of the call.
                 if _cancelled():
                     return _TURN_ABORTED
                 _emit_phase("resolving")
-                res = cc_run_turn(
-                    session_dir=sess.session_dir,
-                    player_input=player_input or "",
-                    mode=mode,
-                )
+                sess.turn_thread_id = threading.get_ident()
+                try:
+                    res = cc_run_turn(
+                        session_dir=sess.session_dir,
+                        player_input=player_input or "",
+                        mode=mode,
+                    )
+                finally:
+                    sess.turn_thread_id = None
+                # (A cancel that raced the call's completion — kill landing after
+                # the CLI already replied — is a no-op kill; the turn completed
+                # and may have committed state, so it is honoured as normal.)
                 _emit_phase("writing")
                 return res
 
@@ -3090,6 +3131,16 @@ async def _run_turn(sess: PlayerSession, ws: WebSocket, player_input: str | None
                     # network blip — don't retry (that's up to ~48min of dead spinner).
                     raise
                 except Exception as _err:
+                    # A cancel mid-call kills this session's CLI child (see
+                    # _kill_inflight_cli), which surfaces here as the wrapper's
+                    # failure. That is the cancel WORKING, not a turn error:
+                    # nothing durable was written before the call returned, so
+                    # translate it into the clean pre-commit abort (no error
+                    # frame, no retry). Bypass path only — it re-reads state
+                    # from disk each turn, so nothing lingers.
+                    if sess.is_cli_bypass and sess.cancel_requested:
+                        result = _TURN_ABORTED
+                        break
                     _retryable = (sess.is_cli_bypass and _attempt < _attempts
                                   and _is_transient_cli_error(_err))
                     if not _retryable:
