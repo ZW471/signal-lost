@@ -832,6 +832,64 @@ def test_difficulty_overrides_do_not_leak_deep_layers():
     print("  [PASS] Difficulty overrides + deep base gates no longer leak on signal/implant/sector/voice/fatal/corporate; real subjects still fire")
 
 
+def test_endgame_and_deep_gates_from_live_bridge_run():
+    """Pins the fixes from the live the_bridge playthrough: (C1) `symbiosis` must
+    not end the run mid-conversation off lore alone; (C2) the L5-01 convergence
+    trace must fire on the resolver's real climax vocabulary; (C3) deep traces
+    must not false-fire off the ubiquitous words the run tripped them on.
+    """
+    from engine.game_data import (TRACE_CONDITIONS, ENDINGS,
+                                   _count_layer_discovered)
+
+    C = {tc["id"]: tc["check"] for tc in TRACE_CONDITIONS}
+    E = {e["id"]: e["check"] for e in ENDINGS}
+    n = {"npcs": [{"name": "Ghost", "trust_level": "trusted"}]}
+
+    def K(*facts, ev=None):
+        r = {"facts": [{"description": d, "source": "s"} for d in facts],
+             "rumors": [], "evidence": [], "theories": [], "connections": []}
+        if ev:
+            r["evidence"] = [{"description": d, "source": "act"} for d in ev]
+        return r
+
+    # --- C3: exact live false-fire quotes must NOT fire their traces ---
+    p3, w3, t3 = {"turn": 3}, {}, {"discovered": []}
+    assert not C["TRACE-L1-03"](K("I carry pre-Severance implant tech"), t3, n, p3, w3)
+    assert not C["TRACE-L2-05"](K("he went so deep underground the daylight forgot his name"), t3, n, p3, w3)
+    assert not C["TRACE-L2-06"](K("unmarked vans with scanners cruise the block"), t3, n, p3, w3)
+    assert not C["TRACE-L4-04"](K("the signal is ordering what you ordered at her counter"), t3, n, p3, w3)
+    assert not C["TRACE-L4-05"](K("pulled things out of the Spire nobody was supposed to see"), t3, n, p3, w3)
+    assert not C["TRACE-L4-08"](K("shipped up the Spire into the Pinnacle sub-basements"), t3, n, p3, w3)
+    k_nexus = {"facts": [{"description": "nexus patrol", "source": "a"},
+                         {"description": "nexus tower", "source": "b"},
+                         {"description": "nexus vans", "source": "c"}],
+               "rumors": [], "evidence": [], "theories": [], "connections": []}
+    assert not C["TRACE-L3-04"](k_nexus, t3, n, p3, w3), "L3-04 counted bare 'nexus' sources"
+    # ...but genuine subject matter still fires each.
+    assert C["TRACE-L1-03"](K("the Severance 30 years ago killed billions"), t3, n, p3, w3)
+    assert C["TRACE-L2-05"](K("the Undercroft is old transit tunnels below"), t3, n, p3, w3)
+    assert C["TRACE-L4-04"](K(ev=["the Sigma Council secret committee ordered it"]), t3, n, p3, w3)
+    assert C["TRACE-L4-05"](K(ev=["the Spire was the Severance control center"]), t3, n, p3, w3)
+    assert C["TRACE-L4-08"](K(ev=["the EMP trigger is still operational"]), t3, n, p3, w3)
+
+    # --- C2: L5-01 fires on the resolver's paraphrased climax (4 L4 + convergence) ---
+    t_deep = {"discovered": [{"id": f"TRACE-L4-0{i}"} for i in range(1, 5)]}
+    assert _count_layer_discovered(t_deep, 4) >= 4
+    k_climax = K("the convergence is complete; I crossed the bridge willingly")
+    assert C["TRACE-L5-01"](k_climax, t_deep, n, {"turn": 12}, {}), \
+        "L5-01 did not fire on 'convergence is complete / crossed the bridge'"
+
+    # --- C1: symbiosis must NOT end the run mid-dialogue (turn<8), even with
+    # L5-01 discovered and the place-name 共鸣 leaked into an EN run's knowledge ---
+    t_l5 = {"discovered": [{"id": f"TRACE-L4-0{i}"} for i in range(1, 5)] + [{"id": "TRACE-L5-01"}]
+            + [{"id": f"TRACE-L{lyr}-{s:02d}"} for lyr in (1, 2, 3) for s in range(1, 4)]}
+    k_place = K("The Resonance (共鸣所) is a place beneath the Undercroft where Echo waits")
+    w_ok = {"fragment_decay": {"current": 0}}
+    assert not E["symbiosis"](t_l5, w_ok, {"turn": 4}, k_place, n), \
+        "symbiosis false-fired mid-conversation on the place-name 共鸣 at turn 4"
+    print("  [PASS] Live-bridge-run fixes hold: C3 gates tightened, C2 climax fires, C1 symbiosis can't end mid-dialogue")
+
+
 def test_cancel_kills_only_this_threads_cli_child():
     """cli_process_registry.kill_thread must kill exactly the CLI child spawned
     by the addressed thread — the mechanism behind the mid-turn CANCEL on the
@@ -1822,6 +1880,7 @@ def main():
         test_act_on_evidence_discovery_route,
         test_examine_implant_does_not_firehose_deep_layers,
         test_difficulty_overrides_do_not_leak_deep_layers,
+        test_endgame_and_deep_gates_from_live_bridge_run,
         test_cancel_kills_only_this_threads_cli_child,
         test_l3_08_reachable_on_certified_wave10_knowledge,
         test_l4_06_requires_spire_locator,

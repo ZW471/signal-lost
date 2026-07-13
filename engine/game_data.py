@@ -466,7 +466,10 @@ TRACE_CONDITIONS: list[dict] = [
     {"id": "TRACE-L1-03", "layer": 1,
      "description": "The Severance happened 30 years ago and killed billions",
      "description_zh": "断离发生在三十年前，数十亿人因此丧生",
-     "check": lambda k, t, n, p, w: _has_fact_or_rumor_about(k, ["severance", "断离", "30 years", "三十年", "billions"])},
+     # Require the SCALE (timeframe / death toll), not the bare word "severance"
+     # — every "pre-Severance" mention carries that and made this over-claim
+     # ("killed billions") fire on turn 1 before the player learned any of it.
+     "check": lambda k, t, n, p, w: _has_fact_or_rumor_about(k, ["30 years", "三十年", "thirty years", "billions", "数十亿", "数十億"])},
     {"id": "TRACE-L1-04", "layer": 1,
      "description": "The Sprawl is the densest district — most residents live here",
      "description_zh": "蔓城是最密集的城区——大部分居民生活在此",
@@ -541,7 +544,10 @@ TRACE_CONDITIONS: list[dict] = [
     {"id": "TRACE-L2-05", "layer": 2,
      "description": "The Undercroft exists beneath The Sprawl — old transit tunnels from before the Severance",
      "description_zh": "底渊存在于蔓城之下——断离前的旧交通隧道",
-     "check": lambda k, t, n, p, w: _has_fact_or_rumor_about(k, ["undercroft", "底渊", "underground", "地下", "tunnel", "隧道"])},
+     # Drop bare "underground"/"地下" — it fired off idioms ("went underground",
+     # "so deep underground the daylight forgot"). The Undercroft is learned by
+     # name or via the old transit TUNNELS.
+     "check": lambda k, t, n, p, w: _has_fact_or_rumor_about(k, ["undercroft", "底渊", "transit tunnel", "old tunnel", "tunnel", "隧道"])},
     {"id": "TRACE-L2-06", "layer": 2,
      "description": "NEXUS surveillance has blind spots — the Signal interferes with their scanners",
      "description_zh": "NEXUS的监控存在盲区——信号会干扰他们的扫描器",
@@ -549,8 +555,11 @@ TRACE_CONDITIONS: list[dict] = [
      # dead zones demonstrates the interference first-hand. "static" must share
      # a clause with scan/surveillance context (wave 7) so plain radio static
      # after a decode act doesn't count.
+     # Bare "scanner" fired off any scanner mention ("unmarked vans with
+     # scanners") without the blind-spot/interference reveal — gate on the
+     # actual lore (blind spots / the Signal interfering) or the act routes.
      "check": lambda k, t, n, p, w: (
-         _has_fact_or_rumor_about(k, ["blind spot", "盲区", "interfere", "干扰", "scanner"])
+         _has_fact_or_rumor_about(k, ["blind spot", "盲区", "interfere", "干扰", "jam the scanner", "scanner blind"])
          or _acted_on_evidence(k, ["dead zone", "jammed", "no coverage",
                                    "死角", "静默区", "屏蔽"])
          or _acted_on_evidence_re(k, _L206_STATIC_RE))},
@@ -626,9 +635,12 @@ TRACE_CONDITIONS: list[dict] = [
     {"id": "TRACE-L3-04", "layer": 3,
      "description": "NEXUS harvests fragments from people — the disappearances are extraction",
      "description_zh": "NEXUS从人体中收割碎片——那些失踪就是提取行动",
+     # Drop bare "nexus" from the source count — NEXUS is named in nearly every
+     # source, so ≥3 sources mention it trivially and fired this extraction
+     # trace with zero harvest/extraction knowledge. Count the extraction THEME.
      "check": lambda k, t, n, p, w: (
          _has_evidence(k, ["extraction", "harvesting", "sector 7", "提取", "收割", "第七区"])
-         or _count_sources_about(k, ["disappear", "fragment", "nexus", "harvest",
+         or _count_sources_about(k, ["disappear", "fragment", "harvest",
                                      "失踪", "消失", "碎片", "收割"]) >= 3)},
     {"id": "TRACE-L3-05", "layer": 3,
      "description": "The Undercroft contains pre-Severance infrastructure still partially active",
@@ -729,11 +741,16 @@ TRACE_CONDITIONS: list[dict] = [
     {"id": "TRACE-L4-04", "layer": 4,
      "description": "The Sigma Council ordered the Severance — a secret committee of corporate and government leaders",
      "description_zh": "西格玛委员会下令实施断离——由企业和政府领袖组成的秘密委员会",
-     "check": lambda k, t, n, p, w: _has_evidence(k, ["sigma council", "西格玛", "ordered", "committee"])},
+     # Bare "ordered" fired off "the signal is ordering what you ordered at her
+     # counter" (a noodle order). Gate on the Sigma Council / secret committee.
+     "check": lambda k, t, n, p, w: _has_evidence(k, ["sigma council", "西格玛", "secret committee", "秘密委员会"])},
     {"id": "TRACE-L4-05", "layer": 4,
      "description": "The Spire was built as the Severance control center — it predates NEXUS",
      "description_zh": "尖塔是作为断离控制中心建造的——它的历史早于NEXUS",
-     "check": lambda k, t, n, p, w: _has_evidence(k, ["spire", "尖塔", "control center", "控制中心", "predates"])},
+     # Bare "spire"/"尖塔" is a known district — merely naming it fired this
+     # secret ("it was the Severance CONTROL CENTER, predates NEXUS"). Gate on
+     # that function, not the location name.
+     "check": lambda k, t, n, p, w: _has_evidence(k, ["control center", "控制中心", "severance control", "predates nexus", "早于nexus", "早于NEXUS"])},
     {"id": "TRACE-L4-06", "layer": 4,
      "description": "The Archive Tower in The Spire contains all records — including the truth about the Severance",
      "description_zh": "尖塔中的档案塔保存着所有记录——包括断离的真相",
@@ -749,7 +766,10 @@ TRACE_CONDITIONS: list[dict] = [
     {"id": "TRACE-L4-08", "layer": 4,
      "description": "The EMP trigger mechanism in The Spire's sub-basements is still operational",
      "description_zh": "尖塔地下室中的EMP触发装置仍在运作",
-     "check": lambda k, t, n, p, w: _has_evidence(k, ["emp trigger", "EMP触发", "operational", "sub-basement", "地下室"])},
+     # Bare "sub-basement"/"operational" fired off "shipped up the Spire into the
+     # Pinnacle's sub-basements" with no EMP knowledge at all. Gate on the EMP
+     # trigger itself.
+     "check": lambda k, t, n, p, w: _has_evidence(k, ["emp trigger", "emp", "EMP触发", "EMP"])},
     {"id": "TRACE-L4-09", "layer": 4,
      "description": "Echo — the Signal's voice — becomes clearer as you approach the Resonance",
      "description_zh": "回响——信号的声音——在你接近共鸣所时变得更加清晰",
@@ -800,8 +820,17 @@ TRACE_CONDITIONS: list[dict] = [
                   "the resonance answers", "resonance is reachable",
                   "holding the bridge", "holds the bridge", "the bridge holds",
                   "first true bridge", "opened the threshold",
+                  # Play-test C2: the resolver paraphrases the decisive climax,
+                  # so the narrow list above missed a textbook consensual
+                  # crossing — it fired two turns late, leaving the player in a
+                  # finished-but-unending story. Add the vocabulary real
+                  # climax turns actually record.
+                  "convergence is complete", "convergence complete",
+                  "the convergence", "crossed the bridge", "cross the bridge",
+                  "bridge is complete", "the bridge is open", "bridged",
                   "共鸣", "共振", "信号共鸣", "植入体共鸣",
                   "汇聚回应", "汇聚点回应", "维系桥梁", "桥梁维系",
+                  "汇聚完成", "汇聚已成", "跨越了桥", "桥已建成", "桥梁贯通",
                   "真正的桥", "开启门槛", "门槛已开",
               ])))},
     {"id": "TRACE-L5-02", "layer": 5,
@@ -836,8 +865,11 @@ TRACE_CONDITIONS: list[dict] = [
     {"id": "TRACE-L5-07", "layer": 5,
      "description": "The Severance machine can be activated again — or destroyed permanently",
      "description_zh": "断离装置可以再次启动——或被永久摧毁",
+     # Requires L4-08 (now tightened) + the SEVERANCE MACHINE specifically. Bare
+     # "activate"/"destroy" cascaded off a falsely-fired L4-08 + generic
+     # "destroying the consciousness" prose into a Layer-5 reveal on turn 10.
      "check": lambda k, t, n, p, w: (
-         _trace_discovered(t, "TRACE-L4-08") and _has_evidence(k, ["severance machine", "断离装置", "activate", "destroy"]))},
+         _trace_discovered(t, "TRACE-L4-08") and _has_evidence(k, ["severance machine", "断离装置", "断离机器"]))},
     {"id": "TRACE-L5-08", "layer": 5,
      "description": "Becoming the bridge means merging permanently — losing your individual self",
      "description_zh": "成为桥梁意味着永久融合——失去你的个体自我",
@@ -1230,8 +1262,15 @@ ENDINGS: list[dict] = [
         "name": "Symbiosis",
         "name_zh": "共生",
         "type": "good",
+        # turn>=8 defense: `symbiosis` has no climax-ACT gate (pure lore ends the
+        # run, permanently), so a false L5-01 + the bilingual place-name 共鸣所
+        # leaking 共鸣 into an EN run's knowledge once ended a run MID-DIALOGUE
+        # with Ghost (never visited the Resonance). The turn gate + the tightened
+        # L4 gates (which feed L5-01) prevent that early false fire; a legitimate
+        # communion is far deeper than turn 8 anyway.
         "check": lambda t, w, p, k, n: (
             _count_discovered_traces(t) >= 12
+            and p.get("turn", 1) >= 8
             and _trace_discovered(t, "TRACE-L5-01")
             and _has_evidence(k, [
                 "echo", "communion",
