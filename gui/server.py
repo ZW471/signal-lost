@@ -1221,6 +1221,55 @@ def _endings_discovered_payload(session_root: str) -> list[dict]:
     return out
 
 
+# --- Terminal-session guard (game over) --------------------------------------
+# A finished run (death / any ending) drops this marker into its session dir so
+# the BACK-END refuses to run further turns on a dead game. The client's
+# post-game-over disableInput() is UI-only — a reconnecting or non-official
+# client could otherwise replay a captured/dead session and keep mutating it
+# (an endless death loop). The marker travels with the session dir; a new_game
+# rmtree's the dir (clearing it), and dead sessions are never autosaved.
+_GAME_OVER_MARKER = "game_over.json"
+
+
+def _game_over_marker_path(session_dir: str) -> str:
+    return os.path.join(session_dir, _GAME_OVER_MARKER)
+
+
+def _write_game_over_marker(session_dir: str, ending, death_cause, run_summary) -> None:
+    try:
+        with open(_game_over_marker_path(session_dir), "w", encoding="utf-8") as f:
+            json.dump({"ending": ending, "death_cause": death_cause,
+                       "run_summary": run_summary}, f, ensure_ascii=False)
+    except Exception:
+        pass
+
+
+def _read_game_over_marker(session_dir: str | None) -> dict | None:
+    if not session_dir:
+        return None
+    try:
+        with open(_game_over_marker_path(session_dir), "r", encoding="utf-8") as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
+        return None
+
+
+async def _resend_game_over(ws: WebSocket, sess: PlayerSession, marker: dict) -> None:
+    """Re-show the ending screen for an already-finished run instead of running a
+    turn on the dead session. Spoiler-safe: reuses the persisted run_summary and
+    re-reads the account gallery (discovered-only)."""
+    endings = _endings_discovered_payload(sess.session_root) if sess.session_dir else []
+    await _safe_send(ws, {
+        "type": "game_over",
+        "ending": marker.get("ending"),
+        "death_cause": marker.get("death_cause"),
+        "narrative": "",  # a reconnect shows the epitaph; the live client kept the prose
+        "run_summary": marker.get("run_summary"),
+        "endings_discovered": endings,
+        "replay": True,
+    })
+
+
 def _status_payload(sess: PlayerSession | None) -> dict:
     """Build the 'status' message — scoped to *sess*'s user, or logged-out.
 
@@ -1732,6 +1781,12 @@ async def _handle_resume(ws: WebSocket, sess: PlayerSession, msg: dict):
         return
 
     sess.session_dir = sess_path
+    # Resuming a finished run: re-show the ending screen instead of replaying a
+    # turn on a dead/captured session (which would loop it back into game-over).
+    marker = await asyncio.to_thread(_read_game_over_marker, sess_path)
+    if marker:
+        await _resend_game_over(ws, sess, marker)
+        return
     sess.graph = _get_graph()
     state = await asyncio.to_thread(_load_state_locked, sess)
     if state is None:
@@ -1898,6 +1953,15 @@ async def _handle_player_input(ws: WebSocket, sess: PlayerSession, msg: dict, lo
         if not await _try_autoresume(ws, sess, msg):
             await ws.send_json({"type": "error", "message": "No active game. Start or resume first."})
             return
+
+    # Terminal-session guard: a finished run must not accept further input. The
+    # client's post-game-over disableInput() is UI-only, so a reconnecting or
+    # non-official client could otherwise replay a dead/captured session and keep
+    # mutating it. Re-show the ending instead of running a turn.
+    marker = await asyncio.to_thread(_read_game_over_marker, sess.session_dir)
+    if marker:
+        await _resend_game_over(ws, sess, marker)
+        return
 
     # Fast path: serve a pre-computed suggested-action outcome. Run the
     # lock-guarded validate+promote off the event loop so a background
@@ -2637,6 +2701,12 @@ async def _finish_turn(sess: PlayerSession, ws: WebSocket, result: dict, mode: s
         })
         if sess.scheduler:
             sess.scheduler.stop()
+        # Mark the on-disk session terminal so no further turns can run on it
+        # (post-game-over input / reconnect death-loop guard). Best-effort.
+        if sess.session_dir:
+            await asyncio.to_thread(
+                _write_game_over_marker, sess.session_dir, ending,
+                result.get("death_cause"), run_summary)
         return
 
     if mode == "play" and sess.scheduler:
