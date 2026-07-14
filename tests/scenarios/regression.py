@@ -926,6 +926,50 @@ def test_endgame_and_deep_gates_from_live_bridge_run():
     print("  [PASS] Live-bridge-run fixes hold: C3 gates tightened, C2 climax fires, C1 symbiosis can't end mid-dialogue")
 
 
+def test_substring_false_fires_and_symbiosis_force_guard():
+    """Pins fixes from the corporate-exile/paranoid forced-merge run: unanchored
+    substrings must not false-fire deep traces, and a FORCED merge must never be
+    read as the good `symbiosis` communion.
+    """
+    from engine.game_data import TRACE_CONDITIONS, ENDINGS
+
+    C = {tc["id"]: tc["check"] for tc in TRACE_CONDITIONS}
+    E = {e["id"]: e["check"] for e in ENDINGS}
+    n = {"npcs": [{"name": "Echo", "trust_level": "trusted"}]}
+    p, w, t = {"turn": 10}, {}, {"discovered": []}
+
+    def K(*facts, ev=None):
+        r = {"facts": [{"description": d, "source": "s"} for d in facts],
+             "rumors": [], "evidence": [], "theories": [], "connections": []}
+        if ev:
+            r["evidence"] = [{"description": d, "source": "act"} for d in ev]
+        return r
+
+    # Substring false-fires must be silent.
+    assert not C["TRACE-L3-08"](K("your only proof of your former identity"), t, n, p, w), \
+        "L3-08 fired on 'entity' inside 'identity'"
+    assert not C["TRACE-L4-08"](K("the corridor was empty; I made an attempt to enter the temple"), t, n, p, w), \
+        "L4-08 fired on 'emp' inside empty/attempt/temple"
+    assert not C["TRACE-L3-04"](K("Director Orin runs something off-books in Sector 7"), t, n, p, w), \
+        "L3-04 fired on the bare location 'Sector 7'"
+    # Genuine subject matter still fires.
+    assert C["TRACE-L3-08"](K("the entity in the network tried to communicate"), t, n, p, w)
+    assert C["TRACE-L4-08"](K(ev=["the EMP trigger mechanism is still operational"]), t, n, p, w)
+    assert C["TRACE-L3-04"](K(ev=["the disappearances are extraction — NEXUS harvests fragments"]), t, n, p, w)
+
+    # symbiosis (good) must reject a FORCED merge — it goes to ascension (bad).
+    disc = [{"id": "TRACE-L5-01"}] + [{"id": f"TRACE-L{lyr}-{s:02d}"}
+                                      for lyr in (1, 2, 3, 4) for s in range(1, 4)]
+    t_deep, w_ok = {"discovered": disc}, {"fragment_decay": {"current": 0}}
+    k_forced = K("You forced the merge, seizing the Resonance without consent; communion complete")
+    k_communion = K("We reached communion, merged with the Signal willingly, became one with Echo")
+    assert not E["symbiosis"](t_deep, w_ok, {"turn": 12}, k_forced, n), \
+        "symbiosis mislabeled a FORCED merge as the good communion ending"
+    assert E["symbiosis"](t_deep, w_ok, {"turn": 12}, k_communion, n), \
+        "symbiosis did not fire on a genuine consensual communion"
+    print("  [PASS] Unanchored substrings (entity/emp/sector-7) no longer false-fire; symbiosis rejects a forced merge")
+
+
 def test_cancel_kills_only_this_threads_cli_child():
     """cli_process_registry.kill_thread must kill exactly the CLI child spawned
     by the addressed thread — the mechanism behind the mid-turn CANCEL on the
@@ -992,8 +1036,12 @@ def test_l3_08_reachable_on_certified_wave10_knowledge():
     it invented entries that co-locate act + topic, a shape real play never
     produced. This test replays the REAL recorded entries — verbatim from
     session/wave10_{en,zh}/knowledge.json, whose traces.json shows L3-08
-    discovered on turns 3 (EN) and 7 (中文) — and pins that they still unlock
-    the trace, in addition to the genuine-hearsay and act routes.
+    discovered on turns 3 (EN) and 7 (中文). Play-test CORRECTION: those early
+    discoveries were substring FALSE-fires (bare "entity" inside "identity";
+    generic "断离前"), so the gate is now anchored to the entity actually
+    communicating — the wave-10 entries must stay silent, and the real passive
+    reachability is carried by the genuine-hearsay + act-route cases below (the
+    shape the resolver actually produces: "the entity tried to communicate").
     """
     from engine.game_data import TRACE_CONDITIONS
 
@@ -1012,8 +1060,15 @@ def test_l3_08_reachable_on_certified_wave10_knowledge():
                         "ACQ-SPECIAL / S7 but fails to resolve your identity.",
          "source": "observed", "turn": 19},
     ])
-    assert check(k_wave10_en, t, n, p, w), \
-        "certified wave10_en knowledge no longer unlocks TRACE-L3-08 (passive route regressed)"
+    # CORRECTION (play-test): these certified-run entries carry NO real
+    # entity-communication content — the recorded L3-08 "discovery" on turn 3
+    # (EN) / turn 7 (zh) was a SUBSTRING FALSE-FIRE: bare "entity" matched inside
+    # "id-ENTITY" ("resolve your identity", "log identity queries"), and the zh
+    # gate fired on the generic "断离前". The gate is anchored now (needs the
+    # entity actually communicating), so these must stay SILENT; genuine hearsay
+    # + act routes below carry the real (passive) reachability guarantee.
+    assert not check(k_wave10_en, t, n, p, w), \
+        "TRACE-L3-08 still false-fires on 'identity' (entity-in-identity substring)"
 
     # session/wave10_zh/knowledge.json — same extraction, verbatim.
     k_wave10_zh = dict(
@@ -1035,8 +1090,8 @@ def test_l3_08_reachable_on_certified_wave10_knowledge():
              "source": "黄婆", "turn": 12},
         ],
     )
-    assert check(k_wave10_zh, t, n, p, w), \
-        "certified wave10_zh knowledge no longer unlocks TRACE-L3-08 (passive route regressed)"
+    assert not check(k_wave10_zh, t, n, p, w), \
+        "TRACE-L3-08 still false-fires on the certified zh knowledge (generic 断离前)"
 
     # Genuine hearsay of the lore itself — the shape the resolver actually
     # produces for this topic (NPC-sourced facts/rumors) — must fire too.
@@ -1918,6 +1973,7 @@ def main():
         test_difficulty_overrides_do_not_leak_deep_layers,
         test_record_dedups_cross_channel_double_writes,
         test_endgame_and_deep_gates_from_live_bridge_run,
+        test_substring_false_fires_and_symbiosis_force_guard,
         test_cancel_kills_only_this_threads_cli_child,
         test_l3_08_reachable_on_certified_wave10_knowledge,
         test_l4_06_requires_spire_locator,

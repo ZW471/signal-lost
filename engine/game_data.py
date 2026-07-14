@@ -638,8 +638,11 @@ TRACE_CONDITIONS: list[dict] = [
      # Drop bare "nexus" from the source count — NEXUS is named in nearly every
      # source, so ≥3 sources mention it trivially and fired this extraction
      # trace with zero harvest/extraction knowledge. Count the extraction THEME.
+     # Bare "sector 7"/"第七区" is just a LOCATION — it fired this extraction
+     # trace on turn 1 off the corporate-exile rumor "Orin runs something
+     # off-books in Sector 7". Gate on the extraction/harvest ACT itself.
      "check": lambda k, t, n, p, w: (
-         _has_evidence(k, ["extraction", "harvesting", "sector 7", "提取", "收割", "第七区"])
+         _has_evidence(k, ["extraction", "harvesting", "harvest", "提取", "收割"])
          or _count_sources_about(k, ["disappear", "fragment", "harvest",
                                      "失踪", "消失", "碎片", "收割"]) >= 3)},
     {"id": "TRACE-L3-05", "layer": 3,
@@ -690,9 +693,15 @@ TRACE_CONDITIONS: list[dict] = [
      # again; the wave-7 anchored voice regex stays as the act path for
      # fragments that literally carry the voice (the analyze_signal fragments
      # read "...before the silence, there was a voice...").
+     # Bare "entity" is an unanchored substring of "id-ENTITY" — the exile fact
+     # "your only proof of your former identity" fired this Layer-3 trace. Bare
+     # "message"/"信息"/"断离前" are likewise too generic. Anchor to the entity
+     # COMMUNICATING (the trace's real subject); the act route covers fragments
+     # that literally carry the voice.
      "check": lambda k, t, n, p, w: (
-         _has_evidence(k, ["communicate", "message", "entity", "before severance",
-                           "沟通", "试图沟通", "信息", "实体", "断离前"])
+         _has_evidence(k, ["communicate", "communicated", "the entity", "network entity",
+                           "entity in the network", "沟通", "试图沟通", "网络实体",
+                           "网络中的实体"])
          or _acted_on_evidence_re(k, _L308_VOICE_RE))},
     {"id": "TRACE-L3-09", "layer": 3,
      "description": "Some extracted fragments have been weaponized by NEXUS — Project Resonance",
@@ -766,10 +775,12 @@ TRACE_CONDITIONS: list[dict] = [
     {"id": "TRACE-L4-08", "layer": 4,
      "description": "The EMP trigger mechanism in The Spire's sub-basements is still operational",
      "description_zh": "尖塔地下室中的EMP触发装置仍在运作",
-     # Bare "sub-basement"/"operational" fired off "shipped up the Spire into the
-     # Pinnacle's sub-basements" with no EMP knowledge at all. Gate on the EMP
-     # trigger itself.
-     "check": lambda k, t, n, p, w: _has_evidence(k, ["emp trigger", "emp", "EMP触发", "EMP"])},
+     # Bare "sub-basement"/"operational" fired off unrelated Spire prose, and the
+     # bare token "emp"/"EMP" is an unanchored substring of "EMP-ty"/"att-EMP-t"/
+     # "t-emp-le"/"exa-mp-le" — it fired constantly. Anchor to the EMP TRIGGER /
+     # electromagnetic-pulse device.
+     "check": lambda k, t, n, p, w: _has_evidence(k, ["emp trigger", "emp device", "emp mechanism",
+                                                      "electromagnetic pulse", "EMP触发", "电磁脉冲"])},
     {"id": "TRACE-L4-09", "layer": 4,
      "description": "Echo — the Signal's voice — becomes clearer as you approach the Resonance",
      "description_zh": "回响——信号的声音——在你接近共鸣所时变得更加清晰",
@@ -801,10 +812,15 @@ TRACE_CONDITIONS: list[dict] = [
      "description": "You are the convergence point — the first true bridge",
      "description_zh": "你是汇聚点——第一座真正的桥梁",
      "check": lambda k, t, n, p, w: (
-         # Reachable-but-deep: a solid chunk of Layer 4 (4/9) + convergence
-         # knowledge + an implant in resonance OR the player having reached deep
-         # resonance lore (so a thorough investigation can actually arrive here).
-         _count_layer_discovered(t, 4) >= 4 and _has_fact_or_rumor_about(k, [
+         # Reachable-but-deep: a solid chunk of Layer 4 + convergence knowledge +
+         # an implant in resonance OR the player having reached deep resonance
+         # lore (so a thorough investigation can actually arrive here). The L4
+         # floor is 3, not 4: the L4 gates were tightened to stop substring
+         # false-fires, and a real perfectly-played bridge run (iter10_h2_en)
+         # legitimately discovers exactly 3 L4 traces — the "4th" it used to hit
+         # was L4-08 firing on "att-emp-t". Keeping 4 would wall off the good
+         # ending it was calibrated against once the false fire is gone.
+         _count_layer_discovered(t, 4) >= 3 and _has_fact_or_rumor_about(k, [
              "convergence", "bridge", "echo", "resonance",
              "汇聚", "汇聚点", "桥", "桥梁", "回响", "回声", "共鸣",
          ])
@@ -1272,9 +1288,16 @@ ENDINGS: list[dict] = [
             _count_discovered_traces(t) >= 12
             and p.get("turn", 1) >= 8
             and _trace_discovered(t, "TRACE-L5-01")
+            # A FORCED merge is `ascension` (bad), never this good communion —
+            # symbiosis had no consent/force gate, so its only safeguard against
+            # mislabeling a forced climax was L5-01 happening not to fire. Make
+            # it explicit.
+            and not _forced_merge_this_turn(k, p)
+            # The COMMUNION act itself — not the bare NPC name "Echo" (which is an
+            # unanchored substring match) nor the place-name resonance 共鸣所.
             and _has_evidence(k, [
-                "echo", "communion",
-                "回声", "回响", "交融", "共融", "共鸣", "圣餐", "共生",
+                "communion", "merged with", "become one with", "became one with",
+                "交融", "共融", "圣餐", "共生", "融为一体",
             ])
             and w.get("fragment_decay", {}).get("current", 0) < 40
         ),
