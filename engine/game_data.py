@@ -534,7 +534,7 @@ TRACE_CONDITIONS: list[dict] = [
      "check": lambda k, t, n, p, w: (
          _npc_trust_at_least(n, "ghost", "neutral") and _has_fact_or_rumor_about(k, ["sector 7", "第七区", "facility", "acquisitions"])
      ) or (p.get("background", "").lower() in ["corporate exile", "企业流亡者"]
-           and _has_fact_or_rumor_about(k, ["sector 7", "第七区", "special"]) and _count_sources_about(k, ["sector 7", "第七区"]) >= 2)},
+           and _has_fact_or_rumor_about(k, ["sector 7", "第七区", "special acquisition", "acquisitions", "特殊征集", "征集"]) and _count_sources_about(k, ["sector 7", "第七区"]) >= 2)},
     {"id": "TRACE-L2-04", "layer": 2,
      "description": "Your implant is unique pre-Severance tech that shouldn't exist",
      "description_zh": "你的植入体是独一无二的断离前技术，本不应存在",
@@ -656,9 +656,12 @@ TRACE_CONDITIONS: list[dict] = [
      # examining your implant on turn 1 leaked this L3 Undercroft trace. Keep the
      # Undercroft/infrastructure locators; the act route below still covers scans
      # of the under-city hardware even without the exact lore words.
+     # NB: bare "active" is dropped — it substring-matches "in-ACTIVE" (the
+     # opposite meaning) and "radio-ACTIVE". "infrastructure"/"运作" already
+     # carry the "still running" sense; the phrase "still active" is anchored.
      "check": lambda k, t, n, p, w: (
-         _has_evidence(k, ["undercroft", "infrastructure", "active",
-                           "底渊", "基础设施", "运作"])
+         _has_evidence(k, ["undercroft", "infrastructure", "still active",
+                           "partially active", "底渊", "基础设施", "运作"])
          or _acted_on_evidence(k, ["undercroft", "tunnel", "conduit", "relay box",
                                    "hatch", "under-market", "底渊", "隧道", "导管",
                                    "中继", "检修口"]))},
@@ -889,8 +892,10 @@ TRACE_CONDITIONS: list[dict] = [
     {"id": "TRACE-L5-08", "layer": 5,
      "description": "Becoming the bridge means merging permanently — losing your individual self",
      "description_zh": "成为桥梁意味着永久融合——失去你的个体自我",
+     # bare "merge" substring-matches "e-MERGE"/"e-MERGE-ncy"/"sub-MERGE"; use
+     # anchored forms. "permanent" likewise → "permanently"/"permanent merge".
      "check": lambda k, t, n, p, w: (
-         _trace_discovered(t, "TRACE-L5-01") and _has_fact_or_rumor_about(k, ["merge", "融合", "permanent", "永久", "lose self", "失去自我"]))},
+         _trace_discovered(t, "TRACE-L5-01") and _has_fact_or_rumor_about(k, ["merging", "the merge", "merge with", "permanent merge", "融合", "lose self", "lose your self", "lose yourself", "失去自我"]))},
 ]
 
 

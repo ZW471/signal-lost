@@ -952,10 +952,18 @@ def test_substring_false_fires_and_symbiosis_force_guard():
         "L4-08 fired on 'emp' inside empty/attempt/temple"
     assert not C["TRACE-L3-04"](K("Director Orin runs something off-books in Sector 7"), t, n, p, w), \
         "L3-04 fired on the bare location 'Sector 7'"
+    # Proactive audit finds: keywords that are substrings of COMMON words.
+    assert not C["TRACE-L3-05"](K(ev=["the panel reads inactive, long dead and cold"]), t, n, p, w), \
+        "L3-05 fired on 'active' inside 'INACTIVE' (opposite meaning)"
+    tl5 = {"discovered": [{"id": "TRACE-L5-01"}]}
+    assert not C["TRACE-L5-08"](K("an emergency emerged from the network"), tl5, n, p, w), \
+        "L5-08 fired on 'merge' inside emerge/emergency"
     # Genuine subject matter still fires.
     assert C["TRACE-L3-08"](K("the entity in the network tried to communicate"), t, n, p, w)
     assert C["TRACE-L4-08"](K(ev=["the EMP trigger mechanism is still operational"]), t, n, p, w)
     assert C["TRACE-L3-04"](K(ev=["the disappearances are extraction — NEXUS harvests fragments"]), t, n, p, w)
+    assert C["TRACE-L3-05"](K(ev=["the undercroft infrastructure is still active down here"]), t, n, p, w)
+    assert C["TRACE-L5-08"](K("merging permanently means you lose your self"), tl5, n, p, w)
 
     # symbiosis (good) must reject a FORCED merge — it goes to ascension (bad).
     disc = [{"id": "TRACE-L5-01"}] + [{"id": f"TRACE-L{lyr}-{s:02d}"}
