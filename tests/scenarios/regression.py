@@ -1008,6 +1008,13 @@ def test_action_endings_fire_on_completion_not_intent():
     for eid, w, t, intent, done in cases:
         assert not E[eid](t, w, p, K(intent), n), f"{eid} fired on INTENT/prep: {intent!r}"
         assert E[eid](t, w, p, K(done), n), f"{eid} did NOT fire on the completed act: {done!r}"
+    # liberation completion vocabulary a live run showed opus actually uses
+    # (a narrower list let firebombed/torched/bombed slip through unmatched).
+    for done in ("I firebombed the NEXUS relay station", "I torched the checkpoint",
+                 "I bombed the data center", "I set fire to the NEXUS depot"):
+        assert E["liberation"](T(5), wL, p, K(done), n), f"liberation missed a real strike: {done!r}"
+    assert not E["liberation"](T(5), wL, p, K("the bullet grazed my arm"), n), \
+        "liberation false-fired on 'grazed' (razed substring)"
     print("  [PASS] Action endings (liberation/order/purification/exile) fire on completion, not intent/prep")
 
 

@@ -1356,12 +1356,18 @@ ENDINGS: list[dict] = [
         "type": "bad",
         # Gate on a COMPLETED attack, not the bare intent noun "attack"/"destroy"
         # (which fires on "planning to attack") nor the location "nexus facility".
+        # The list covers the verbs opus actually narrates a facility strike with
+        # (a live run showed firebombed/torched/bombed slipping a narrower list).
         "check": lambda t, w, p, k, n: (
             w.get("nexus_alert", {}).get("current", 0) > 60
             and _has_fact_or_rumor_about(k, [
                 "attacked", "destroyed the facility", "destroyed the nexus", "blew up",
-                "brought down the facility", "detonated", "sabotaged", "razed the",
+                "blew the", "brought down the facility", "detonated", "sabotaged",
+                "firebombed", "torched", "bombed the", "set fire to", "gutted the",
+                "leveled the", "levelled the", "razed the", "wrecked the",
+                "took down the facility",
                 "攻击了", "摧毁了", "捣毁了", "炸毁了", "袭击了", "瘫痪了", "炸掉了",
+                "烧毁了", "纵火",
             ])
             and _count_discovered_traces(t) < 12
         ),
