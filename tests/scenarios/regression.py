@@ -832,6 +832,42 @@ def test_difficulty_overrides_do_not_leak_deep_layers():
     print("  [PASS] Difficulty overrides + deep base gates no longer leak on signal/implant/sector/voice/fatal/corporate; real subjects still fire")
 
 
+def test_record_dedups_cross_channel_double_writes():
+    """The bypass model records the same revelation in BOTH channels — a sourced
+    add_knowledge fact AND the plain `record` string — producing near-identical
+    fact pairs that clutter the panel and inflate _count_sources_about gates. The
+    record pass must drop a same-turn near-duplicate (keeping the better-sourced
+    add_knowledge one), while never dropping a genuinely new fact or one that
+    merely shares words with an OLDER fact.
+    """
+    from engine.claude_code_engine import _apply_record
+
+    # add_knowledge already wrote a sourced fact THIS turn (turn 5); an OLDER
+    # fact (turn 2) shares vocabulary with a new one we still want to keep.
+    knowledge = {"facts": [
+        {"id": "FACT-001", "description": "Ghost is a hacker who cracked NEXUS security years ago, then vanished",
+         "source": "Mira", "turn": 5},
+        {"id": "FACT-002", "description": "The Undercroft is old transit tunnels beneath The Sprawl",
+         "source": "Patch", "turn": 2},
+    ]}
+    records = [
+        # near-dup reword of FACT-001 (same turn) → dropped
+        "Ghost is a hacker who cracked NEXUS security years ago and then vanished",
+        # genuinely new fact → kept
+        "Mira agreed to put word out to her friends in the market",
+        # shares words with the OLDER FACT-002 but is a distinct fact → kept
+        "Sector 7 is a restricted NEXUS facility, not old transit tunnels",
+    ]
+    notifs = _apply_record(records, knowledge, turn=5)
+    descs = [f["description"] for f in knowledge["facts"]]
+    assert len(knowledge["facts"]) == 4, f"expected 4 facts (1 dup dropped), got {len(knowledge['facts'])}: {descs}"
+    assert not any("and then vanished" in d for d in descs), "cross-channel near-dup was not dropped"
+    assert any("put word out" in d for d in descs), "a genuinely new fact was dropped"
+    assert any("Sector 7" in d for d in descs), "a distinct fact sharing words with an older one was wrongly dropped"
+    assert len(notifs) == 2, f"expected 2 new-fact notifications, got {len(notifs)}"
+    print("  [PASS] record pass drops same-turn cross-channel near-dupes, keeps new + old-vocabulary-overlap facts")
+
+
 def test_endgame_and_deep_gates_from_live_bridge_run():
     """Pins the fixes from the live the_bridge playthrough: (C1) `symbiosis` must
     not end the run mid-conversation off lore alone; (C2) the L5-01 convergence
@@ -1880,6 +1916,7 @@ def main():
         test_act_on_evidence_discovery_route,
         test_examine_implant_does_not_firehose_deep_layers,
         test_difficulty_overrides_do_not_leak_deep_layers,
+        test_record_dedups_cross_channel_double_writes,
         test_endgame_and_deep_gates_from_live_bridge_run,
         test_cancel_kills_only_this_threads_cli_child,
         test_l3_08_reachable_on_certified_wave10_knowledge,

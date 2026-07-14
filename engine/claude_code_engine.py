@@ -1334,6 +1334,42 @@ def _fact_key(desc: str) -> str:
     return _FACT_KEY_STRIP.sub("", str(desc).strip().lower())
 
 
+_TOKEN_RE = re.compile(r"[\w']+", re.UNICODE)
+
+
+def _fact_tokens(desc: str) -> set:
+    """Word-token set of a fact description (for near-duplicate detection)."""
+    return set(_TOKEN_RE.findall(str(desc).lower()))
+
+
+def _is_near_dup(new_tokens: set, prior: list) -> bool:
+    """True if *new_tokens* is a near-duplicate of any fact in *prior* — a list of
+    token sets. Catches the model re-recording the SAME fact in two channels
+    (add_knowledge with a real source + the `record` list as "observed") with
+    trivially reworded text. Deliberately conservative and used ONLY against
+    facts written in the SAME turn, so a genuinely new fact that merely shares
+    vocabulary with an OLDER one is never dropped:
+      * high Jaccard overlap (>= 0.75), or
+      * one description's tokens fully contain the other's (a truncation /
+        expansion of the same statement), the shorter having >= 4 tokens.
+    """
+    if len(new_tokens) < 4:
+        return False
+    for pt in prior:
+        if len(pt) < 4:
+            continue
+        inter = len(new_tokens & pt)
+        if inter == 0:
+            continue
+        union = len(new_tokens | pt)
+        if union and inter / union >= 0.75:
+            return True
+        smaller = new_tokens if len(new_tokens) <= len(pt) else pt
+        if len(smaller) >= 4 and smaller <= (new_tokens | pt) and inter == len(smaller):
+            return True
+    return False
+
+
 def _apply_record(records, knowledge: dict, turn: int) -> list[dict]:
     """Persist the model's `record` list (short fact strings) into knowledge.facts.
 
@@ -1356,11 +1392,22 @@ def _apply_record(records, knowledge: dict, turn: int) -> list[dict]:
             except ValueError:
                 pass
     next_num = max(nums, default=0) + 1
+    # Facts already written THIS turn — i.e. by add_knowledge, which runs before
+    # us (Step 7 → Step 7c). The model routinely records the same revelation in
+    # BOTH channels (a sourced add_knowledge fact + the plain `record` string),
+    # so drop a record entry that near-duplicates one already logged this turn,
+    # keeping the better-sourced add_knowledge version. Scoped to this turn only
+    # so a genuinely new fact sharing words with an OLDER one is never dropped.
+    same_turn = [_fact_tokens(f.get("description", "")) for f in facts
+                 if f.get("turn") == turn]
     notifs = []
     for r in records:
         desc = (str(r.get("description", "")) if isinstance(r, dict) else str(r)).strip()
         key = _fact_key(desc)
         if len(desc) < 4 or key in existing:
+            continue
+        toks = _fact_tokens(desc)
+        if _is_near_dup(toks, same_turn):
             continue
         facts.append({
             "id": f"FACT-{next_num:03d}", "description": desc,
@@ -1368,6 +1415,7 @@ def _apply_record(records, knowledge: dict, turn: int) -> list[dict]:
             "_layer": {"hidden": True, "value": 1},
         })
         existing.add(key)
+        same_turn.append(toks)
         next_num += 1
         notifs.append({"entry_type": "fact"})
     return notifs
