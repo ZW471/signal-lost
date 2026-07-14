@@ -1004,6 +1004,10 @@ def test_substring_false_fires_and_symbiosis_force_guard():
     tl5 = {"discovered": [{"id": "TRACE-L5-01"}]}
     assert not C["TRACE-L5-08"](K("an emergency emerged from the network"), tl5, n, p, w), \
         "L5-08 fired on 'merge' inside emerge/emergency"
+    assert not C["TRACE-L4-09"](K("detention flag RESONANCE-positive on the manifest"), t, n, p, w), \
+        "L4-09 fired on 'resonance' inside 'resonance-positive'"
+    assert C["TRACE-L4-09"](K("靠近深处时，植入体的共鸣越来越强。"), t, n, p, w), \
+        "L4-09 zh implant-resonance-gradient regressed"
     # Genuine subject matter still fires.
     assert C["TRACE-L3-08"](K("the entity in the network tried to communicate"), t, n, p, w)
     assert C["TRACE-L4-08"](K(ev=["the EMP trigger mechanism is still operational"]), t, n, p, w)
@@ -1021,7 +1025,17 @@ def test_substring_false_fires_and_symbiosis_force_guard():
         "symbiosis mislabeled a FORCED merge as the good communion ending"
     assert E["symbiosis"](t_deep, w_ok, {"turn": 12}, k_communion, n), \
         "symbiosis did not fire on a genuine consensual communion"
-    print("  [PASS] Unanchored substrings (entity/emp/sector-7) no longer false-fire; symbiosis rejects a forced merge")
+
+    # exposure must fire on the SENT beat, not the PREP beat (which gave a
+    # "You do not send it. Not yet." cliffhanger under a "The Broadcast" banner).
+    w_hot = {"nexus_alert": {"current": 50}}
+    k_prep = K("I armed the full exposure package as a dead-man's broadcast on the freeband, ready to transmit")
+    k_sent = K("I hit send; the broadcast went out across every screen and the whole city saw the truth")
+    assert not E["exposure"]({"discovered": []}, w_hot, {"turn": 10}, k_prep, n), \
+        "exposure fired on the prep/arming beat (bare 'broadcast'/'freeband')"
+    assert E["exposure"]({"discovered": []}, w_hot, {"turn": 10}, k_sent, n), \
+        "exposure did not fire once the broadcast actually went out"
+    print("  [PASS] Unanchored substrings (entity/emp/sector-7/resonance-positive) no longer false-fire; symbiosis rejects a forced merge; exposure fires on send not prep")
 
 
 def test_cancel_kills_only_this_threads_cli_child():

@@ -802,10 +802,19 @@ TRACE_CONDITIONS: list[dict] = [
      # GRADIENT without any of those nouns ("静水井深处是Signal更强的方向",
      # "Signal残留沿冷链路线继续向下") — the clause-gated route catches that
      # shape (see _signal_gradient_in_one_entry).
+     # bare "resonance" substring-matched "RESONANCE-positive" (a NEXUS detention
+     # manifest category), leaking this Layer-4 reveal on turn 3; and bare "共鸣"
+     # matches the place-name 共鸣所. Anchor both to THE Resonance / its chamber.
      "check": lambda k, t, n, p, w: (
          _has_fact_or_rumor_about(k, [
              "echo", "回响", "回声", "signal's voice", "信号的声音", "clearer",
-             "resonance", "共鸣"])
+             "the resonance", "resonance chamber", "resonance grows", "approach the resonance",
+             "near the resonance", "共鸣室", "共鸣所", "接近共鸣",
+             # zh resonance-GRADIENT (the implant's/Signal's resonance growing) —
+             # the legit "共鸣越来越强" shape, anchored so it doesn't match the bare
+             # place-name 共鸣所 the way bare "共鸣" did.
+             "植入体的共鸣", "信号共鸣", "植入体共鸣", "共鸣越来越",
+             "共鸣增强", "共鸣更强", "共鸣变强", "共鸣更清晰"])
          or _signal_gradient_in_one_entry(k))},
 
     # =========================================================================
@@ -1320,12 +1329,23 @@ ENDINGS: list[dict] = [
         "name": "The Broadcast",
         "name_zh": "广播",
         "type": "neutral",
+        # Gate on a COMPLETED transmit — the truth actually reaching the city.
+        # The bare noun "broadcast"/"expose"/"freeband"/"public airwaves" matched
+        # the model PREPARING a transmitter ("armed the full exposure package as a
+        # dead-man's broadcast... ready to transmit"), firing this ending on the
+        # prep beat with a "You do not send it. Not yet." cliffhanger under a
+        # "The Broadcast" banner. It must fire on the SEND beat, which lands.
         "check": lambda t, w, p, k, n: (
             w.get("nexus_alert", {}).get("current", 0) >= 40
             and _has_fact_or_rumor_about(k, [
-                "broadcast", "broadcasted", "expose", "exposed the truth", "leaked the truth",
-                "went public", "freeband", "public airwaves",
-                "广播", "曝光", "揭露真相", "公之于众", "公开真相", "自由频段", "向全城",
+                "broadcast the truth", "broadcasted the truth", "the broadcast went out",
+                "broadcast went live", "went live", "on air", "went public",
+                "across every screen", "on every screen", "every public screen",
+                "aired the truth", "transmitted the truth", "transmitted the proof",
+                "the whole city saw", "the city saw the truth", "exposed the truth",
+                "leaked the truth", "went out across", "hit send",
+                "揭露真相", "公之于众", "公开真相", "向全城", "真相传遍", "向全城播出",
+                "广播已发出", "已经播出", "公开曝光",
             ])
         ),
     },
