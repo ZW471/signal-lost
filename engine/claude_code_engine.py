@@ -236,9 +236,10 @@ actual choices. Never use this to end the game early or to escape a hard moment.
 
 **location_update** (provide when scene changes): Provide this whenever the player \
 moves OR when NPCs arrive/leave OR when time shifts significantly (period change). \
-Not just on movement — atmosphere and people change over time too. If you called \
-`update_location` in tool_calls, also provide the full new location description:
-`{"description": "...", "exits": {"north": "Place", ...}, "points_of_interest": ["..."], "npcs_present": ["..."]}`
+Not just on movement — atmosphere and people change over time too. When the player \
+MOVES to a new district, area, room, or building, you MUST set `district` and \
+`area` here so the HUD tracks the move (do not leave them on the old location):
+`{"district": "The Undercroft", "area": "Line-4 Platform", "description": "...", "exits": {"north": "Place", ...}, "points_of_interest": ["..."], "npcs_present": ["..."]}`
 
 **suggested_actions** (required): An array of 1-3 SHORT, simple, distinct next \
 actions the player could take, written as direct commands in the player's language \
@@ -1714,7 +1715,16 @@ def run_turn(session_dir: str, player_input: str, mode: str = "play") -> dict:
                 "上": "up", "下": "down",
             }
             loc_update["exits"] = {_ZH_TO_EN.get(k, k).lower(): v for k, v in exits.items()}
-        for field in ("description", "exits", "points_of_interest", "npcs_present"):
+        # district/area/zone included so a narrated MOVE actually updates the HUD.
+        # The model reliably emits location_update (new description) on a scene
+        # change but often forgets the SEPARATE update_location tool call that
+        # carries district/area — so the description advanced into the Undercroft
+        # while the HUD still read "Neon Row" for several turns. Applying the
+        # identity + scene-meta fields from location_update too closes that gap
+        # (only fields the model actually provides are touched).
+        for field in ("description", "exits", "points_of_interest", "npcs_present",
+                      "district", "area", "zone", "signal_strength",
+                      "danger_level", "nexus_patrol"):
             if field in loc_update:
                 location[field] = loc_update[field]
 
