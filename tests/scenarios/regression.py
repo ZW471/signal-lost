@@ -926,6 +926,52 @@ def test_endgame_and_deep_gates_from_live_bridge_run():
     print("  [PASS] Live-bridge-run fixes hold: C3 gates tightened, C2 climax fires, C1 symbiosis can't end mid-dialogue")
 
 
+def test_all_nine_endings_reachable_and_correctly_ordered():
+    """Every one of the 9 endings must be REACHABLE and win first-match from a
+    state crafted to resolve to it. Guards the load-bearing ENDINGS ordering
+    against gate tightening/loosening (e.g. the symbiosis force-guard, the
+    substring anchors) silently walling an ending off or letting a looser one
+    shadow it. Complements good_ending_reachability.py (which only exercises the
+    two good endings from one deep state).
+    """
+    from engine.claude_code_engine import _run_consequence
+    from engine.game_data import ENDINGS
+
+    I = {"current": 3, "max": 3}
+
+    def K(*d):
+        return {"facts": [{"description": x, "turn": 20} for x in d], "rumors": [],
+                "evidence": [{"description": x} for x in d], "theories": [], "connections": []}
+
+    def T(ids, count):
+        disc = [{"id": i} for i in ids]
+        fill = [f"TRACE-L{lyr}-{s:02d}" for lyr in (1, 2, 3) for s in range(1, 12)]
+        for f in fill:
+            if len(disc) >= count:
+                break
+            if f not in ids:
+                disc.append({"id": f})
+        return {"discovered": disc}
+
+    # (player, traces, world, knowledge, npcs) crafted to resolve to each ending.
+    cases = {
+        "the_bridge":   (dict(turn=20, integrity=I), T(["TRACE-L5-01"], 18), {"nexus_alert": {"current": 10}, "fragment_decay": {"current": 0}}, K("we reached mutual consent, the bridge holds, still singular"), {"npcs": []}),
+        "symbiosis":    (dict(turn=20, integrity=I), T(["TRACE-L5-01"], 12), {"nexus_alert": {"current": 10}, "fragment_decay": {"current": 0}}, K("Echo offered communion, we became one with the signal"), {"npcs": []}),
+        "exposure":     (dict(turn=10, integrity=I), T([], 3), {"nexus_alert": {"current": 50}, "fragment_decay": {"current": 0}}, K("I went public on the free airwaves and broadcast the truth to the whole city"), {"npcs": []}),
+        "liberation":   (dict(turn=10, integrity=I), T([], 5), {"nexus_alert": {"current": 65}, "fragment_decay": {"current": 0}}, K("we attacked and destroyed the nexus facility"), {"npcs": []}),
+        "ascension":    (dict(turn=20, integrity=I), T([], 5), {"nexus_alert": {"current": 10}, "fragment_decay": {"current": 0}}, K("I forced the merge, dragging every mind into the core against their will"), {"npcs": []}),
+        "order":        (dict(turn=20, integrity=I), T([], 5), {"nexus_alert": {"current": 85}, "fragment_decay": {"current": 0}}, K("I chose to cooperate with nexus and serve nexus"), {"npcs": []}),
+        "purification": (dict(turn=20, integrity=I), T([], 5), {"nexus_alert": {"current": 30}, "fragment_decay": {"current": 0}}, K("I chose to destroy the fragment for good and purify the fragment"), {"npcs": []}),
+        "silence":      (dict(turn=100, integrity=I), T([], 2), {"nexus_alert": {"current": 10}, "fragment_decay": {"current": 0}}, K("the city hums on, nothing resolved"), {"npcs": []}),
+        "exile":        (dict(turn=20, integrity=I), T([], 3), {"nexus_alert": {"current": 10}, "fragment_decay": {"current": 0}}, K("I left neo-kowloon for good and fled the city"), {"npcs": []}),
+    }
+    assert set(cases) == {e["id"] for e in ENDINGS}, "ENDINGS changed — update the reachability cases"
+    for want, (p, t, w, k, n) in cases.items():
+        go, end, _cause = _run_consequence(p, t, w, k, n)
+        assert go and end == want, f"{want} not reachable / mis-ordered (fired {end!r}, go={go})"
+    print("  [PASS] All 9 endings reachable and correctly first-matched")
+
+
 def test_substring_false_fires_and_symbiosis_force_guard():
     """Pins fixes from the corporate-exile/paranoid forced-merge run: unanchored
     substrings must not false-fire deep traces, and a FORCED merge must never be
@@ -1981,6 +2027,7 @@ def main():
         test_difficulty_overrides_do_not_leak_deep_layers,
         test_record_dedups_cross_channel_double_writes,
         test_endgame_and_deep_gates_from_live_bridge_run,
+        test_all_nine_endings_reachable_and_correctly_ordered,
         test_substring_false_fires_and_symbiosis_force_guard,
         test_cancel_kills_only_this_threads_cli_child,
         test_l3_08_reachable_on_certified_wave10_knowledge,
