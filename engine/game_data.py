@@ -1354,11 +1354,14 @@ ENDINGS: list[dict] = [
         "name": "Liberation",
         "name_zh": "解放",
         "type": "bad",
+        # Gate on a COMPLETED attack, not the bare intent noun "attack"/"destroy"
+        # (which fires on "planning to attack") nor the location "nexus facility".
         "check": lambda t, w, p, k, n: (
             w.get("nexus_alert", {}).get("current", 0) > 60
             and _has_fact_or_rumor_about(k, [
-                "attack", "destroy", "nexus facility",
-                "攻击", "摧毁", "捣毁", "瘫痪", "炸毁", "袭击", "连结设施", "数据中心",
+                "attacked", "destroyed the facility", "destroyed the nexus", "blew up",
+                "brought down the facility", "detonated", "sabotaged", "razed the",
+                "攻击了", "摧毁了", "捣毁了", "炸毁了", "袭击了", "瘫痪了", "炸掉了",
             ])
             and _count_discovered_traces(t) < 12
         ),
@@ -1387,12 +1390,13 @@ ENDINGS: list[dict] = [
         "check": lambda t, w, p, k, n: (
             (w.get("nexus_alert", {}).get("current", 0) > 80
              and _has_fact_or_rumor_about(k, [
-                 # cooperation-SPECIFIC — never the bare token "nexus", which
-                 # false-matches the many facts naming NEXUS as the adversary and
-                 # wrongly fired `order` on high-alert resistance/exposure runs.
-                 "cooperate with nexus", "side with nexus", "join nexus", "serve nexus",
-                 "cooperation", "collaborate",
-                 "与连结合作", "归顺连结", "投靠连结", "效忠连结", "为连结效力", "归顺", "投靠", "效忠",
+                 # cooperation-SPECIFIC and COMPLETED — never the bare token
+                 # "nexus" (matches the many facts naming NEXUS the adversary), and
+                 # not the present-tense intent "cooperate with nexus" (fires on
+                 # "considering whether to cooperate"). Require the committed act.
+                 "cooperated with nexus", "sided with nexus", "joined nexus", "serve nexus",
+                 "pledged to nexus", "swore to nexus", "collaborated with nexus",
+                 "归顺连结", "投靠连结", "效忠连结", "为连结效力", "归顺了", "投靠了", "效忠了",
              ]))
             or (_npc_trust_at_least(n, "orin", "trusted")
                 and _has_fact_or_rumor_about(k, [
@@ -1410,10 +1414,18 @@ ENDINGS: list[dict] = [
             # Fragment-DESTRUCTION specific — never the bare "净化"/"purify", which
             # false-match NEXUS's "净化脚本" (anti-broadcast purge scripts) and other
             # incidental uses, mislabeling broadcast/exposure runs as purification.
+            # COMPLETED destruction. The old present-tense "destroy the fragment"
+            # fired on the PREP beat ("rigged to destroy the fragment") yet MISSED
+            # the natural past-tense completion ("I destroyed the fragment") — so
+            # the ending was effectively unreachable in real EN play. Require the
+            # done act (or the Lian alliance, a committed choice).
             _has_fact_or_rumor_about(k, [
-                "purify the fragment", "destroy the fragment", "destroy fragment",
-                "purge the fragment", "lian alliance", "joined lian", "join the lian",
-                "净化碎片", "净化了碎片", "销毁碎片", "摧毁碎片", "清除碎片", "莲同盟", "莲联盟",
+                "destroyed the fragment", "purified the fragment", "purged the fragment",
+                "erased the fragment", "unmade the fragment", "the fragment is destroyed",
+                "the fragment is gone", "the fragment was destroyed",
+                "lian alliance", "joined lian", "join the lian",
+                "净化了碎片", "销毁了碎片", "摧毁了碎片", "清除了碎片", "碎片已销毁",
+                "碎片被摧毁", "莲同盟", "莲联盟",
             ])
         ),
     },
@@ -1435,9 +1447,14 @@ ENDINGS: list[dict] = [
             # Action of LEAVING the city — not the bare word "exile"/"流亡"/"流放",
             # which collide with the corporate_exile background's own identity lore
             # and false-fired the ending on turn 1.
+            # Drop only the PROGRESSIVE "leaving neo-kowloon" (mid-departure, fired
+            # while merely packing). "leave neo-kowloon" is KEPT — it matches the
+            # completion narration "you finally leave Neo-Kowloon behind" and does
+            # NOT substring-match "leaving neo-kowloon".
             _has_fact_or_rumor_about(k, [
-                "leave neo-kowloon", "left neo-kowloon", "leaving neo-kowloon",
-                "fled the city", "fled neo-kowloon", "escaped neo-kowloon", "out of neo-kowloon",
+                "leave neo-kowloon", "left neo-kowloon", "fled the city", "fled neo-kowloon",
+                "escaped neo-kowloon", "out of neo-kowloon", "gone from neo-kowloon",
+                "boarded the transport out",
                 "离开新九龙", "逃离新九龙", "逃出新九龙", "离开这座城", "逃出这座城", "远走他乡",
             ])
         ),

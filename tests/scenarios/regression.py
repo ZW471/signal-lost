@@ -961,7 +961,7 @@ def test_all_nine_endings_reachable_and_correctly_ordered():
         "liberation":   (dict(turn=10, integrity=I), T([], 5), {"nexus_alert": {"current": 65}, "fragment_decay": {"current": 0}}, K("we attacked and destroyed the nexus facility"), {"npcs": []}),
         "ascension":    (dict(turn=20, integrity=I), T([], 5), {"nexus_alert": {"current": 10}, "fragment_decay": {"current": 0}}, K("I forced the merge, dragging every mind into the core against their will"), {"npcs": []}),
         "order":        (dict(turn=20, integrity=I), T([], 5), {"nexus_alert": {"current": 85}, "fragment_decay": {"current": 0}}, K("I chose to cooperate with nexus and serve nexus"), {"npcs": []}),
-        "purification": (dict(turn=20, integrity=I), T([], 5), {"nexus_alert": {"current": 30}, "fragment_decay": {"current": 0}}, K("I chose to destroy the fragment for good and purify the fragment"), {"npcs": []}),
+        "purification": (dict(turn=20, integrity=I), T([], 5), {"nexus_alert": {"current": 30}, "fragment_decay": {"current": 0}}, K("I destroyed the fragment for good; the fragment is gone"), {"npcs": []}),
         "silence":      (dict(turn=100, integrity=I), T([], 2), {"nexus_alert": {"current": 10}, "fragment_decay": {"current": 0}}, K("the city hums on, nothing resolved"), {"npcs": []}),
         "exile":        (dict(turn=20, integrity=I), T([], 3), {"nexus_alert": {"current": 10}, "fragment_decay": {"current": 0}}, K("I left neo-kowloon for good and fled the city"), {"npcs": []}),
     }
@@ -970,6 +970,45 @@ def test_all_nine_endings_reachable_and_correctly_ordered():
         go, end, _cause = _run_consequence(p, t, w, k, n)
         assert go and end == want, f"{want} not reachable / mis-ordered (fired {end!r}, go={go})"
     print("  [PASS] All 9 endings reachable and correctly first-matched")
+
+
+def test_action_endings_fire_on_completion_not_intent():
+    """Action-triggered endings must fire on the COMPLETED act, not on prep/intent
+    — otherwise they end on a cliffhanger (the exposure "You do not send it. Not
+    yet." bug) or, for purification, missed the natural past tense entirely and
+    were unreachable. Pins prep/intent = silent, completion = fires, for all four.
+    """
+    from engine.game_data import ENDINGS
+
+    E = {e["id"]: e["check"] for e in ENDINGS}
+
+    def K(*d):
+        return {"facts": [{"description": x, "turn": 20} for x in d], "rumors": [],
+                "evidence": [], "theories": [], "connections": []}
+
+    def T(count):
+        return {"discovered": [{"id": f"TRACE-L{l}-{s:02d}"} for l in (1, 2) for s in range(1, 7)][:count]}
+
+    p = {"turn": 20}
+    n = {"npcs": []}
+    wL = {"nexus_alert": {"current": 65}}
+    wO = {"nexus_alert": {"current": 85}}
+
+    # (ending, world, traces, intent-text, completion-text)
+    cases = [
+        ("liberation", wL, T(5), "I am planning to attack the nexus facility and rig charges to destroy it",
+         "we attacked and destroyed the nexus facility"),
+        ("order", wO, T(5), "I am considering whether to cooperate with nexus",
+         "I sided with nexus and now serve nexus"),
+        ("purification", {}, T(5), "the charges are rigged to destroy the fragment, not yet triggered",
+         "I destroyed the fragment for good; the fragment is gone"),
+        ("exile", {}, T(3), "I am leaving neo-kowloon soon, packing my things",
+         "I left neo-kowloon for good and fled the city"),
+    ]
+    for eid, w, t, intent, done in cases:
+        assert not E[eid](t, w, p, K(intent), n), f"{eid} fired on INTENT/prep: {intent!r}"
+        assert E[eid](t, w, p, K(done), n), f"{eid} did NOT fire on the completed act: {done!r}"
+    print("  [PASS] Action endings (liberation/order/purification/exile) fire on completion, not intent/prep")
 
 
 def test_substring_false_fires_and_symbiosis_force_guard():
@@ -2042,6 +2081,7 @@ def main():
         test_record_dedups_cross_channel_double_writes,
         test_endgame_and_deep_gates_from_live_bridge_run,
         test_all_nine_endings_reachable_and_correctly_ordered,
+        test_action_endings_fire_on_completion_not_intent,
         test_substring_false_fires_and_symbiosis_force_guard,
         test_cancel_kills_only_this_threads_cli_child,
         test_l3_08_reachable_on_certified_wave10_knowledge,
