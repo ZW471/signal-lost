@@ -509,8 +509,8 @@ TRACE_CONDITIONS: list[dict] = [
      # mystery on turn 1. Keep the two earned routes: a neutral-or-better Mira who
      # speaks of the vanishings, or ≥2 independent sources reporting them.
      "check": lambda k, t, n, p, w: (
-         _npc_trust_at_least(n, "mira", "neutral") and _has_fact_or_rumor_about(k, ["disappear", "消失", "missing", "失踪"])
-     ) or _count_sources_about(k, ["disappear", "消失", "missing", "失踪"]) >= 2},
+         _npc_trust_at_least(n, "mira", "neutral") and _has_fact_or_rumor_about(k, ["disappear", "vanish", "gone missing", "消失", "missing", "失踪"])
+     ) or _count_sources_about(k, ["disappear", "vanish", "gone missing", "消失", "missing", "失踪"]) >= 2},
     {"id": "TRACE-L2-02", "layer": 2,
      "description": "The Listeners exist and protect Signal-sensitive people",
      "description_zh": "聆听者组织存在，并保护对信号敏感的人",
@@ -865,8 +865,10 @@ TRACE_CONDITIONS: list[dict] = [
     {"id": "TRACE-L5-03", "layer": 5,
      "description": "Restoration requires both human will and the proto-consciousness's consent",
      "description_zh": "恢复连接需要人类的意志和原意识的同意",
+     # bare "will" is the English modal — it matches any "…will…" once L5-01 is
+     # in. The consent/mutual anchors carry reachability; use "human/free will".
      "check": lambda k, t, n, p, w: (
-         _trace_discovered(t, "TRACE-L5-01") and _has_fact_or_rumor_about(k, ["consent", "同意", "mutual", "will", "意志"]))},
+         _trace_discovered(t, "TRACE-L5-01") and _has_fact_or_rumor_about(k, ["consent", "同意", "mutual", "human will", "free will", "willpower", "意志"]))},
     {"id": "TRACE-L5-04", "layer": 5,
      "description": "The Resonance chamber is where the original Severance epicenter lies",
      "description_zh": "共鸣室是最初断离震中所在之处",
@@ -874,8 +876,10 @@ TRACE_CONDITIONS: list[dict] = [
     {"id": "TRACE-L5-05", "layer": 5,
      "description": "Echo can become fully coherent through deep communion with the bridge",
      "description_zh": "通过与桥梁的深度交融，回响可以完全清晰化",
+     # bare "deep" fires on "deeper"/"deep resonance" once L5-01 is in; the
+     # coherent/communion anchors carry it (the trace is about DEEP COMMUNION).
      "check": lambda k, t, n, p, w: (
-         _trace_discovered(t, "TRACE-L5-01") and _has_fact_or_rumor_about(k, ["coherent", "清晰", "communion", "交融", "deep"]))},
+         _trace_discovered(t, "TRACE-L5-01") and _has_fact_or_rumor_about(k, ["coherent", "清晰", "communion", "deep communion", "交融"]))},
     {"id": "TRACE-L5-06", "layer": 5,
      "description": "Multiple endings exist — symbiosis, bridge, or destruction",
      "description_zh": "存在多种结局——共生、桥梁或毁灭",
@@ -1565,8 +1569,8 @@ TRACE_DIFFICULTY_OVERRIDES: dict[str, dict] = {
         "TRACE-L2-01": lambda k, t, n, p, w: (
             # Real disappearance evidence or 3+ sources — NOT the bare "signal"
             # topic (every Signal fact carries it; leaked on turn-1 implant examine).
-            _has_evidence(k, ["disappear", "missing", "失踪", "消失"])
-            or (_count_sources_about(k, ["disappear", "missing", "失踪", "消失"]) >= 3)
+            _has_evidence(k, ["disappear", "vanish", "gone missing", "missing", "失踪", "消失"])
+            or (_count_sources_about(k, ["disappear", "vanish", "gone missing", "missing", "失踪", "消失"]) >= 3)
         ),
         "TRACE-L2-03": lambda k, t, n, p, w: (
             # Sector-7 / acquisitions evidence (paid from Ghost or decrypted cipher).
@@ -1581,8 +1585,8 @@ TRACE_DIFFICULTY_OVERRIDES: dict[str, dict] = {
     },
     "reckless": {
         "TRACE-L2-01": lambda k, t, n, p, w: (
-            _has_evidence(k, ["disappear", "missing", "失踪", "消失"])
-            and _count_sources_about(k, ["disappear", "missing", "失踪", "消失"]) >= 3
+            _has_evidence(k, ["disappear", "vanish", "gone missing", "missing", "失踪", "消失"])
+            and _count_sources_about(k, ["disappear", "vanish", "gone missing", "missing", "失踪", "消失"]) >= 3
         ),
         "TRACE-L2-03": lambda k, t, n, p, w: (
             _has_evidence(k, ["sector 7", "第七区", "acquisition", "acquisitions", "征集"])
