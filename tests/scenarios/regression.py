@@ -1018,6 +1018,48 @@ def test_action_endings_fire_on_completion_not_intent():
     print("  [PASS] Action endings (liberation/order/purification/exile) fire on completion, not intent/prep")
 
 
+def test_action_endings_fire_on_recent_act_not_stale():
+    """An action ending must fire ON the act turn (a landed climax), not on a
+    later unrelated beat once the keyword is banked in append-only knowledge — a
+    live liberation run ended on a stray turn-8 evasion beat because a turn-2
+    strike keyword still matched. The act branches are now recency-gated; STANDING
+    decisions (Lian/Orin alliances) still persist regardless of recency.
+    """
+    from engine.game_data import ENDINGS
+
+    E = {e["id"]: e["check"] for e in ENDINGS}
+    p = {"turn": 20}
+    n = {"npcs": []}
+    n_orin = {"npcs": [{"name": "Orin", "trust_level": "trusted"}]}
+
+    def K(turn, *d):
+        return {"facts": [{"description": x, "turn": turn} for x in d], "rumors": [],
+                "evidence": [], "theories": [], "connections": []}
+
+    def T(c):
+        return {"discovered": [{"id": f"TRACE-L1-{s:02d}"} for s in range(1, min(c, 8) + 1)]
+                + [{"id": f"TRACE-L2-{s:02d}"} for s in range(1, max(0, c - 8) + 1)]}
+
+    w_lib, w_ord = {"nexus_alert": {"current": 65}}, {"nexus_alert": {"current": 85}}
+    empty_t = {"discovered": []}
+
+    # RECENT act (recorded this turn) fires and lands.
+    assert E["liberation"](T(5), w_lib, p, K(20, "I firebombed the NEXUS relay station"), n)
+    assert E["exile"](empty_t, {}, p, K(20, "I left neo-kowloon for good"), n)
+    assert E["purification"](empty_t, {}, p, K(20, "I destroyed the fragment for good"), n)
+    # STALE act (banked 17 turns ago) must NOT fire on an unrelated later turn.
+    assert not E["liberation"](T(5), w_lib, p, K(3, "I firebombed the NEXUS relay station"), n), \
+        "liberation fired on a stale turn-3 strike (cliffhanger regressed)"
+    assert not E["exile"](empty_t, {}, p, K(3, "I left neo-kowloon for good"), n), \
+        "exile fired on a stale leave act"
+    # STANDING alliances persist — reachable regardless of when they were formed.
+    assert E["purification"](empty_t, {}, p, K(3, "I formed a lian alliance"), n), \
+        "purification lost the standing Lian-alliance route"
+    assert E["order"](empty_t, w_ord, p, K(3, "the orin alliance was sealed"), n_orin), \
+        "order lost the standing Orin-alliance route"
+    print("  [PASS] Action endings fire on the RECENT act (land the climax); standing alliances persist")
+
+
 def test_substring_false_fires_and_symbiosis_force_guard():
     """Pins fixes from the corporate-exile/paranoid forced-merge run: unanchored
     substrings must not false-fire deep traces, and a FORCED merge must never be
@@ -2089,6 +2131,7 @@ def main():
         test_endgame_and_deep_gates_from_live_bridge_run,
         test_all_nine_endings_reachable_and_correctly_ordered,
         test_action_endings_fire_on_completion_not_intent,
+        test_action_endings_fire_on_recent_act_not_stale,
         test_substring_false_fires_and_symbiosis_force_guard,
         test_cancel_kills_only_this_threads_cli_child,
         test_l3_08_reachable_on_certified_wave10_knowledge,

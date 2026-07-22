@@ -1252,6 +1252,36 @@ def _forced_merge_this_turn(knowledge: dict, player: dict, recency: int = 2) -> 
     return False
 
 
+def _recent_act(knowledge: dict, keywords: list[str], player: dict, recency: int = 2) -> bool:
+    """True when one of *keywords* appears in a knowledge entry recorded within
+    *recency* turns of the current turn.
+
+    Action-triggered endings (broadcast / attack / destroy-fragment / leave) key
+    off a one-off ACT the model records as a fact. Because knowledge is append-
+    only, a bare presence check fires the ending on ANY later turn once the
+    keyword is banked — so an early strike surfaced `liberation` on an unrelated
+    turn-8 evasion beat (a cliffhanger that never lands). Requiring the act to be
+    RECENT makes the ending fire ON the act turn, which the model narrates as the
+    climax. Standing DECISIONS (a Lian/Orin alliance) use the plain presence
+    check instead — they persist by design. Undated entries are treated as
+    current (the act-specific keywords keep the false-positive risk low), mirror-
+    ing _forced_merge_this_turn."""
+    turn = player.get("turn", 0)
+    kws = [kw.lower() for kw in keywords]
+    for entry_type in _KNOWLEDGE_TYPES:
+        for entry in knowledge.get(entry_type, []):
+            text = _entry_text(entry)
+            if not any(kw in text for kw in kws):
+                continue
+            entry_turn = entry.get("turn")
+            try:
+                if entry_turn is None or int(entry_turn) >= int(turn) - recency:
+                    return True
+            except (TypeError, ValueError):
+                return True
+    return False
+
+
 ENDINGS: list[dict] = [
     {
         # GOOD endings are checked FIRST. They carry the strictest, deepest gates
@@ -1337,7 +1367,7 @@ ENDINGS: list[dict] = [
         # "The Broadcast" banner. It must fire on the SEND beat, which lands.
         "check": lambda t, w, p, k, n: (
             w.get("nexus_alert", {}).get("current", 0) >= 40
-            and _has_fact_or_rumor_about(k, [
+            and _recent_act(k, [
                 "broadcast the truth", "broadcasted the truth", "the broadcast went out",
                 "broadcast went live", "went live", "on air", "went public",
                 "across every screen", "on every screen", "every public screen",
@@ -1346,7 +1376,7 @@ ENDINGS: list[dict] = [
                 "leaked the truth", "went out across", "hit send",
                 "揭露真相", "公之于众", "公开真相", "向全城", "真相传遍", "向全城播出",
                 "广播已发出", "已经播出", "公开曝光",
-            ])
+            ], p)
         ),
     },
     {
@@ -1360,7 +1390,7 @@ ENDINGS: list[dict] = [
         # (a live run showed firebombed/torched/bombed slipping a narrower list).
         "check": lambda t, w, p, k, n: (
             w.get("nexus_alert", {}).get("current", 0) > 60
-            and _has_fact_or_rumor_about(k, [
+            and _recent_act(k, [
                 "attacked", "destroyed the facility", "destroyed the nexus", "blew up",
                 "blew the", "brought down the facility", "detonated", "sabotaged",
                 "firebombed", "torched", "bombed the", "set fire to", "gutted the",
@@ -1368,7 +1398,7 @@ ENDINGS: list[dict] = [
                 "took down the facility",
                 "攻击了", "摧毁了", "捣毁了", "炸毁了", "袭击了", "瘫痪了", "炸掉了",
                 "烧毁了", "纵火",
-            ])
+            ], p)
             and _count_discovered_traces(t) < 12
         ),
     },
@@ -1395,15 +1425,16 @@ ENDINGS: list[dict] = [
         "type": "bad",
         "check": lambda t, w, p, k, n: (
             (w.get("nexus_alert", {}).get("current", 0) > 80
-             and _has_fact_or_rumor_about(k, [
+             and _recent_act(k, [
                  # cooperation-SPECIFIC and COMPLETED — never the bare token
                  # "nexus" (matches the many facts naming NEXUS the adversary), and
                  # not the present-tense intent "cooperate with nexus" (fires on
-                 # "considering whether to cooperate"). Require the committed act.
+                 # "considering whether to cooperate"). Require the committed act,
+                 # RECENTLY (so it lands on the capitulation turn, not a later beat).
                  "cooperated with nexus", "sided with nexus", "joined nexus", "serve nexus",
                  "pledged to nexus", "swore to nexus", "collaborated with nexus",
                  "归顺连结", "投靠连结", "效忠连结", "为连结效力", "归顺了", "投靠了", "效忠了",
-             ]))
+             ], p))
             or (_npc_trust_at_least(n, "orin", "trusted")
                 and _has_fact_or_rumor_about(k, [
                     "cooperate nexus", "orin alliance",
@@ -1425,14 +1456,18 @@ ENDINGS: list[dict] = [
             # the natural past-tense completion ("I destroyed the fragment") — so
             # the ending was effectively unreachable in real EN play. Require the
             # done act (or the Lian alliance, a committed choice).
-            _has_fact_or_rumor_about(k, [
+            # The DESTRUCTION is a one-off act (recency-gated so it lands on the
+            # turn it happens); the Lian alliance is a standing choice (plain
+            # presence — it persists once made).
+            (_recent_act(k, [
                 "destroyed the fragment", "purified the fragment", "purged the fragment",
                 "erased the fragment", "unmade the fragment", "the fragment is destroyed",
                 "the fragment is gone", "the fragment was destroyed",
-                "lian alliance", "joined lian", "join the lian",
-                "净化了碎片", "销毁了碎片", "摧毁了碎片", "清除了碎片", "碎片已销毁",
-                "碎片被摧毁", "莲同盟", "莲联盟",
-            ])
+                "净化了碎片", "销毁了碎片", "摧毁了碎片", "清除了碎片", "碎片已销毁", "碎片被摧毁",
+            ], p)
+             or _has_fact_or_rumor_about(k, [
+                "lian alliance", "joined lian", "join the lian", "莲同盟", "莲联盟",
+            ]))
         ),
     },
     {
@@ -1457,12 +1492,12 @@ ENDINGS: list[dict] = [
             # while merely packing). "leave neo-kowloon" is KEPT — it matches the
             # completion narration "you finally leave Neo-Kowloon behind" and does
             # NOT substring-match "leaving neo-kowloon".
-            _has_fact_or_rumor_about(k, [
+            _recent_act(k, [
                 "leave neo-kowloon", "left neo-kowloon", "fled the city", "fled neo-kowloon",
                 "escaped neo-kowloon", "out of neo-kowloon", "gone from neo-kowloon",
                 "boarded the transport out",
                 "离开新九龙", "逃离新九龙", "逃出新九龙", "离开这座城", "逃出这座城", "远走他乡",
-            ])
+            ], p)
         ),
     },
 ]
