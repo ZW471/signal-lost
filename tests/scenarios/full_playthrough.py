@@ -28,7 +28,26 @@ from engine.graph import compile_graph, set_llm
 from engine.state import create_new_session, initial_state
 from engine.llm_factory import create_llm, default_model_for, load_env, load_provider_config, SETTINGS_DIR
 
-# Default action sequence for reproducible testing
+# Default action sequence for reproducible testing.
+#
+# Wave-12 friction #1: the back-half beats (restricted areas → source → confront)
+# provoked the model into stacking NEXUS alert past 100 before deep-layer content
+# unlocked, so both languages hit the designed alert-100 capture death (EN@T19)
+# at L3. Note the engine does NOT apply alert amounts deterministically —
+# game_data.ALERT_INCREASES is reference-only (see the NOTE above it); alert
+# moves only when the model volunteers a `nexus_alert_delta`. The saturation
+# was model-emergent, but consistent enough on provocative beats to kill runs.
+# Two lay-low beats bleed off heat at the two spike points — one right after
+# the restricted-area attempt, one right before the endgame run — replacing the
+# two lowest-value beats (a duplicate "talk to the knowledgeable one" and a pure
+# "plan my next move" reflection). A 20-turn run should now stay under the
+# 90+ full-manhunt band (game_data.ALERT_THRESHOLDS) and reach L4 content,
+# while alert still climbs visibly through the 25/50/75 thresholds. The list
+# stays at exactly 20 entries so `--turns 20` still reaches the final choice.
+# Beat 16 is a deep act (decrypt) rather than a social beat: with two rest
+# turns in T14/T17, the back half needs enough act-driven discovery beats to
+# exercise deep-layer content (wave-14 validation: survival and back-half
+# depth are otherwise in tension).
 DEFAULT_ACTIONS = [
     "Look around. Where am I?",
     "Talk to the nearest person",
@@ -40,17 +59,36 @@ DEFAULT_ACTIONS = [
     "Ask about the Severance",
     "Look for encrypted data or signals",
     "Head deeper into the district — follow any leads",
-    "Talk to whoever seems most knowledgeable here",
     "Present what I've learned and ask for their theory",
     "Search for evidence of the conspiracy",
     "Try to access restricted areas",
+    "Lay low at a quiet food stall until the patrols thin — rest and recover",
     "Analyze any signal artifacts I've found",
-    "Look for allies who share my goals",
-    "Plan my next move based on everything I know",
+    "Decrypt any encrypted data I'm carrying — dig for what's underneath",
+    "Find somewhere safe to sleep and let the heat die down before the final push",
     "Head toward the source of the Signal",
     "Confront what I find",
     "Make my final choice",
 ]
+
+
+# Substrings marking a transient CLI/network stream drop worth retrying.
+# Connection-phase errors only — no bare "timeout"/"timed out": those match a
+# CLI turn that already burned its full multi-minute budget, and re-running it
+# stacks tens of minutes of retries on a merely slow model (wave 4 review).
+# Keep in sync with gui/server.py _TRANSIENT_CLI_MARKERS.
+_TRANSIENT_MARKERS = (
+    "tls handshake eof", "handshake eof", "connection reset", "connection refused",
+    "connection aborted", "connection closed", "broken pipe", "reconnecting",
+    "temporarily unavailable", "eof occurred",
+    "stream closed", "network is unreachable", "read timed out", "remote end closed",
+)
+
+
+def _is_transient_error(err: BaseException) -> bool:
+    """True if *err* looks like a transient network/CLI stream drop (safe to retry)."""
+    msg = str(err).lower()
+    return any(marker in msg for marker in _TRANSIENT_MARKERS)
 
 
 def run_playthrough(max_turns: int, actions: list[str]) -> dict:
@@ -103,7 +141,22 @@ def run_playthrough(max_turns: int, actions: list[str]) -> dict:
         state["messages"].append(HumanMessage(content=action))
 
         try:
-            result = graph.invoke(state)
+            # A single transient stream drop (tls handshake eof, connection reset,
+            # timeout) used to break the whole run on turn 1. Retry the invoke up to
+            # 2 extra attempts with a short backoff on connection-ish errors before
+            # giving up. Re-invoking the same `state` is safe — the HumanMessage was
+            # already appended above and `state` is only reassigned on success.
+            _last_err = None
+            for _attempt in range(3):
+                try:
+                    result = graph.invoke(state)
+                    break
+                except Exception as _err:
+                    _last_err = _err
+                    if _attempt < 2 and _is_transient_error(_err):
+                        time.sleep(2 * (_attempt + 1))
+                        continue
+                    raise
             state = result
             metrics["turns_played"] += 1
 

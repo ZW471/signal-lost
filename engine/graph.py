@@ -571,7 +571,14 @@ def _build_validator_context(state: dict) -> str:
                 out.append(d[:limit])
         return out
 
-    facts = _descs(knowledge.get("facts", []))
+    # Cap fact grounding to the most-recent N so the per-turn prompt can't grow
+    # unbounded over a long game; key truths persist in Discovered Traces below.
+    # ⚠️ SYNC: mirrored in claude_code_engine._summarize_knowledge.
+    _MAX_FACTS_IN_SUMMARY = 100
+    _all_facts = knowledge.get("facts", [])
+    facts = _descs(_all_facts[-_MAX_FACTS_IN_SUMMARY:])
+    if len(_all_facts) > _MAX_FACTS_IN_SUMMARY:
+        facts.insert(0, f"[+{len(_all_facts) - _MAX_FACTS_IN_SUMMARY} earlier facts — distilled into the Discovered Traces below]")
     rumors = _descs(knowledge.get("rumors", []))
     theories = _descs(knowledge.get("theories", []))
     evidence_names = [e.get("name", e.get("id", "?")) for e in knowledge.get("evidence", [])]

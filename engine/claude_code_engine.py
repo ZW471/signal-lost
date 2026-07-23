@@ -54,6 +54,7 @@ from engine.tools import (
     generate_minor_npc,
     set_session_dir,
     set_current_inventory,
+    _record_reason,
 )
 
 logger = logging.getLogger(__name__)
@@ -113,7 +114,7 @@ Return ONLY a single JSON object. No prose, no markdown, no explanation outside 
     {"name": "tool_name", "args": { ... }},
     ...
   ],
-  "state_effects": {"integrity_delta": 0, "nexus_alert_delta": 0, "credits_delta": 0, "fragment_decay_delta": 0, "time_minutes": 0},
+  "state_effects": {"integrity_delta": 0, "nexus_alert_delta": 0, "credits_delta": 0, "fragment_decay_delta": 0, "time_minutes": 0, "integrity_reason": null, "alert_reason": null, "decay_reason": null},
   "record": ["a short fact the player just learned", "another lead or name"],
   "ending_signal": null,
   "location_update": null,
@@ -150,8 +151,9 @@ State mutations (declare what changes):
 - `update_npc`: `{"name": "NPC Name", "changes": {"trust": "wary", "mood": "nervous", ...}}`
 - `update_location`: `{"location_data": {"district": "...", "area": "...", "signal_strength": N, "danger_level": "...", "nexus_patrol": "..."}}`
 - `update_inventory`: `{"action": "add|remove|sell|update_credits", "item": {"name": "...", ...}, "credits_gained": N, "amount": N}`
-- `update_world_state`: `{"changes": {"nexus_alert_delta": N, "fragment_decay_delta": N, "discover_district": "Name", "add_event": "event text", "events_update": [{"action": "remove|replace|add", "index": N, "text": "..."}]}}`
+- `update_world_state`: `{"changes": {"nexus_alert_delta": N, "fragment_decay_delta": N, "discover_district": "Name", "add_event": "event text", "events_update": [{"action": "remove|replace|add", "index": N, "text": "..."}]}, "alert_reason": "why alert moved", "decay_reason": "why decay moved"}`
   - Use `events_update` to manage global_events: remove obsolete events, replace updated ones, add new ones. Review events each turn and clean up stale entries.
+  - `alert_reason`/`decay_reason` (optional): short in-world clause for WHY the meter moved, same rules as the state_effects reasons below.
 - `advance_time`: `{"minutes": N, "reason": "brief reason"}` — MANDATORY once per turn. Report how many in-world minutes elapsed (1-480). Quick look=1-5, conversation=5-15, travel=15-30, rest=120-480.
 - `add_log_entry`: `{"title": "...", "tag": "movement|dialogue|discovery|danger|signal|system|trade", "text": "..."}`
 
@@ -186,6 +188,12 @@ or are paid. Every purchase MUST send a negative delta.
 - `fragment_decay_delta`: positive as the Signal fragment degrades over deep resonance.
 - `time_minutes`: in-world minutes elapsed this turn (quick look 1-5, conversation \
 5-15, travel 15-30, deep work/rest 60-480). REQUIRED and non-zero every turn.
+- `integrity_reason` / `alert_reason` / `decay_reason`: whenever the matching delta \
+is non-zero, ALSO send a short in-world clause (under 10 words, in the narrative's \
+language) explaining WHY the meter moved — reference ONLY what the player just did \
+(e.g. "asking about NEXUS in the open", "deep resonance strained the implant"). \
+Never mention undiscovered content, ending names, or game numbers. null when the \
+delta is 0.
 
 **CRITICAL — COMMIT THE WORLD YOU NARRATE (via tool_calls).** The validator and next \
 turn's scene only ever see COMMITTED structured state, so if your narrative changes \
@@ -228,9 +236,10 @@ actual choices. Never use this to end the game early or to escape a hard moment.
 
 **location_update** (provide when scene changes): Provide this whenever the player \
 moves OR when NPCs arrive/leave OR when time shifts significantly (period change). \
-Not just on movement — atmosphere and people change over time too. If you called \
-`update_location` in tool_calls, also provide the full new location description:
-`{"description": "...", "exits": {"north": "Place", ...}, "points_of_interest": ["..."], "npcs_present": ["..."]}`
+Not just on movement — atmosphere and people change over time too. When the player \
+MOVES to a new district, area, room, or building, you MUST set `district` and \
+`area` here so the HUD tracks the move (do not leave them on the old location):
+`{"district": "The Undercroft", "area": "Line-4 Platform", "description": "...", "exits": {"north": "Place", ...}, "points_of_interest": ["..."], "npcs_present": ["..."]}`
 
 **suggested_actions** (required): An array of 1-3 SHORT, simple, distinct next \
 actions the player could take, written as direct commands in the player's language \
@@ -238,9 +247,17 @@ actions the player could take, written as direct commands in the player's langua
 has ALREADY discovered (the scene, exits, points of interest, present/known NPCs, \
 inventory, and discovered knowledge). NEVER reference undiscovered people, places, \
 items, secrets, or deeper-layer lore — these options must not spoil anything. Keep \
-them mundane and obvious — things a player would naturally try next — not clever or \
-cryptic. Make each option meaningfully different from the others. Use `[]` only when \
-the game is ending.
+most of them grounded and obvious — things a player would naturally try next. But \
+exactly ONE suggestion MAY surface an available game verb the player might not \
+realize they can use — decrypt an encrypted item with the cipher tool, analyze a \
+signal artifact, present what they know to an NPC, hack a terminal, or rest to \
+recover integrity — ONLY when the current inventory/knowledge/scene actually affords \
+it (they hold the tool, have the evidence, or face the encrypted thing). Phrase it \
+in-world as a direct action, never as UI-speak or a tutorial hint. If the validation \
+context lists recently offered suggestions, NEVER repeat one of them (even reworded) \
+— especially the teaching option: teach a DIFFERENT verb this turn, or offer no \
+teaching option at all. Make each option meaningfully different from the others. \
+Use `[]` only when the game is ending.
 
 ### Validation context:
 {validator_context}
@@ -311,7 +328,17 @@ def _summarize_knowledge(knowledge: dict, traces: dict) -> list[str]:
                 out.append(d[:limit])
         return out
 
-    facts = _descs(knowledge.get("facts", []))
+    # Cap the fact grounding to the most-recent N so the per-turn prompt can't
+    # grow unbounded over a long game (a live 13-turn run already held 109 facts,
+    # ~10 added/turn, and `silence` runs to turn 100). Facts are appended
+    # chronologically, so the tail is the freshest context; the KEY established
+    # truths persist uncapped in the Discovered Traces below, so consistency
+    # holds. ⚠️ SYNC: mirrored in graph.py's validator context.
+    _MAX_FACTS_IN_SUMMARY = 100
+    _all_facts = knowledge.get("facts", [])
+    facts = _descs(_all_facts[-_MAX_FACTS_IN_SUMMARY:])
+    if len(_all_facts) > _MAX_FACTS_IN_SUMMARY:
+        facts.insert(0, f"[+{len(_all_facts) - _MAX_FACTS_IN_SUMMARY} earlier facts — distilled into the Discovered Traces below]")
     rumors = _descs(knowledge.get("rumors", []))
     theories = _descs(knowledge.get("theories", []))
     evidence = [e.get("name") or e.get("id") or (e.get("description", "")[:50])
@@ -711,6 +738,13 @@ def _execute_game_tools(tool_calls: list, narrative: str, inventory: dict) -> tu
 # State mutation application (mirrors state_writer from graph.py)
 # ---------------------------------------------------------------------------
 
+def _reason_str(v) -> str | None:
+    """Normalize a model-supplied meter reason: non-empty string or None."""
+    if isinstance(v, str) and v.strip():
+        return v.strip()
+    return None
+
+
 def _apply_mutations(
     mutation_calls: list,
     player: dict, knowledge: dict, location: dict,
@@ -749,6 +783,11 @@ def _apply_mutations(
                     except (TypeError, ValueError):
                         pass
                     player["integrity"] = {"current": new_cur, "max": new_max}
+                    # Meter-why (wave 4): surface the model's in-world cause for
+                    # the integrity change, mirroring the LangGraph tool wrapper
+                    # (engine/tools.py update_player) which never runs on this path.
+                    _record_reason("integrity", _reason_str(args.get("reason")),
+                                   _reason_str(args.get("reason_zh")))
                 else:
                     player[k] = v
 
@@ -804,18 +843,24 @@ def _apply_mutations(
 
         elif name == "update_npc":
             npc_name = args.get("name", "")
-            changes = args.get("changes", {})
+            changes = args.get("changes", {}) or {}
             npc_list = npcs.get("npcs", [])
+            # Match by CORE identity so "Bartender — drying glasses" and
+            # "Bartender — far end" update ONE roster entry instead of piling up.
+            core = _npc_core(npc_name)
+            core_key = _npc_norm(core)
             found = False
             for npc in npc_list:
-                if npc.get("name", "").lower() == npc_name.lower():
+                if core_key and _npc_norm(_npc_core(npc.get("name", ""))) == core_key:
                     npc.update(changes)
+                    npc["name"] = core  # keep the clean core identity, not the suffix
                     npc["last_interaction_turn"] = player.get("turn", 1)
                     found = True
                     break
             if not found:
-                new_npc = {"name": npc_name, "last_interaction_turn": player.get("turn", 1)}
+                new_npc = {"name": core or npc_name, "last_interaction_turn": player.get("turn", 1)}
                 new_npc.update(changes)
+                new_npc["name"] = core or npc_name
                 npc_list.append(new_npc)
                 npcs["npcs"] = npc_list
 
@@ -911,6 +956,15 @@ def _apply_mutations(
 
         elif name == "update_world_state":
             changes = args.get("changes", {})
+            # Meter-why (wave 4): mirror engine/tools.py update_world_state, whose
+            # @tool wrapper (the only other _record_reason caller) never runs on
+            # the bypass path — mutations are applied inline here.
+            if changes.get("nexus_alert_delta"):
+                _record_reason("alert", _reason_str(args.get("alert_reason")),
+                               _reason_str(args.get("alert_reason_zh")))
+            if changes.get("fragment_decay_delta"):
+                _record_reason("decay", _reason_str(args.get("decay_reason")),
+                               _reason_str(args.get("decay_reason_zh")))
             if "nexus_alert_delta" in changes:
                 alert = world_state.get("nexus_alert", {})
                 if isinstance(alert, dict):
@@ -1003,7 +1057,8 @@ def _apply_mutations(
     return knowledge_notifications, elapsed_minutes
 
 
-def _apply_state_effects(effects: dict, player: dict, world_state: dict, inventory: dict) -> int:
+def _apply_state_effects(effects: dict, player: dict, world_state: dict, inventory: dict,
+                         tool_credit_delta: int = 0) -> int:
     """Apply the numeric deltas the model reports in ``state_effects``.
 
     Returns minutes elapsed (from ``time_minutes``). This is the deterministic
@@ -1031,9 +1086,16 @@ def _apply_state_effects(effects: dict, player: dict, world_state: dict, invento
         mx = ig.get("max", ig.get("current", 3)) or 3
         cur = ig.get("current", mx)
         player["integrity"] = {"current": max(0, min(int(mx), int(cur) + di)), "max": int(mx)}
+        # Meter-why (wave 4): state_effects is the primary numeric channel on the
+        # bypass, so the in-world cause rides here too. _record_reason no-ops when
+        # the model sent none; the server only forwards reasons for meters that moved.
+        _record_reason("integrity", _reason_str(effects.get("integrity_reason")),
+                       _reason_str(effects.get("integrity_reason_zh")))
 
     da = _num(effects.get("nexus_alert_delta"))
     if da:
+        _record_reason("alert", _reason_str(effects.get("alert_reason")),
+                       _reason_str(effects.get("alert_reason_zh")))
         alert = world_state.get("nexus_alert", {})
         if isinstance(alert, dict):
             alert["current"] = max(0, min(100, alert.get("current", 0) + da))
@@ -1048,6 +1110,8 @@ def _apply_state_effects(effects: dict, player: dict, world_state: dict, invento
 
     dd = _num(effects.get("fragment_decay_delta"))
     if dd:
+        _record_reason("decay", _reason_str(effects.get("decay_reason")),
+                       _reason_str(effects.get("decay_reason_zh")))
         decay = world_state.get("fragment_decay", {})
         if isinstance(decay, dict):
             decay["current"] = max(0, min(100, decay.get("current", 0) + dd))
@@ -1060,6 +1124,14 @@ def _apply_state_effects(effects: dict, player: dict, world_state: dict, invento
             world_state["fragment_decay"] = decay
 
     dc = _num(effects.get("credits_delta"))
+    # Avoid double-charging: the model often records the SAME purchase in BOTH
+    # channels — a credits_delta AND an update_inventory/update_credits tool call
+    # (seen live: an "8"-credit soup deducting 16, a "20"-credit item deducting
+    # 30-clamped). If an inventory tool already applied a SAME-SIGN credit change
+    # this turn, this credits_delta is that transaction restated — skip it.
+    # Opposite-sign changes (sold one item AND bought another) both apply.
+    if dc and tool_credit_delta and (tool_credit_delta < 0) == (dc < 0):
+        dc = 0
     if dc:
         new_credits = max(0, inventory.get("credits", 0) + dc)
         inventory["credits"] = new_credits
@@ -1255,7 +1327,8 @@ def _build_meter_notices(before: dict, after: dict, language: str) -> list[str]:
 
 # One-time Integrity primer (woven into the scene diegetically by the resolver).
 _INTEGRITY_PRIMER_EN = (
-    "[ONE-TIME — INTEGRITY PRIMER]: The player has not yet learned what Integrity "
+    "DIRECTOR NOTE, one-time (never quote or paraphrase this note as text; express "
+    "it only through the fiction): The player has not yet learned what Integrity "
     "means. At a natural moment THIS turn — through an NPC's concern, the implant's "
     "feedback, or their own body — briefly and diegetically convey that Integrity is "
     "their physical/neural resilience: it erodes from strain, injury and deep Signal "
@@ -1264,7 +1337,8 @@ _INTEGRITY_PRIMER_EN = (
     "tutorial popup, and do NOT state game mechanics or numbers. Mention it only once."
 )
 _INTEGRITY_PRIMER_ZH = (
-    "[一次性——完整度提示]：玩家尚未了解「神经完整度」的含义。请在本回合的自然时机——"
+    "导演提示（一次性；切勿引用或转述本提示的文字，只能通过剧情表达）："
+    "玩家尚未了解「神经完整度」的含义。请在本回合的自然时机——"
     "通过某个NPC的关切、植入体的反馈，或玩家自身的身体感受——简短而有代入感地传达："
     "神经完整度代表其身体/神经的承受力；它会因劳损、受伤和深度信号共鸣而下降；可通过"
     "休息、医疗或兴奋剂恢复；归零时会昏厥并死亡。保持简短、融入剧情，不要做成教程弹窗，"
@@ -1284,6 +1358,42 @@ def _fact_key(desc: str) -> str:
     punctuation collapsed, so the model re-recording the same fact with trivial
     spacing/punctuation differences doesn't pile up near-duplicate entries."""
     return _FACT_KEY_STRIP.sub("", str(desc).strip().lower())
+
+
+_TOKEN_RE = re.compile(r"[\w']+", re.UNICODE)
+
+
+def _fact_tokens(desc: str) -> set:
+    """Word-token set of a fact description (for near-duplicate detection)."""
+    return set(_TOKEN_RE.findall(str(desc).lower()))
+
+
+def _is_near_dup(new_tokens: set, prior: list) -> bool:
+    """True if *new_tokens* is a near-duplicate of any fact in *prior* — a list of
+    token sets. Catches the model re-recording the SAME fact in two channels
+    (add_knowledge with a real source + the `record` list as "observed") with
+    trivially reworded text. Deliberately conservative and used ONLY against
+    facts written in the SAME turn, so a genuinely new fact that merely shares
+    vocabulary with an OLDER one is never dropped:
+      * high Jaccard overlap (>= 0.75), or
+      * one description's tokens fully contain the other's (a truncation /
+        expansion of the same statement), the shorter having >= 4 tokens.
+    """
+    if len(new_tokens) < 4:
+        return False
+    for pt in prior:
+        if len(pt) < 4:
+            continue
+        inter = len(new_tokens & pt)
+        if inter == 0:
+            continue
+        union = len(new_tokens | pt)
+        if union and inter / union >= 0.75:
+            return True
+        smaller = new_tokens if len(new_tokens) <= len(pt) else pt
+        if len(smaller) >= 4 and smaller <= (new_tokens | pt) and inter == len(smaller):
+            return True
+    return False
 
 
 def _apply_record(records, knowledge: dict, turn: int) -> list[dict]:
@@ -1308,11 +1418,22 @@ def _apply_record(records, knowledge: dict, turn: int) -> list[dict]:
             except ValueError:
                 pass
     next_num = max(nums, default=0) + 1
+    # Facts already written THIS turn — i.e. by add_knowledge, which runs before
+    # us (Step 7 → Step 7c). The model routinely records the same revelation in
+    # BOTH channels (a sourced add_knowledge fact + the plain `record` string),
+    # so drop a record entry that near-duplicates one already logged this turn,
+    # keeping the better-sourced add_knowledge version. Scoped to this turn only
+    # so a genuinely new fact sharing words with an OLDER one is never dropped.
+    same_turn = [_fact_tokens(f.get("description", "")) for f in facts
+                 if f.get("turn") == turn]
     notifs = []
     for r in records:
         desc = (str(r.get("description", "")) if isinstance(r, dict) else str(r)).strip()
         key = _fact_key(desc)
         if len(desc) < 4 or key in existing:
+            continue
+        toks = _fact_tokens(desc)
+        if _is_near_dup(toks, same_turn):
             continue
         facts.append({
             "id": f"FACT-{next_num:03d}", "description": desc,
@@ -1320,6 +1441,7 @@ def _apply_record(records, knowledge: dict, turn: int) -> list[dict]:
             "_layer": {"hidden": True, "value": 1},
         })
         existing.add(key)
+        same_turn.append(toks)
         next_num += 1
         notifs.append({"entry_type": "fact"})
     return notifs
@@ -1340,6 +1462,60 @@ def _npc_norm(s: str) -> str:
     return re.sub(r"[\s,，。、:：()（）\-—\"'’]", "", str(s)).lower()
 
 
+# A scene NPC's identity is the part BEFORE any descriptive suffix — the model
+# writes "Bartender — drying glasses" / "Bartender — far end, not watching" and
+# the suffix changes every turn, so the same person was piling up as separate
+# roster entries (a long run accumulated 3× "Bartender", 3× "Wren"). Split on
+# em/en-dash, comma, or colon (NOT the hyphen in "dock-worker") to recover the
+# stable core name. Bare-hyphen names are left whole.
+_NPC_SUFFIX_RE = re.compile(r"\s*(?:[—–]|,|，|:|：).*$")
+# Trust levels low→high, so a dedup merge keeps the strongest trust earned.
+_TRUST_RANK = {"hostile": 0, "suspicious": 1, "neutral": 2,
+               "cautious_ally": 3, "trusted": 4, "devoted": 5}
+
+
+def _npc_core(name: str) -> str:
+    """The stable identity of an NPC name — its part before any descriptive
+    suffix ("Bartender — drying glasses" -> "Bartender", "Mira, the vendor" ->
+    "Mira"). Returns the whole (stripped) name when there is no suffix."""
+    core = _NPC_SUFFIX_RE.sub("", str(name or "").strip()).strip()
+    return core or str(name or "").strip()
+
+
+def _trust_rank(npc: dict) -> int:
+    t = str(npc.get("trust_level", npc.get("trust", "neutral"))).lower()
+    return _TRUST_RANK.get(t, 2)
+
+
+def _dedup_npc_roster(roster: list) -> list:
+    """Collapse roster entries that share a core identity into one — keeping the
+    strongest trust and latest interaction, and storing the clean core name."""
+    by_core: dict[str, dict] = {}
+    order: list[str] = []
+    for npc in roster:
+        if not isinstance(npc, dict):
+            continue
+        core = _npc_core(npc.get("name", ""))
+        key = _npc_norm(core)
+        if not key:
+            continue
+        if key not in by_core:
+            merged = {**npc, "name": core}
+            by_core[key] = merged
+            order.append(key)
+        else:
+            cur = by_core[key]
+            # keep the higher-trust entry's fields as the base, layer the other on
+            base, other = (cur, npc) if _trust_rank(cur) >= _trust_rank(npc) else (npc, cur)
+            merged = {**other, **{k: v for k, v in base.items() if v not in (None, "")}}
+            merged["name"] = core
+            li = [x.get("last_interaction_turn") for x in (cur, npc) if isinstance(x.get("last_interaction_turn"), int)]
+            if li:
+                merged["last_interaction_turn"] = max(li)
+            by_core[key] = merged
+    return [by_core[k] for k in order]
+
+
 def _promote_scene_npcs(location: dict, npcs: dict, turn: int) -> None:
     """Register NPCs the narration placed in the scene (``location.npcs_present``)
     into ``npcs.json`` so they are interactable and can satisfy NPC-trust trace
@@ -1351,21 +1527,23 @@ def _promote_scene_npcs(location: dict, npcs: dict, turn: int) -> None:
     """
     present = location.get("npcs_present", []) or []
     if not isinstance(present, list):
-        return
-    roster = npcs.get("npcs", [])
-    existing_norm = [_npc_norm(n.get("name", "")) for n in roster]
+        present = []
+    # Always collapse any dupes that accumulated before this fix / from update_npc.
+    roster = _dedup_npc_roster(npcs.get("npcs", []))
+    existing_cores = [_npc_norm(_npc_core(n.get("name", ""))) for n in roster]
     for entry in present:
         name = entry.get("name") if isinstance(entry, dict) else entry
         name = str(name or "").strip()
         if not name or len(name) < 2 or _CROWD_RE.search(name):
             continue
-        nn = _npc_norm(name)
-        if not nn or any(ex and (nn in ex or ex in nn) for ex in existing_norm):
+        core = _npc_core(name)
+        ck = _npc_norm(core)
+        if not ck or any(ex and (ck in ex or ex in ck) for ex in existing_cores):
             continue
         if len(roster) >= 40:  # guard against unbounded growth
             break
-        roster.append({"name": name, "trust": "neutral", "first_seen_turn": turn})
-        existing_norm.append(nn)
+        roster.append({"name": core, "trust": "neutral", "first_seen_turn": turn})
+        existing_cores.append(ck)
     npcs["npcs"] = roster
 
 
@@ -1484,6 +1662,13 @@ def run_turn(session_dir: str, player_input: str, mode: str = "play") -> dict:
         prompt_state = state
     dynamic_prompt = build_dynamic_state_prompt(prompt_state)
     validator_context = _build_validator_context(state)
+    # Wave-12 friction #3: show the model what it already suggested recently so
+    # the same (teaching) nudge can't repeat turn after turn. The spec's
+    # suggested_actions rules carry the matching no-repeat directive.
+    from engine.suggestions import format_recent_suggestions, read_recent_suggestions
+    _recent_block = format_recent_suggestions(read_recent_suggestions(session_dir))
+    if _recent_block:
+        validator_context = f"{validator_context}\n\n{_recent_block}"
     conversation_history = _read_conversation_history(session_dir, last_n=5)
 
     output_spec = _OUTPUT_FORMAT_SPEC.replace("{validator_context}", validator_context)
@@ -1579,17 +1764,21 @@ def run_turn(session_dir: str, player_input: str, mode: str = "play") -> dict:
     narrative, mutation_calls = _execute_game_tools(parsed["tool_calls"], narrative, inventory)
 
     # ── Step 7: Apply state mutations ────────────────────────────────
+    _credits_before_tools = inventory.get("credits", 0)
     knowledge_notifications, elapsed_minutes = _apply_mutations(
         mutation_calls, player, knowledge, location,
         inventory, npcs, world_state, log, session_dir,
     )
+    _tool_credit_delta = inventory.get("credits", 0) - _credits_before_tools
 
     # ── Step 7b: Apply numeric state_effects (deterministic meter deltas) ──
     # The model reports consequences as simple numbers here; applying them in
     # Python means integrity/NEXUS/credits move even when it omits the tool_calls,
-    # so death/capture endings can actually fire.
+    # so death/capture endings can actually fire. Pass the credit change the tools
+    # already made so a purchase recorded in BOTH channels isn't charged twice.
     elapsed_minutes += _apply_state_effects(
         parsed.get("state_effects", {}), player, world_state, inventory,
+        tool_credit_delta=_tool_credit_delta,
     )
 
     # ── Step 7c: Persist the model's `record` list as knowledge facts ──────
@@ -1611,7 +1800,16 @@ def run_turn(session_dir: str, player_input: str, mode: str = "play") -> dict:
                 "上": "up", "下": "down",
             }
             loc_update["exits"] = {_ZH_TO_EN.get(k, k).lower(): v for k, v in exits.items()}
-        for field in ("description", "exits", "points_of_interest", "npcs_present"):
+        # district/area/zone included so a narrated MOVE actually updates the HUD.
+        # The model reliably emits location_update (new description) on a scene
+        # change but often forgets the SEPARATE update_location tool call that
+        # carries district/area — so the description advanced into the Undercroft
+        # while the HUD still read "Neon Row" for several turns. Applying the
+        # identity + scene-meta fields from location_update too closes that gap
+        # (only fields the model actually provides are touched).
+        for field in ("description", "exits", "points_of_interest", "npcs_present",
+                      "district", "area", "zone", "signal_strength",
+                      "danger_level", "nexus_patrol"):
             if field in loc_update:
                 location[field] = loc_update[field]
 
@@ -1673,7 +1871,7 @@ def run_turn(session_dir: str, player_input: str, mode: str = "play") -> dict:
     # ── Step 14: Suggested actions ───────────────────────────────────
     # The model emits these inline (see _OUTPUT_FORMAT_SPEC) so there is no
     # extra LLM call. Spoiler-safety is enforced by the prompt rules.
-    from engine.suggestions import read_features, normalize_actions
+    from engine.suggestions import read_features, normalize_actions, record_suggestions
     features = read_features(session_dir)
     suggested_actions: list[dict] = []
     if features["suggested_actions"] and not game_over:
@@ -1681,6 +1879,8 @@ def run_turn(session_dir: str, player_input: str, mode: str = "play") -> dict:
             parsed.get("suggested_actions", []),
             features["suggested_actions_count"],
         )
+        # Remember what we offered so next turn's prompt can forbid repeats.
+        record_suggestions(session_dir, player.get("turn", 1), suggested_actions)
 
     return {
         "narrative": narrative,

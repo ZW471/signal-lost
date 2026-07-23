@@ -32,8 +32,13 @@ _tls = threading.local()
 
 
 def set_session_dir(session_dir: str) -> None:
-    """Set the active session directory for this thread's turn."""
+    """Set the active session directory for this thread's turn.
+
+    Also clears any turn-scoped mechanic buffers for this session — every turn in
+    both engine paths calls this at its start, so roll/reason records from a prior
+    turn can never bleed into the next one."""
     _tls.session_dir = session_dir
+    _clear_turn_buffers(session_dir)
 
 
 def _get_session_dir() -> str | None:
@@ -52,6 +57,152 @@ def _has_item(keyword: str) -> bool:
         if keyword.lower() in name:
             return True
     return False
+
+
+# ---------------------------------------------------------------------------
+# Turn-scoped mechanic buffers (rolls + meter-change reasons).
+#
+# The game mechanic tools (roll_dice / decrypt_cipher / analyze_signal) and the
+# state-mutation tools (update_world_state / update_player) run deep inside the
+# LangGraph resolver (and the CLI-bypass engine), and their results are collapsed
+# by the reducer before the server ever sees them. To surface a "roll beat" frame
+# and per-meter reasons to the client WITHOUT touching graph.py/state.py/reducer.py,
+# each wrapper appends a turn-scoped record onto a module-level buffer keyed by the
+# active session directory. The server drains the buffer per turn (in _finish_turn)
+# and emits an additive WS frame; old clients ignore it.
+#
+# Keyed by session_dir (not thread-local) because the tool runs in an executor
+# thread while the server drains from the event-loop thread — a thread-local would
+# not survive that hop. set_session_dir() (called at the start of every turn in
+# both engine paths) clears the buffer for that session so records never bleed
+# across turns.
+# ---------------------------------------------------------------------------
+
+_buffer_lock = threading.Lock()
+_roll_buffer: dict[str, list] = {}
+_reason_buffer: dict[str, dict] = {}
+
+
+def _buffer_key() -> str | None:
+    return _get_session_dir()
+
+
+def _record_roll(record: dict) -> None:
+    """Append a roll/mechanic record to the current session's turn buffer."""
+    key = _buffer_key()
+    if key is None:
+        return
+    with _buffer_lock:
+        _roll_buffer.setdefault(key, []).append(record)
+
+
+def _record_reason(meter: str, en: str | None, zh: str | None) -> None:
+    """Record an in-world reason for a meter change (alert/integrity/decay)."""
+    key = _buffer_key()
+    if key is None or not (en or zh):
+        return
+    with _buffer_lock:
+        bucket = _reason_buffer.setdefault(key, {})
+        bucket[meter] = {"en": en or zh, "zh": zh or en}
+
+
+def _clear_turn_buffers(session_dir: str | None) -> None:
+    if not session_dir:
+        return
+    with _buffer_lock:
+        _roll_buffer.pop(session_dir, None)
+        _reason_buffer.pop(session_dir, None)
+
+
+def drain_rolls(session_dir: str | None) -> list:
+    """Drain (and clear) the roll records recorded for *session_dir* this turn."""
+    if not session_dir:
+        return []
+    with _buffer_lock:
+        return _roll_buffer.pop(session_dir, []) or []
+
+
+def drain_reasons(session_dir: str | None) -> dict:
+    """Drain (and clear) the meter-change reasons recorded for *session_dir*."""
+    if not session_dir:
+        return {}
+    with _buffer_lock:
+        return _reason_buffer.pop(session_dir, {}) or {}
+
+
+def requeue_rolls(session_dir: str | None, rolls: list | None) -> None:
+    """Re-buffer roll records under *session_dir*.
+
+    Used by the prediction cache (gui/server.py): a speculative turn runs against
+    a per-action work dir, so its rolls land under THAT key and _finish_turn's
+    drain of the live session dir would miss them. The speculator drains the
+    work-dir buffer at speculate time and, on a cache hit, requeues the records
+    here so the normal drain surfaces them (and the work-dir key never leaks)."""
+    if not session_dir or not rolls:
+        return
+    with _buffer_lock:
+        _roll_buffer.setdefault(session_dir, []).extend(rolls)
+
+
+def requeue_reasons(session_dir: str | None, reasons: dict | None) -> None:
+    """Re-buffer meter-change reasons under *session_dir* (see requeue_rolls)."""
+    if not session_dir or not reasons:
+        return
+    with _buffer_lock:
+        _reason_buffer.setdefault(session_dir, {}).update(reasons)
+
+
+# Bilingual, in-world labels for the roll beat. Falls back to a title-cased
+# version of the raw skill/method token for anything not enumerated here, so a
+# novel skill still renders (never a spoiler — only the verb the player attempted).
+_SKILL_LABELS = {
+    "check": ("Skill Check", "技能检定"),
+    "hack": ("Hack", "入侵"),
+    "lockpick": ("Lockpick", "撬锁"),
+    "stealth": ("Stealth", "潜行"),
+    "persuasion": ("Persuasion", "说服"),
+    "perception": ("Perception", "感知"),
+    "intimidation": ("Intimidation", "威吓"),
+    "decrypt": ("Decrypt", "解密"),
+    "caesar": ("Cipher — Caesar", "密码——凯撒"),
+    "xor": ("Cipher — XOR", "密码——异或"),
+    "substitute": ("Cipher — Substitution", "密码——替换"),
+    "reverse": ("Cipher — Reverse", "密码——反转"),
+    "base64": ("Cipher — Base64", "密码——Base64"),
+    "analyze": ("Frequency Analysis", "频率分析"),
+    "signal_scan": ("Signal Scan", "信号扫描"),
+    "signal_analysis": ("Signal Analysis", "信号解析"),
+    "deep_resonance": ("Deep Resonance", "深度共鸣"),
+}
+
+
+def _skill_labels(skill: str) -> tuple[str, str]:
+    """Return (en, zh) display labels for a roll skill/method token."""
+    key = (skill or "check").lower()
+    if key in _SKILL_LABELS:
+        return _SKILL_LABELS[key]
+    pretty = key.replace("_", " ").title()
+    return (pretty, pretty)
+
+
+def _record_cipher_roll(method: str, success: bool) -> None:
+    """Record a decryption attempt as a roll beat (no target — pass/fail only)."""
+    label, label_zh = _skill_labels(method)
+    _record_roll({
+        "skill": "decrypt", "target": 0, "result": 0,
+        "success": bool(success), "modifiers": [],
+        "label": label, "label_zh": label_zh,
+    })
+
+
+def _record_signal_roll(mode: str, success: bool = True) -> None:
+    """Record a Signal-tool use (scan / analysis / resonance) as a roll beat."""
+    label, label_zh = _skill_labels(mode)
+    _record_roll({
+        "skill": "signal", "target": 0, "result": 0,
+        "success": bool(success), "modifiers": [],
+        "label": label, "label_zh": label_zh,
+    })
 
 
 # Add the game's tools/ directory to path so we can import directly
@@ -119,6 +270,23 @@ def roll_dice(expression: str, target: int | None = None, modifier: int = 0,
         result.update(check(result["total"], target))
     if skill_type:
         result["skill_type"] = skill_type
+
+    # Record a turn-scoped roll beat for the client (drained per turn by the
+    # server). In-world safe: it only names the skill the player just attempted.
+    _skill = skill_type or "check"
+    _label, _label_zh = _skill_labels(_skill)
+    _modifiers = []
+    if modifier:
+        _modifiers.append({"source": _skill, "value": modifier})
+    _record_roll({
+        "skill": _skill,
+        "target": target if isinstance(target, int) else 0,
+        "result": result.get("total", 0),
+        "success": bool(result.get("success")) if target is not None else True,
+        "modifiers": _modifiers,
+        "label": _label,
+        "label_zh": _label_zh,
+    })
     return result
 
 
@@ -138,20 +306,23 @@ def decrypt_cipher(method: str, text: str, key: str | None = None) -> dict:
 
     if method == "analyze":
         freq = frequency_analysis(text)
+        _record_cipher_roll("analyze", True)
         return {"mode": "frequency_analysis", "frequencies": freq}
 
     if method == "caesar":
-        return {"method": "caesar", "result": caesar_decrypt(text, int(key or 0))}
+        out = {"method": "caesar", "result": caesar_decrypt(text, int(key or 0))}
     elif method == "xor":
-        return {"method": "xor", "result": xor_decrypt(text, int(key or 0))}
+        out = {"method": "xor", "result": xor_decrypt(text, int(key or 0))}
     elif method == "substitute":
-        return {"method": "substitute", "result": substitute_decrypt(text, key or "")}
+        out = {"method": "substitute", "result": substitute_decrypt(text, key or "")}
     elif method == "reverse":
-        return {"method": "reverse", "result": reverse_decrypt(text)}
+        out = {"method": "reverse", "result": reverse_decrypt(text)}
     elif method == "base64":
-        return {"method": "base64", "result": base64_decrypt(text)}
+        out = {"method": "base64", "result": base64_decrypt(text)}
     else:
         return {"error": f"Unknown method: {method}"}
+    _record_cipher_roll(method, "error" not in out)
+    return out
 
 
 @tool
@@ -173,12 +344,15 @@ def analyze_signal(evidence_id: str | None = None, description: str | None = Non
         resonate: If True, attempt deep resonance (dangerous)
     """
     if evidence_id:
+        _record_signal_roll("signal_analysis")
         return analyze_evidence(evidence_id, description or "Unknown evidence")
     elif scan:
+        _record_signal_roll("signal_scan")
         return signal_scan(strength)
     elif resonate:
         result = deep_resonance()
         result["integrity_cost"] = 1  # Enforced by state_writer
+        _record_signal_roll("deep_resonance")
         return result
     else:
         return {"error": "Specify evidence_id, scan=True, or resonate=True"}
@@ -242,7 +416,8 @@ def _parse_json_arg(value: Any, fallback_key: str = "description") -> dict:
 
 
 @tool
-def update_player(changes: str) -> str:
+def update_player(changes: str, reason: str | None = None,
+                  reason_zh: str | None = None) -> str:
     """Update player state fields.
 
     Pass a JSON string of field:value pairs to update.
@@ -251,8 +426,15 @@ def update_player(changes: str) -> str:
 
     Args:
         changes: JSON string of changes, e.g. '{"credits": 40, "neural_implant": "Active"}'
+        reason: OPTIONAL short in-world clause explaining WHY integrity changed this
+            turn, phrased for the player and referencing only what they just did
+            (e.g. "deep Signal resonance strained the implant"). Never mention
+            undiscovered content or game numbers. Omit if integrity did not change.
+        reason_zh: OPTIONAL Chinese translation of `reason`.
     """
     parsed = _parse_json_arg(changes, "value")
+    if (reason or reason_zh) and "integrity" in parsed:
+        _record_reason("integrity", reason, reason_zh)
     return json.dumps({"type": "update_player", "changes": parsed})
 
 
@@ -346,7 +528,10 @@ def update_inventory(action: str, item: str | None = None) -> str:
 
 
 @tool
-def update_world_state(changes: str) -> str:
+def update_world_state(changes: str, alert_reason: str | None = None,
+                       alert_reason_zh: str | None = None,
+                       decay_reason: str | None = None,
+                       decay_reason_zh: str | None = None) -> str:
     """Update world state (NEXUS alert, fragment decay, district access, events).
 
     Args:
@@ -360,8 +545,22 @@ def update_world_state(changes: str) -> str:
             - "remove": Remove an obsolete event by index. Requires "index".
             - "replace": Update an existing event's text. Requires "index" and "text".
         Review global_events each turn and remove obsolete ones (e.g. events that have been superseded or are no longer relevant).
+
+        alert_reason: OPTIONAL short in-world clause explaining WHY NEXUS Alert moved
+            (e.g. "asking about NEXUS in the open"). Player-facing — reference only
+            what the player just did; never spoil undiscovered content or ending
+            names, and no game numbers. Omit when nexus_alert_delta is absent/zero.
+        alert_reason_zh: OPTIONAL Chinese translation of `alert_reason`.
+        decay_reason: OPTIONAL short in-world clause explaining WHY Fragment Decay
+            moved (e.g. "the fragment frays under deep resonance"). Same rules as
+            alert_reason. Omit when fragment_decay_delta is absent/zero.
+        decay_reason_zh: OPTIONAL Chinese translation of `decay_reason`.
     """
     parsed = _parse_json_arg(changes, "description")
+    if (alert_reason or alert_reason_zh) and parsed.get("nexus_alert_delta"):
+        _record_reason("alert", alert_reason, alert_reason_zh)
+    if (decay_reason or decay_reason_zh) and parsed.get("fragment_decay_delta"):
+        _record_reason("decay", decay_reason, decay_reason_zh)
     return json.dumps({"type": "update_world_state", "changes": parsed})
 
 

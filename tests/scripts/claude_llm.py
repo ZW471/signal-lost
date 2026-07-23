@@ -31,6 +31,11 @@ from langchain_core.runnables import Runnable, RunnableBinding
 from langchain_core.tools import BaseTool
 from langchain_core.utils.function_calling import convert_to_openai_tool
 
+try:  # normal package import (engine/llm_factory loads us as tests.scripts.claude_llm)
+    from tests.scripts import cli_process_registry as _proc_registry
+except ImportError:  # loaded standalone with tests/scripts on sys.path
+    import cli_process_registry as _proc_registry  # type: ignore[no-redef]
+
 # Env vars that prevent nested Claude Code sessions from starting
 _NESTING_GUARD_VARS = (
     "CLAUDECODE",
@@ -45,6 +50,15 @@ def _clean_env() -> dict[str, str]:
     return {k: v for k, v in os.environ.items() if k not in _NESTING_GUARD_VARS}
 
 
+class CLIChildKilled(Exception):
+    """The CLI child was terminated by an external signal (SIGKILL/SIGTERM),
+    not a normal CLI error. Raised on a negative returncode so the retry loop
+    does NOT respawn — a signal-kill is deliberate (a mid-turn cancel via
+    cli_process_registry.kill_thread, or server shutdown), so retrying would
+    defeat the very cancel that killed it. Not a RuntimeError subclass, so it
+    propagates past the wrapper's transient-retry handler untouched."""
+
+
 def _run_cli_pg(cmd, input_text, timeout, env):
     """Run *cmd* in its own process group and return (returncode, stdout, stderr).
 
@@ -57,11 +71,18 @@ def _run_cli_pg(cmd, input_text, timeout, env):
     (observed: a 52-minute hang with the engine alive but no ``claude`` child).
     Launching with ``start_new_session=True`` and ``os.killpg`` on timeout closes
     the whole tree so the call fails fast and the retry/fallback path can run.
+
+    The new session also detaches the child from the server's process group, so
+    a server shutdown would otherwise orphan an in-flight CLI call (it keeps
+    running with no parent, still consuming CPU/tokens). Every live child is
+    therefore registered in :mod:`tests.scripts.cli_process_registry`, whose
+    ``kill_all()`` runs from the GUI server's shutdown hook + atexit.
     """
     proc = subprocess.Popen(
         cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
         text=True, env=env, start_new_session=True,
     )
+    _proc_registry.register(proc)
     try:
         out, err = proc.communicate(input=input_text, timeout=timeout)
         return proc.returncode, out, err
@@ -76,6 +97,8 @@ def _run_cli_pg(cmd, input_text, timeout, env):
         except subprocess.TimeoutExpired:
             pass
         raise
+    finally:
+        _proc_registry.unregister(proc)
 
 
 def _parse_stream_json(stdout: str) -> tuple[str, str | None]:
@@ -365,6 +388,12 @@ class ClaudeCodeLLM(BaseChatModel):
                 returncode, stdout_text, stderr_text = _run_cli_pg(
                     cmd, stdin_text, self.timeout, env,
                 )
+
+                if returncode < 0:
+                    # Terminated by a signal — a deliberate external kill (mid-turn
+                    # cancel or shutdown), never a transient CLI error. Abort now;
+                    # retrying would just spawn a fresh child and defeat the cancel.
+                    raise CLIChildKilled(f"claude CLI child killed by signal {-returncode}")
 
                 if returncode != 0:
                     stderr = stderr_text[:500] if stderr_text else ""

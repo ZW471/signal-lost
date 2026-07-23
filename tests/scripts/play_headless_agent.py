@@ -217,11 +217,17 @@ def main():
                 player = state.get("player", {})
                 location = state.get("location", {})
                 integrity = player.get("integrity", {})
+                # NEXUS alert lives on world_state, not player — reading it off
+                # player printed 'NEXUS: ?' in every headless log. Mirror the GUI's
+                # world_state read (gui/server.py) so the alert is legible here too.
+                world_state = state.get("world_state", {})
+                _alert = world_state.get("nexus_alert", {})
+                nexus_alert = _alert.get("current", "?") if isinstance(_alert, dict) else _alert
                 log.write(f"## Turn {turn}\n\n**Player**: {action}\n\n")
                 log.write(f"**Response**:\n{narrative}\n\n")
                 log.write(f"*Location: {location.get('district', '?')} — {location.get('area', '?')}*\n")
                 log.write(f"*Integrity: {integrity.get('current', '?')}/{integrity.get('max', '?')} | "
-                          f"NEXUS: {player.get('nexus_alert', '?')} | Credits: {player.get('credits', '?')} | "
+                          f"NEXUS: {nexus_alert} | Credits: {player.get('credits', '?')} | "
                           f"Turn: {player.get('turn', '?')}*\n\n---\n\n")
                 log.flush()
 

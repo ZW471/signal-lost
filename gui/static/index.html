@@ -5,10 +5,23 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, viewport-fit=cover">
   <title>SIGNAL LOST</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='4' fill='%230a0a0f'/><text x='16' y='22' text-anchor='middle' font-size='18' fill='%2300ff88'>S</text></svg>">
-  <link rel="stylesheet" href="/static/style.css?v=x2vis1">
-  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/style.css?v=w15">
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;400;500;600;700&family=Noto+Sans+SC:wght@300;400;500;700&display=swap" rel="stylesheet">
 </head>
 <body>
+  <!-- Shared SVG symbols. The neural-link brain icon is used in two places (the
+       inline chat button and the floating companion FAB); defining it once as a
+       <symbol> and referencing it via <use> removes the duplicated markup. -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+    <symbol id="icon-neural" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+      <!-- Two hemispheres form the brain; a central fold + a synapse node give it the neural-implant feel -->
+      <path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z"/>
+      <path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z"/>
+      <path d="M15 13a4.5 4.5 0 0 1-3-4 4.5 4.5 0 0 1-3 4"/>
+      <circle cx="12" cy="6.6" r="0.85" fill="currentColor" stroke="none"/>
+    </symbol>
+  </svg>
+
   <!-- Scanline overlay -->
   <div class="scanlines"></div>
 
@@ -41,19 +54,29 @@
       </div>
       <div class="menu-buttons">
         <button class="cyber-btn" id="btnNewGame" onclick="showNewGame()">
-          <span class="cyber-btn-text">NEW GAME</span>
+          <span class="cyber-btn-text" data-i18n="menu_new_game">NEW GAME</span>
           <span class="cyber-btn-glitch"></span>
           <span class="cyber-btn-tag">01</span>
         </button>
-        <button class="cyber-btn" id="btnLoadGame" onclick="showLoadGame()" style="display:none">
-          <span class="cyber-btn-text">LOAD GAME</span>
+        <button class="cyber-btn" id="btnResumeGame" onclick="resumeGame()" style="display:none">
+          <span class="cyber-btn-text" data-i18n="menu_resume">RESUME</span>
           <span class="cyber-btn-glitch"></span>
           <span class="cyber-btn-tag">02</span>
         </button>
-        <button class="cyber-btn" id="btnSettings" onclick="openSettings()">
-          <span class="cyber-btn-text">SETTINGS</span>
+        <button class="cyber-btn" id="btnLoadGame" onclick="showLoadGame()" style="display:none">
+          <span class="cyber-btn-text" data-i18n="menu_load_game">LOAD GAME</span>
           <span class="cyber-btn-glitch"></span>
           <span class="cyber-btn-tag">03</span>
+        </button>
+        <button class="cyber-btn" id="btnSettings" onclick="openSettings()">
+          <span class="cyber-btn-text" data-i18n="menu_settings">SETTINGS</span>
+          <span class="cyber-btn-glitch"></span>
+          <span class="cyber-btn-tag">04</span>
+        </button>
+        <button class="cyber-btn" id="btnEndings" onclick="openEndingsGallery()">
+          <span class="cyber-btn-text" data-i18n="menu_endings">ENDINGS</span>
+          <span class="cyber-btn-glitch"></span>
+          <span class="cyber-btn-tag">05</span>
         </button>
       </div>
       <div class="menu-lang">
@@ -63,7 +86,7 @@
         </select>
       </div>
       <div class="menu-footer">
-        <span class="blink">_</span> NEXUS MONITORING ACTIVE
+        <span class="blink">_</span> UNKNOWN SIGNAL DETECTED
       </div>
       <a href="https://github.com/ZW471/signal-lost" target="_blank" rel="noopener" class="github-link" title="GitHub">
         <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='%23606080' d='M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0016 8c0-4.42-3.58-8-8-8z'/%3E%3C/svg%3E" alt="GitHub" width="22" height="22">
@@ -73,7 +96,7 @@
     <!-- Account widget (bottom-left corner) -->
     <div class="account-widget" id="accountWidget">
       <div class="account-menu" id="accountMenu" aria-hidden="true">
-        <button class="account-menu-item" id="accountMenuLogout" onclick="doLogout()">SIGN OUT</button>
+        <button class="account-menu-item" id="accountMenuLogout" onclick="doLogout()" data-i18n="auth_sign_out">SIGN OUT</button>
       </div>
       <button class="account-btn" id="accountBtn" onclick="onAccountButton(event)" aria-haspopup="true" aria-expanded="false">
         <span class="account-status-dot" id="accountDot"></span>
@@ -85,31 +108,51 @@
   <!-- ========== NEW GAME SCREEN ========== -->
   <div id="newGameScreen" class="screen">
     <div class="config-container">
-      <h2 class="config-title">// IDENTITY CONFIGURATION</h2>
+      <h2 class="config-title" data-i18n="config_title">// IDENTITY CONFIGURATION</h2>
       <div class="config-form">
         <div class="form-group">
-          <label class="cyber-label">DESIGNATION</label>
-          <input type="text" class="cyber-input" id="inputName" placeholder="Enter name..." value="Kael">
+          <label class="cyber-label" data-i18n="label_designation">DESIGNATION</label>
+          <input type="text" class="cyber-input" id="inputName" placeholder="Enter name..." data-i18n-placeholder="placeholder_name" value="Kael">
         </div>
         <div class="form-group">
-          <label class="cyber-label">ALIAS</label>
-          <input type="text" class="cyber-input" id="inputAlias" placeholder="Enter alias..." value="Ghost">
+          <label class="cyber-label" data-i18n="label_alias">ALIAS</label>
+          <input type="text" class="cyber-input" id="inputAlias" placeholder="Enter alias..." data-i18n-placeholder="placeholder_alias" value="Ghost">
         </div>
         <div class="form-group">
-          <label class="cyber-label">BACKGROUND</label>
+          <label class="cyber-label" data-i18n="label_background">BACKGROUND</label>
           <div class="cyber-select-group">
             <button class="cyber-select active" data-bg="street_runner" onclick="selectBg(this)">
-              <span class="select-icon">⚡</span>
+              <span class="select-icon">
+                <!-- Street Runner → lightning bolt (themed, replaces ⚡) -->
+                <svg viewBox="0 0 24 24" role="img" data-i18n-aria="bg_icon_street_runner" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M13 2 4 14h6l-1 8 9-12h-6l1-8Z"/>
+                </svg>
+              </span>
               <span class="select-name">Street Runner</span>
               <span class="select-desc">街头行者</span>
             </button>
             <button class="cyber-select" data-bg="corporate_exile" onclick="selectBg(this)">
-              <span class="select-icon">🏢</span>
+              <span class="select-icon">
+                <!-- Corporate Exile → corporate tower (themed, replaces 🏢) -->
+                <svg viewBox="0 0 24 24" role="img" data-i18n-aria="bg_icon_corporate_exile" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M5 21V5a1 1 0 0 1 1-1h8a1 1 0 0 1 1 1v16"/>
+                  <path d="M15 9h3a1 1 0 0 1 1 1v11"/>
+                  <path d="M3 21h18"/>
+                  <path d="M8 8h0M11 8h0M8 12h0M11 12h0M8 16h0M11 16h0"/>
+                </svg>
+              </span>
               <span class="select-name">Corporate Exile</span>
               <span class="select-desc">企业流亡者</span>
             </button>
             <button class="cyber-select" data-bg="netrunner" onclick="selectBg(this)">
-              <span class="select-icon">🔌</span>
+              <span class="select-icon">
+                <!-- Netrunner → jack/plug (themed, replaces 🔌) -->
+                <svg viewBox="0 0 24 24" role="img" data-i18n-aria="bg_icon_netrunner" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M9 2v4M15 2v4"/>
+                  <path d="M7 6h10v4a5 5 0 0 1-10 0V6Z"/>
+                  <path d="M12 15v4a2 2 0 0 0 2 2h3"/>
+                </svg>
+              </span>
               <span class="select-name">Netrunner</span>
               <span class="select-desc">网行者</span>
             </button>
@@ -117,7 +160,7 @@
         </div>
         <div class="form-row">
           <div class="form-group half">
-            <label class="cyber-label">DIFFICULTY</label>
+            <label class="cyber-label" data-i18n="label_difficulty">DIFFICULTY</label>
             <select class="cyber-input" id="selectDifficulty">
               <option value="paranoid">Easy</option>
               <option value="cautious">Normal</option>
@@ -126,8 +169,8 @@
             </select>
           </div>
           <div class="form-group half">
-            <label class="cyber-label">LANGUAGE</label>
-            <select class="cyber-input" id="selectLanguage">
+            <label class="cyber-label" data-i18n="label_language">LANGUAGE</label>
+            <select class="cyber-input" id="selectLanguage" onchange="setLanguage(this.value)">
               <option value="en" selected>English</option>
               <option value="zh">中文</option>
             </select>
@@ -136,11 +179,11 @@
 
         <div class="form-actions">
           <button class="cyber-btn accent" onclick="startNewGame()">
-            <span class="cyber-btn-text">INITIALIZE</span>
+            <span class="cyber-btn-text" data-i18n="btn_initialize">INITIALIZE</span>
             <span class="cyber-btn-glitch"></span>
           </button>
           <button class="cyber-btn" onclick="showMenu()">
-            <span class="cyber-btn-text">BACK</span>
+            <span class="cyber-btn-text" data-i18n="btn_back">BACK</span>
             <span class="cyber-btn-glitch"></span>
           </button>
         </div>
@@ -151,11 +194,11 @@
   <!-- ========== LOAD GAME SCREEN ========== -->
   <div id="loadGameScreen" class="screen">
     <div class="config-container">
-      <h2 class="config-title">// LOAD SAVED SESSION</h2>
+      <h2 class="config-title" data-i18n="load_title">// LOAD SAVED SESSION</h2>
       <div id="savesList" class="saves-list"></div>
       <div class="form-actions">
         <button class="cyber-btn" onclick="showMenu()">
-          <span class="cyber-btn-text">BACK</span>
+          <span class="cyber-btn-text" data-i18n="btn_back">BACK</span>
           <span class="cyber-btn-glitch"></span>
         </button>
       </div>
@@ -166,28 +209,49 @@
   <div id="gameScreen" class="screen">
     <!-- Status bar -->
     <div class="status-bar" id="statusBar">
-      <div class="game-logo" id="gameLogo" aria-label="Signal Lost">SIGNAL LOST</div>
-      <div class="status-item status-item-integrity">
-        <span class="status-label" id="statLabelIntegrity">INTEGRITY</span>
-        <div class="integrity-pips" id="statIntegrityPips"></div>
+      <!-- LEFT ZONE: brand wordmark -->
+      <div class="status-zone status-zone-left">
+        <div class="game-logo" id="gameLogo" aria-label="Signal Lost">SIGNAL LOST</div>
       </div>
-      <div class="status-item">
-        <span class="status-label" id="statLabelLocation">LOCATION</span>
-        <span class="status-value truncate cyan" id="statLocation">—</span>
+
+      <!-- CENTER ZONE: meter cluster (integrity · nexus alert · signal coherence · clock · location) -->
+      <div class="status-zone status-zone-center" id="statusCenter">
+        <div class="status-item status-item-integrity" id="statItemIntegrity">
+          <span class="status-label" id="statLabelIntegrity">INTEGRITY</span>
+          <div class="integrity-pips" id="statIntegrityPips"></div>
+        </div>
+        <div class="status-item status-item-gauge" id="statItemNexus" style="display:none">
+          <span class="status-label" id="statLabelNexus">NEXUS</span>
+          <div class="hud-gauge" id="statNexusGauge" role="img"></div>
+        </div>
+        <div class="status-item status-item-gauge" id="statItemDecay" style="display:none">
+          <span class="status-label" id="statLabelDecay">SIGNAL</span>
+          <div class="hud-gauge" id="statDecayGauge" role="img"></div>
+        </div>
+        <div class="status-item status-item-clock" id="statItemClock">
+          <span class="status-label" id="statLabelClock">TIME</span>
+          <span class="status-value hud-clock" id="statClock">—</span>
+        </div>
+        <div class="status-item status-item-location">
+          <span class="status-label" id="statLabelLocation">LOCATION</span>
+          <span class="status-value truncate cyan" id="statLocation">—</span>
+        </div>
+        <div class="status-item status-item-area">
+          <span class="status-label" id="statLabelArea">AREA</span>
+          <span class="status-value truncate" id="statArea">—</span>
+        </div>
       </div>
-      <div class="status-item status-item-area">
-        <span class="status-label" id="statLabelArea">AREA</span>
-        <span class="status-value truncate" id="statArea">—</span>
-      </div>
-      <div class="status-item actions">
+
+      <!-- RIGHT ZONE: actions -->
+      <div class="status-item actions status-zone-right">
         <button class="status-btn status-btn-panels" onclick="toggleInfoPanels()" title="Show panels" aria-label="Toggle info panels" id="btnInfoPanels">▤</button>
         <div class="nav-menu-wrap">
           <button class="status-btn" onclick="toggleNavMenu(event)" title="Menu" aria-label="Menu" aria-haspopup="true" aria-expanded="false" id="btnNavMenu">☰</button>
           <div class="nav-menu" id="navMenu" role="menu" aria-hidden="true">
-            <button class="nav-menu-item" role="menuitem" onclick="navMenuAction('tutorial')" id="navItemTutorial">Tutorial</button>
-            <button class="nav-menu-item" role="menuitem" onclick="navMenuAction('save')" id="navItemSave">Save Game</button>
-            <button class="nav-menu-item" role="menuitem" onclick="navMenuAction('settings')" id="navItemSettings">Settings</button>
-            <button class="nav-menu-item" role="menuitem" onclick="navMenuAction('menu')" id="navItemMenu">Main Menu</button>
+            <button class="nav-menu-item" role="menuitem" onclick="navMenuAction('tutorial')" id="navItemTutorial" data-i18n="nav_tutorial">Tutorial</button>
+            <button class="nav-menu-item" role="menuitem" onclick="navMenuAction('save')" id="navItemSave" data-i18n="nav_save">Save Game</button>
+            <button class="nav-menu-item" role="menuitem" onclick="navMenuAction('settings')" id="navItemSettings" data-i18n="nav_settings">Settings</button>
+            <button class="nav-menu-item" role="menuitem" onclick="navMenuAction('menu')" id="navItemMenu" data-i18n="nav_menu">Main Menu</button>
           </div>
         </div>
       </div>
@@ -197,29 +261,42 @@
     <div class="game-layout" id="gameLayout">
       <!-- Chat panel (left) -->
       <div class="chat-panel" id="chatPanel">
-        <div class="chat-messages" id="chatMessages"></div>
+        <!-- role="region" (NOT role="log") names the transcript as a plain
+             landmark. role="log" would carry an IMPLICIT aria-live="polite",
+             and the typewriter mutates each message char-by-char (textContent),
+             which any live region would announce as a storm of partial/garbled
+             fragments. A non-live region keeps those mutations silent; the
+             visually-hidden #chatLiveRegion below is the single polite
+             announcer — finalize() writes each message's COMPLETE text into it
+             exactly once, so screen readers hear the final narration once per
+             message with no double-announce. -->
+        <div class="chat-messages" id="chatMessages" role="region" data-i18n-aria="chat_log_label"></div>
+        <div id="chatLiveRegion" class="sr-only" aria-live="polite" aria-atomic="true"></div>
         <div class="thinking-indicator" id="thinkingIndicator" style="display:none">
           <div class="thinking-row">
             <div class="thinking-dots">
               <span></span><span></span><span></span>
             </div>
             <span class="thinking-text">PROCESSING NEURAL INPUT</span>
+            <button type="button" class="cyber-btn thinking-cancel-btn" id="cancelTurnBtn"
+                    style="display:none" onclick="requestCancelTurn()" data-i18n="cancel_turn">CANCEL</button>
           </div>
           <span class="thinking-hint" id="thinkingHint"></span>
         </div>
         <div class="suggested-actions" id="suggestedActions" aria-label="Suggested actions"></div>
+        <!-- Curated bilingual verb chips — shown only on an empty, focused input -->
+        <div class="verb-chips" id="verbChips" aria-hidden="true"></div>
         <div class="chat-input-container">
           <button class="chat-neural-btn" id="chatNeuralBtn" onclick="toggleCompanion()" title="Neural Link" aria-label="Open neural link">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z"/>
-              <path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z"/>
-              <path d="M15 13a4.5 4.5 0 0 1-3-4 4.5 4.5 0 0 1-3 4"/>
-              <circle cx="12" cy="6.6" r="0.85" fill="currentColor" stroke="none"/>
-            </svg>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-neural"/></svg>
           </button>
           <div class="input-prefix">▶</div>
-          <input type="text" class="chat-input" id="chatInput" placeholder="What do you do?" autocomplete="off" onkeydown="if(event.key==='Enter')sendMessage()">
-          <button class="send-btn" onclick="sendMessage()">⟩</button>
+          <div class="chat-input-wrap">
+            <!-- Ghost completion layer: dim verb tail behind the input text -->
+            <div class="input-ghost" id="inputGhost" aria-hidden="true"></div>
+            <input type="text" class="chat-input" id="chatInput" placeholder="What do you do?" data-i18n-placeholder="chat_placeholder" autocomplete="off" onkeydown="if(event.key==='Enter')sendMessage()">
+          </div>
+          <button class="send-btn" onclick="sendMessage()" data-i18n-aria="send_action" title="Send">⟩</button>
         </div>
       </div>
 
@@ -233,26 +310,31 @@
       <div class="info-panels" id="infoPanels">
         <!-- Drawer handle: visible only on mobile, lets the user collapse the drawer -->
         <div class="info-panels-drawer-head">
-          <span class="info-panels-drawer-title">// DATA PANELS</span>
+          <span class="info-panels-drawer-title" data-i18n="data_panels">// DATA PANELS</span>
           <button class="info-panels-close" onclick="closeInfoPanels()" title="Close panels" aria-label="Close info panels">✕</button>
         </div>
+        <!-- WAVE 5a IA regroup: 9 equal-weight tabs → 7 grouped tabs. Hot tabs
+             (KNOW/TRACE/NPC/WORLD) lead; ID+INV fold into CHARACTER (two
+             sections); LOC folds into WORLD (sections); LOG/CONV stay. Each tab's
+             data-panel still names an existing .panel container so every
+             updateXPanel keeps rendering into a live element, and the old
+             per-panel containers (#panel-identity / #panel-inventory /
+             #panel-district) are preserved nested inside the merged panels so
+             their renderers, the tutorial targets and 1–9 shortcuts all resolve. -->
         <div class="panel-tabs">
-          <button class="panel-tab active" data-panel="identity" onclick="switchPanel(this)">ID</button>
-          <button class="panel-tab" data-panel="knowledge" onclick="switchPanel(this)">KNOW</button>
-          <button class="panel-tab" data-panel="traces" onclick="switchPanel(this)">TRACE</button>
-          <button class="panel-tab" data-panel="district" onclick="switchPanel(this)">LOC</button>
-          <button class="panel-tab" data-panel="inventory" onclick="switchPanel(this)">INV</button>
-          <button class="panel-tab" data-panel="network" onclick="switchPanel(this)">NPC</button>
-          <button class="panel-tab" data-panel="world" onclick="switchPanel(this)">WORLD</button>
-          <button class="panel-tab" data-panel="log" onclick="switchPanel(this)">LOG</button>
-          <button class="panel-tab" data-panel="conversation" onclick="switchPanel(this)">CONV</button>
+          <button class="panel-tab active" data-panel="knowledge" onclick="switchPanel(this)" data-i18n="tab_knowledge">KNOW</button>
+          <button class="panel-tab" data-panel="traces" onclick="switchPanel(this)" data-i18n="tab_traces">TRACE</button>
+          <button class="panel-tab" data-panel="network" onclick="switchPanel(this)" data-i18n="tab_network">NPC</button>
+          <button class="panel-tab" data-panel="world" onclick="switchPanel(this)" data-i18n="tab_world">WORLD</button>
+          <button class="panel-tab" data-panel="character" onclick="switchPanel(this)" data-i18n="tab_character">CHAR</button>
+          <button class="panel-tab" data-panel="log" onclick="switchPanel(this)" data-i18n="tab_log">LOG</button>
+          <button class="panel-tab" data-panel="conversation" onclick="switchPanel(this)" data-i18n="tab_conversation">CONV</button>
         </div>
         <div class="panel-content" id="panelContent">
-          <div class="panel active" id="panel-identity"></div>
-          <div class="panel has-search" id="panel-knowledge">
+          <div class="panel active has-search" id="panel-knowledge">
             <div class="panel-search">
               <span class="panel-search-icon">⌕</span>
-              <input type="text" class="panel-search-input" id="search-knowledge" placeholder="Search…" autocomplete="off" oninput="onPanelSearch('knowledge')">
+              <input type="text" class="panel-search-input" id="search-knowledge" placeholder="Search…" data-i18n-placeholder="search_placeholder" autocomplete="off" oninput="onPanelSearch('knowledge')">
               <button type="button" class="panel-search-clear" id="search-knowledge-clear" onclick="clearPanelSearch('knowledge')" title="Clear" aria-label="Clear search">✕</button>
             </div>
             <div class="panel-body" id="panel-knowledge-body"></div>
@@ -260,19 +342,30 @@
           <div class="panel has-search" id="panel-traces">
             <div class="panel-search">
               <span class="panel-search-icon">⌕</span>
-              <input type="text" class="panel-search-input" id="search-traces" placeholder="Search…" autocomplete="off" oninput="onPanelSearch('traces')">
+              <input type="text" class="panel-search-input" id="search-traces" placeholder="Search…" data-i18n-placeholder="search_placeholder" autocomplete="off" oninput="onPanelSearch('traces')">
               <button type="button" class="panel-search-clear" id="search-traces-clear" onclick="clearPanelSearch('traces')" title="Clear" aria-label="Clear search">✕</button>
             </div>
             <div class="panel-body" id="panel-traces-body"></div>
           </div>
-          <div class="panel" id="panel-district"></div>
-          <div class="panel" id="panel-inventory"></div>
           <div class="panel" id="panel-network"></div>
-          <div class="panel" id="panel-world"></div>
+          <!-- WORLD tab = district constellation map + world state + district
+               (LOC) sections in one scroll. The map sits above world-state and
+               is rendered separately (updateDistrictMap) so a world-state repaint
+               never wipes it. -->
+          <div class="panel" id="panel-world">
+            <div id="panel-district-map"></div>
+            <div id="panel-world-state"></div>
+            <div id="panel-district"></div>
+          </div>
+          <!-- CHARACTER tab = identity (ID) + inventory (INV) sections. -->
+          <div class="panel" id="panel-character">
+            <div id="panel-identity"></div>
+            <div id="panel-inventory"></div>
+          </div>
           <div class="panel has-search" id="panel-log">
             <div class="panel-search">
               <span class="panel-search-icon">⌕</span>
-              <input type="text" class="panel-search-input" id="search-log" placeholder="Search…" autocomplete="off" oninput="onPanelSearch('log')">
+              <input type="text" class="panel-search-input" id="search-log" placeholder="Search…" data-i18n-placeholder="search_placeholder" autocomplete="off" oninput="onPanelSearch('log')">
               <button type="button" class="panel-search-clear" id="search-log-clear" onclick="clearPanelSearch('log')" title="Clear" aria-label="Clear search">✕</button>
             </div>
             <div class="panel-body" id="panel-log-body"></div>
@@ -280,7 +373,7 @@
           <div class="panel has-search" id="panel-conversation">
             <div class="panel-search">
               <span class="panel-search-icon">⌕</span>
-              <input type="text" class="panel-search-input" id="search-conversation" placeholder="Search…" autocomplete="off" oninput="onPanelSearch('conversation')">
+              <input type="text" class="panel-search-input" id="search-conversation" placeholder="Search…" data-i18n-placeholder="search_placeholder" autocomplete="off" oninput="onPanelSearch('conversation')">
               <button type="button" class="panel-search-clear" id="search-conversation-clear" onclick="clearPanelSearch('conversation')" title="Clear" aria-label="Clear search">✕</button>
             </div>
             <div class="panel-body" id="panel-conversation-body"></div>
@@ -293,13 +386,7 @@
     <!-- A private inner channel to the neural implant. Read-only: nothing said
          here touches the world, and the transcript is never saved. -->
     <button class="companion-fab" id="companionFab" onclick="toggleCompanion()" title="Neural Link" aria-label="Open neural link">
-      <svg class="companion-fab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <!-- Two hemispheres form the brain; a central fold + a synapse node give it the neural-implant feel -->
-        <path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z"/>
-        <path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z"/>
-        <path d="M15 13a4.5 4.5 0 0 1-3-4 4.5 4.5 0 0 1-3 4"/>
-        <circle cx="12" cy="6.6" r="0.85" fill="currentColor" stroke="none"/>
-      </svg>
+      <svg class="companion-fab-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-neural"/></svg>
       <span class="companion-fab-pulse"></span>
     </button>
 
@@ -322,7 +409,7 @@
       <div class="companion-input-row">
         <div class="companion-input-prefix">▶</div>
         <input type="text" class="companion-input" id="companionInput" placeholder="Ask, or think out loud…" autocomplete="off" maxlength="500" onkeydown="if(event.key==='Enter')sendCompanionMessage()">
-        <button class="companion-send" id="companionSend" onclick="sendCompanionMessage()" title="Send">⟩</button>
+        <button class="companion-send" id="companionSend" onclick="sendCompanionMessage()" data-i18n-aria="send_action" title="Send">⟩</button>
       </div>
     </div>
   </div>
@@ -330,7 +417,7 @@
   <!-- ========== TUTORIAL OVERLAY ========== -->
   <div id="tutorialOverlay" style="display:none">
     <div class="tutorial-highlight" id="tutorialHighlight"></div>
-    <div class="tutorial-tooltip" id="tutorialTooltip">
+    <div class="tutorial-tooltip" id="tutorialTooltip" role="dialog" aria-modal="false" aria-labelledby="tutorialStepIndicator">
       <div class="tutorial-step-indicator" id="tutorialStepIndicator"></div>
       <div class="tutorial-text" id="tutorialText"></div>
       <div class="tutorial-buttons">
@@ -342,28 +429,59 @@
 
   <!-- ========== GAME OVER OVERLAY ========== -->
   <div id="gameOverOverlay" class="overlay" style="display:none">
-    <div class="game-over-container">
-      <h1 class="game-over-title glitch-text" data-text="SIGNAL LOST">SIGNAL LOST</h1>
-      <div class="game-over-ending" id="gameOverEnding"></div>
-      <div class="game-over-narrative" id="gameOverNarrative"></div>
-      <button class="cyber-btn accent" onclick="location.reload()">
-        <span class="cyber-btn-text">RECONNECT</span>
-        <span class="cyber-btn-glitch"></span>
-      </button>
+    <div class="game-over-container dialog" role="dialog" aria-modal="true" aria-labelledby="gameOverTitle">
+      <h1 class="game-over-title glitch-text" id="gameOverTitle" data-text="SIGNAL LOST">SIGNAL LOST</h1>
+      <!-- Ending + narrative scroll so a long death narrative on a short
+           viewport can never push RECONNECT (pinned below) off-screen. -->
+      <div class="dialog-body game-over-body">
+        <div class="game-over-ending" id="gameOverEnding"></div>
+        <div class="game-over-narrative" id="gameOverNarrative"></div>
+      </div>
+      <div class="dialog-actions">
+        <button class="cyber-btn accent" onclick="location.reload()">
+          <span class="cyber-btn-text" data-i18n="game_over_reconnect">RECONNECT</span>
+          <span class="cyber-btn-glitch"></span>
+        </button>
+      </div>
     </div>
   </div>
 
   <!-- ========== CONFIRM MENU DIALOG ========== -->
   <div id="confirmMenuDialog" class="overlay" style="display:none">
-    <div class="save-dialog">
-      <h3 class="config-title" id="confirmMenuTitle">// RETURN TO MENU?</h3>
-      <p class="confirm-text" id="confirmMenuText">Any unsaved progress will be lost.</p>
-      <div class="form-actions">
+    <div class="save-dialog dialog" role="dialog" aria-modal="true" aria-labelledby="confirmMenuTitle">
+      <div class="dialog-header">
+        <h3 class="config-title" id="confirmMenuTitle" data-i18n="confirm_menu_title">// RETURN TO MENU?</h3>
+      </div>
+      <div class="dialog-body">
+        <p class="confirm-text" id="confirmMenuText" data-i18n="confirm_menu_text">Any unsaved progress will be lost.</p>
+      </div>
+      <div class="dialog-actions form-actions">
         <button class="cyber-btn accent" onclick="confirmReturnToMenu()">
-          <span class="cyber-btn-text" id="confirmMenuYes">CONFIRM</span>
+          <span class="cyber-btn-text" id="confirmMenuYes" data-i18n="btn_confirm">CONFIRM</span>
         </button>
         <button class="cyber-btn" onclick="closeConfirmMenu()">
-          <span class="cyber-btn-text" id="confirmMenuNo">CANCEL</span>
+          <span class="cyber-btn-text" id="confirmMenuNo" data-i18n="btn_cancel">CANCEL</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== CONFIRM DELETE SAVE DIALOG ========== -->
+  <div id="confirmDeleteDialog" class="overlay" style="display:none">
+    <div class="save-dialog dialog" role="dialog" aria-modal="true" aria-labelledby="confirmDeleteTitle">
+      <div class="dialog-header">
+        <h3 class="config-title" id="confirmDeleteTitle" data-i18n="save_delete_title">// DELETE SAVE?</h3>
+      </div>
+      <div class="dialog-body">
+        <p class="confirm-text" id="confirmDeleteText" data-i18n="save_delete_confirm">Delete this save permanently? This cannot be undone.</p>
+        <p class="confirm-text save-delete-target" id="confirmDeleteName"></p>
+      </div>
+      <div class="dialog-actions form-actions">
+        <button class="cyber-btn accent" id="confirmDeleteBtn" onclick="doDeleteSave()">
+          <span class="cyber-btn-text" data-i18n="btn_delete">DELETE</span>
+        </button>
+        <button class="cyber-btn" onclick="closeDeleteDialog()">
+          <span class="cyber-btn-text" data-i18n="btn_cancel">CANCEL</span>
         </button>
       </div>
     </div>
@@ -371,32 +489,82 @@
 
   <!-- ========== SAVE DIALOG ========== -->
   <div id="saveDialog" class="overlay" style="display:none">
-    <div class="save-dialog">
-      <h3 class="config-title">// SAVE SESSION</h3>
-      <div class="form-group">
-        <label class="cyber-label">SAVE NAME</label>
-        <input type="text" class="cyber-input" id="saveName" placeholder="quicksave" value="quicksave">
+    <div class="save-dialog dialog" role="dialog" aria-modal="true" aria-labelledby="saveDialogTitle">
+      <div class="dialog-header">
+        <h3 class="config-title" id="saveDialogTitle" data-i18n="save_title">// SAVE SESSION</h3>
       </div>
-      <div class="form-actions">
+      <div class="dialog-body">
+        <div class="form-group">
+          <label class="cyber-label" data-i18n="label_save_name">SAVE NAME</label>
+          <input type="text" class="cyber-input" id="saveName" placeholder="quicksave" value="quicksave">
+        </div>
+      </div>
+      <div class="dialog-actions form-actions">
         <button class="cyber-btn accent" onclick="confirmSave()">
-          <span class="cyber-btn-text">SAVE</span>
+          <span class="cyber-btn-text" data-i18n="btn_save">SAVE</span>
         </button>
         <button class="cyber-btn" onclick="closeSaveDialog()">
-          <span class="cyber-btn-text">CANCEL</span>
+          <span class="cyber-btn-text" data-i18n="btn_cancel">CANCEL</span>
         </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== SHORTCUT CHEAT-SHEET ========== -->
+  <div id="shortcutSheet" class="overlay" style="display:none">
+    <div class="save-dialog dialog" role="dialog" aria-modal="true" aria-labelledby="shortcutSheetTitle">
+      <div class="dialog-header">
+        <h3 class="config-title" id="shortcutSheetTitle" data-i18n="shortcuts_title">// SHORTCUTS</h3>
+      </div>
+      <div class="dialog-body">
+        <div class="shortcut-list" id="shortcutSheetBody"></div>
+      </div>
+      <div class="dialog-actions form-actions">
+        <button class="cyber-btn" onclick="closeShortcutSheet()">
+          <span class="cyber-btn-text" data-i18n="btn_close">CLOSE</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== ENDINGS GALLERY ========== -->
+  <!-- Meta-progression, DISCOVERED SCOPE ONLY: one named slot per REACHED
+       ending (from the status payload's spoiler-safe endings_discovered) with
+       localized name + reached-on info, plus a single unquantified sealed
+       '▓ ???' hint card. The client never learns how many endings exist. -->
+  <div id="endingsOverlay" class="overlay" style="display:none">
+    <div class="endings-dialog dialog" role="dialog" aria-modal="true" aria-labelledby="endingsTitle">
+      <div class="dialog-header">
+        <h3 class="config-title" id="endingsTitle" data-i18n="endings_title">// ENDINGS ARCHIVE</h3>
+      </div>
+      <div class="dialog-body">
+        <div class="endings-grid" id="endingsGrid" role="list"></div>
+      </div>
+      <div class="dialog-actions">
+        <div class="endings-footer">
+          <span class="endings-counter" id="endingsCounter"></span>
+        </div>
+        <div class="form-actions">
+          <button class="cyber-btn" onclick="closeEndingsGallery()">
+            <span class="cyber-btn-text" data-i18n="btn_close">CLOSE</span>
+          </button>
+        </div>
       </div>
     </div>
   </div>
 
   <!-- ========== SETTINGS OVERLAY ========== -->
   <div id="settingsOverlay" class="overlay" style="display:none">
-    <div class="settings-dialog">
-      <h3 class="config-title">// SETTINGS</h3>
+    <div class="settings-dialog dialog" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+      <div class="dialog-header">
+        <h3 class="config-title" id="settingsTitle" data-i18n="settings_title">// SETTINGS</h3>
+      </div>
+      <div class="dialog-body">
       <div class="config-form">
-        <h4 class="config-subtitle">// LLM PROVIDER</h4>
+        <h4 class="config-subtitle" data-i18n="settings_provider_title">// LLM PROVIDER</h4>
         <div class="form-row">
           <div class="form-group half">
-            <label class="cyber-label">PROVIDER</label>
+            <label class="cyber-label" data-i18n="label_provider">PROVIDER</label>
             <select class="cyber-input" id="selectProvider" onchange="onProviderChange()">
               <option value="openai">OpenAI</option>
               <option value="anthropic">Anthropic</option>
@@ -407,138 +575,164 @@
             </select>
           </div>
           <div class="form-group half">
-            <label class="cyber-label">MODEL</label>
+            <label class="cyber-label" data-i18n="label_model">MODEL</label>
             <input type="text" class="cyber-input" id="inputModel" placeholder="gpt-4o" value="gpt-4o">
           </div>
         </div>
         <div class="form-group" id="apiKeyGroup">
-          <label class="cyber-label">API KEY</label>
+          <label class="cyber-label" data-i18n="label_api_key">API KEY</label>
           <input type="password" class="cyber-input" id="inputApiKey" placeholder="sk-...">
         </div>
         <div class="form-group" id="baseUrlGroup" style="display:none">
-          <label class="cyber-label">BASE URL</label>
+          <label class="cyber-label" data-i18n="label_base_url">BASE URL</label>
           <input type="text" class="cyber-input" id="inputBaseUrl" placeholder="http://localhost:1234/v1" value="http://localhost:1234/v1">
         </div>
         <div class="form-group">
-          <label class="cyber-label">TEMPERATURE</label>
+          <label class="cyber-label" data-i18n="label_temperature">TEMPERATURE</label>
           <div class="slider-container">
             <input type="range" class="cyber-slider" id="inputTemp" min="0" max="1" step="0.1" value="0.7">
             <span class="slider-value" id="tempValue">0.7</span>
           </div>
         </div>
-        <h4 class="config-subtitle">// LANGSMITH TRACING</h4>
+        <h4 class="config-subtitle" data-i18n="settings_langsmith_title">// LANGSMITH TRACING</h4>
         <div class="form-row">
           <div class="form-group half">
-            <label class="cyber-label">API KEY</label>
+            <label class="cyber-label" data-i18n="label_langsmith_key">API KEY</label>
             <input type="password" class="cyber-input" id="inputLangsmithKey" placeholder="lsv2_pt_...">
           </div>
           <div class="form-group half">
-            <label class="cyber-label">PROJECT NAME</label>
+            <label class="cyber-label" data-i18n="label_langsmith_project">PROJECT NAME</label>
             <input type="text" class="cyber-input" id="inputLangsmithProject" placeholder="signal_lost" value="signal_lost">
           </div>
         </div>
-        <h4 class="config-subtitle">// USAGE TRACKING</h4>
+        <h4 class="config-subtitle" data-i18n="settings_usage_title">// USAGE TRACKING</h4>
         <div class="form-group">
           <label class="cyber-label" style="display:flex;align-items:center;gap:8px;cursor:pointer">
-            <input type="checkbox" id="chkShowTokens" style="accent-color:var(--cyan)"> Show token usage in conversation
+            <input type="checkbox" id="chkShowTokens" style="accent-color:var(--cyan)"> <span id="lblShowTokens" data-i18n="label_show_tokens">Show token usage in conversation</span>
           </label>
         </div>
         <div id="usageStats" class="usage-stats"></div>
-        <h4 class="config-subtitle">// AUDIO</h4>
+        <h4 class="config-subtitle" data-i18n="settings_audio_title">// AUDIO</h4>
         <div class="form-group">
-          <label class="cyber-label">MUSIC VOLUME</label>
+          <label class="cyber-label" data-i18n="label_music_volume">MUSIC VOLUME</label>
           <div class="slider-container">
             <input type="range" class="cyber-slider" id="inputMusicVolume" min="0" max="1" step="0.05" value="0.35" oninput="MusicEngine.setVolume(parseFloat(this.value)); document.getElementById('musicVolValue').textContent = Math.round(this.value * 100) + '%'">
             <span class="slider-value" id="musicVolValue">35%</span>
           </div>
         </div>
-        <h4 class="config-subtitle" id="gameplaySectionTitle">// GAMEPLAY</h4>
+        <div class="form-group">
+          <label class="cyber-label" data-i18n="label_sfx_volume">SFX VOLUME</label>
+          <div class="slider-container">
+            <input type="range" class="cyber-slider" id="inputSfxVolume" min="0" max="1" step="0.05" value="1" oninput="MusicEngine.setSfxVolume(parseFloat(this.value)); document.getElementById('sfxVolValue').textContent = Math.round(this.value * 100) + '%'">
+            <span class="slider-value" id="sfxVolValue">100%</span>
+          </div>
+        </div>
+        <h4 class="config-subtitle" id="gameplaySectionTitle" data-i18n="settings_gameplay_title">// GAMEPLAY</h4>
         <div class="form-group">
           <label class="cyber-label" style="display:flex;align-items:center;gap:8px;cursor:pointer">
-            <input type="checkbox" id="chkSuggestedActions" style="accent-color:var(--cyan)"> <span id="lblSuggestedActions">Suggest actions each turn</span>
+            <input type="checkbox" id="chkSuggestedActions" style="accent-color:var(--cyan)"> <span id="lblSuggestedActions" data-i18n="label_suggested_actions">Suggest actions each turn</span>
           </label>
         </div>
         <div class="form-group">
           <label class="cyber-label" style="display:flex;align-items:center;gap:8px;cursor:pointer">
-            <input type="checkbox" id="chkPredictOutcome" style="accent-color:var(--cyan)"> <span id="lblPredictOutcome">Pre-compute suggested actions (instant replies, extra LLM calls)</span>
+            <input type="checkbox" id="chkPredictOutcome" style="accent-color:var(--cyan)"> <span id="lblPredictOutcome" data-i18n="label_predict_outcome">Pre-compute suggested actions (instant replies, extra LLM calls)</span>
           </label>
-        </div>
-        <div class="form-actions">
-          <button class="cyber-btn accent" onclick="saveSettings()">
-            <span class="cyber-btn-text">SAVE</span>
-          </button>
-          <button class="cyber-btn" onclick="closeSettings()">
-            <span class="cyber-btn-text">CLOSE</span>
-          </button>
         </div>
       </div>
-      <div class="settings-status" id="settingsStatus"></div>
+      </div>
+      <div class="dialog-actions">
+        <div class="form-actions">
+          <button class="cyber-btn accent" onclick="saveSettings()">
+            <span class="cyber-btn-text" data-i18n="btn_save">SAVE</span>
+          </button>
+          <button class="cyber-btn" onclick="closeSettings()">
+            <span class="cyber-btn-text" data-i18n="btn_close">CLOSE</span>
+          </button>
+        </div>
+        <div class="settings-status" id="settingsStatus"></div>
+      </div>
     </div>
   </div>
 
   <!-- ========== AUTH (REGISTER / SIGN IN) ========== -->
   <div id="authOverlay" class="overlay" style="display:none">
-    <div class="auth-dialog">
-      <h3 class="config-title" id="authTitle">// ACCESS TERMINAL</h3>
-      <div class="auth-tabs">
-        <button class="auth-tab active" id="authTabSignin" onclick="switchAuthTab('signin')">SIGN IN</button>
-        <button class="auth-tab" id="authTabRegister" onclick="switchAuthTab('register')">REGISTER</button>
+    <div class="auth-dialog dialog" role="dialog" aria-modal="true" aria-labelledby="authTitle">
+      <div class="dialog-header">
+        <h3 class="config-title" id="authTitle" data-i18n="auth_title">// ACCESS TERMINAL</h3>
       </div>
-      <div class="config-form">
-        <div class="form-group">
-          <label class="cyber-label" id="authUserLabel">USERNAME</label>
-          <input type="text" class="cyber-input" id="authUsername" autocomplete="username" maxlength="32" placeholder="Enter a username" onkeydown="if(event.key==='Enter')submitAuth()">
+      <div class="dialog-body">
+        <div class="auth-tabs">
+          <button class="auth-tab active" id="authTabSignin" onclick="switchAuthTab('signin')" data-i18n="auth_sign_in">SIGN IN</button>
+          <button class="auth-tab" id="authTabRegister" onclick="switchAuthTab('register')" data-i18n="auth_register">REGISTER</button>
         </div>
-        <div class="form-group">
-          <label class="cyber-label" id="authPassLabel">PASSWORD</label>
-          <input type="password" class="cyber-input" id="authPassword" autocomplete="current-password" placeholder="Enter a password" onkeydown="if(event.key==='Enter')submitAuth()">
+        <div class="config-form">
+          <div class="form-group">
+            <label class="cyber-label" id="authUserLabel" data-i18n="auth_username">USERNAME</label>
+            <input type="text" class="cyber-input" id="authUsername" autocomplete="username" maxlength="32" placeholder="Enter a username" data-i18n-placeholder="auth_username_placeholder" onkeydown="if(event.key==='Enter')submitAuth()">
+          </div>
+          <div class="form-group">
+            <label class="cyber-label" id="authPassLabel" data-i18n="auth_password">PASSWORD</label>
+            <input type="password" class="cyber-input" id="authPassword" autocomplete="current-password" placeholder="Enter a password" data-i18n-placeholder="auth_password_placeholder" onkeydown="if(event.key==='Enter')submitAuth()">
+          </div>
+          <div class="auth-error" id="authError"></div>
         </div>
-        <div class="auth-error" id="authError"></div>
-        <div class="form-actions">
-          <button class="cyber-btn accent" onclick="submitAuth()">
-            <span class="cyber-btn-text" id="authSubmitLabel">SIGN IN</span>
-          </button>
-          <button class="cyber-btn" onclick="closeAuth()">
-            <span class="cyber-btn-text" id="authCancelLabel">CANCEL</span>
-          </button>
-        </div>
+      </div>
+      <div class="dialog-actions form-actions">
+        <button class="cyber-btn accent" onclick="submitAuth()">
+          <span class="cyber-btn-text" id="authSubmitLabel">SIGN IN</span>
+        </button>
+        <button class="cyber-btn" onclick="closeAuth()">
+          <span class="cyber-btn-text" id="authCancelLabel" data-i18n="btn_cancel">CANCEL</span>
+        </button>
       </div>
     </div>
   </div>
 
   <!-- ========== SESSION CONFLICT (double login) ========== -->
-  <div id="sessionConflictDialog" class="overlay" style="display:none">
-    <div class="save-dialog">
-      <h3 class="config-title" id="conflictTitle">// ACCOUNT ALREADY ACTIVE</h3>
-      <p class="confirm-text" id="conflictText">This account is already signed in on another session. Continue here and disconnect the other one?</p>
-      <div class="form-actions">
+  <div id="sessionConflictDialog" class="overlay overlay-top" style="display:none">
+    <div class="save-dialog dialog" role="dialog" aria-modal="true" aria-labelledby="conflictTitle">
+      <div class="dialog-header">
+        <h3 class="config-title" id="conflictTitle" data-i18n="conflict_title">// ACCOUNT ALREADY ACTIVE</h3>
+      </div>
+      <div class="dialog-body">
+        <p class="confirm-text" id="conflictText" data-i18n="conflict_text">This account is already signed in on another session. Continue here and disconnect the other one?</p>
+      </div>
+      <div class="dialog-actions form-actions">
         <button class="cyber-btn accent" onclick="confirmTakeover()">
-          <span class="cyber-btn-text" id="conflictYes">CONTINUE HERE</span>
+          <span class="cyber-btn-text" id="conflictYes" data-i18n="conflict_yes">CONTINUE HERE</span>
         </button>
         <button class="cyber-btn" onclick="closeConflict()">
-          <span class="cyber-btn-text" id="conflictNo">CANCEL</span>
+          <span class="cyber-btn-text" id="conflictNo" data-i18n="conflict_no">CANCEL</span>
         </button>
       </div>
     </div>
   </div>
 
   <!-- ========== KICKED (signed out elsewhere) ========== -->
-  <div id="kickedOverlay" class="overlay" style="display:none">
-    <div class="save-dialog">
-      <h3 class="config-title" id="kickedTitle">// SESSION ENDED</h3>
-      <p class="confirm-text" id="kickedText">This account was opened in another session. You have been signed out here.</p>
-      <div class="form-actions">
+  <div id="kickedOverlay" class="overlay overlay-top" style="display:none">
+    <div class="save-dialog dialog" role="dialog" aria-modal="true" aria-labelledby="kickedTitle">
+      <div class="dialog-header">
+        <h3 class="config-title" id="kickedTitle" data-i18n="kicked_title">// SESSION ENDED</h3>
+      </div>
+      <div class="dialog-body">
+        <p class="confirm-text" id="kickedText" data-i18n="kicked_text">This account was opened in another session. You have been signed out here.</p>
+      </div>
+      <div class="dialog-actions form-actions">
         <button class="cyber-btn accent" onclick="location.reload()">
-          <span class="cyber-btn-text" id="kickedReload">RECONNECT</span>
+          <span class="cyber-btn-text" id="kickedReload" data-i18n="kicked_reload">RECONNECT</span>
         </button>
       </div>
     </div>
   </div>
 
-  <!-- ========== NOTIFICATION ========== -->
-  <div id="notification" class="notification"></div>
+  <!-- ========== TOAST STACK ==========
+       Single flex-column host for every transient notification (system notices,
+       knowledge-added, overflow chip). Positioned bottom-center (top-center on
+       narrow viewports) in CSS; the companion FAB keeps its own bottom-right
+       lane so the two no longer collide. -->
+  <div id="toastStack" class="toast-stack" aria-live="polite" aria-relevant="additions"></div>
 
-  <script src="/static/music.js?v=x2vis1"></script>
-  <script src="/static/app.js?v=x2vis1"></script>
+  <script src="/static/music.js?v=w15"></script>
+  <script src="/static/app.js?v=w15"></script>
 </body>
 </html>
