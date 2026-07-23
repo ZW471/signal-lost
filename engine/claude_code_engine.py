@@ -328,7 +328,17 @@ def _summarize_knowledge(knowledge: dict, traces: dict) -> list[str]:
                 out.append(d[:limit])
         return out
 
-    facts = _descs(knowledge.get("facts", []))
+    # Cap the fact grounding to the most-recent N so the per-turn prompt can't
+    # grow unbounded over a long game (a live 13-turn run already held 109 facts,
+    # ~10 added/turn, and `silence` runs to turn 100). Facts are appended
+    # chronologically, so the tail is the freshest context; the KEY established
+    # truths persist uncapped in the Discovered Traces below, so consistency
+    # holds. ⚠️ SYNC: mirrored in graph.py's validator context.
+    _MAX_FACTS_IN_SUMMARY = 100
+    _all_facts = knowledge.get("facts", [])
+    facts = _descs(_all_facts[-_MAX_FACTS_IN_SUMMARY:])
+    if len(_all_facts) > _MAX_FACTS_IN_SUMMARY:
+        facts.insert(0, f"[+{len(_all_facts) - _MAX_FACTS_IN_SUMMARY} earlier facts — distilled into the Discovered Traces below]")
     rumors = _descs(knowledge.get("rumors", []))
     theories = _descs(knowledge.get("theories", []))
     evidence = [e.get("name") or e.get("id") or (e.get("description", "")[:50])
