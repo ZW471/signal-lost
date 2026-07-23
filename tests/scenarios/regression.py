@@ -1015,7 +1015,17 @@ def test_action_endings_fire_on_completion_not_intent():
         assert E["liberation"](T(5), wL, p, K(done), n), f"liberation missed a real strike: {done!r}"
     assert not E["liberation"](T(5), wL, p, K("the bullet grazed my arm"), n), \
         "liberation false-fired on 'grazed' (razed substring)"
-    print("  [PASS] Action endings (liberation/order/purification/exile) fire on completion, not intent/prep")
+    # exposure: a real SEND fires; a DESCRIPTIVE infrastructure fact must not
+    # (a live run saw "every public screen hangs off one spine" match the old
+    # bare "every public screen" keyword — a latent cliffhanger surface).
+    wExp = {"nexus_alert": {"current": 50}}
+    assert E["exposure"]({"discovered": []}, wExp, {"turn": 9},
+                         K("I broadcast the ledger across every public screen; the whole city saw it"), n), \
+        "exposure did not fire on a real completed broadcast"
+    assert not E["exposure"]({"discovered": []}, wExp, {"turn": 9},
+                             K("every public screen in Neo-Kowloon hangs off one municipal broadcast spine"), n), \
+        "exposure false-fired on a descriptive infrastructure fact ('every public screen')"
+    print("  [PASS] Action endings (liberation/order/purification/exile/exposure) fire on completion, not intent/prep/description")
 
 
 def test_action_endings_fire_on_recent_act_not_stale():

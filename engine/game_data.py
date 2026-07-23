@@ -1367,13 +1367,19 @@ ENDINGS: list[dict] = [
         # "The Broadcast" banner. It must fire on the SEND beat, which lands.
         "check": lambda t, w, p, k, n: (
             w.get("nexus_alert", {}).get("current", 0) >= 40
+            # COMPLETED-transmit phrases only. Bare "went live"/"on air"/
+            # "went public"/"every public screen"/"on every screen" also match
+            # non-broadcast prose (a live run saw "every public screen hangs off
+            # one spine" — infrastructure description — match); dropped in favour
+            # of the "across ... screen" broadcast-action forms + unambiguous send
+            # verbs. Still guarded by alert>=40 + turn>=8 + recency, but this
+            # removes the latent cliffhanger-via-different-keyword surface.
             and _recent_act(k, [
                 "broadcast the truth", "broadcasted the truth", "the broadcast went out",
-                "broadcast went live", "went live", "on air", "went public",
-                "across every screen", "on every screen", "every public screen",
-                "aired the truth", "transmitted the truth", "transmitted the proof",
-                "the whole city saw", "the city saw the truth", "exposed the truth",
-                "leaked the truth", "went out across", "hit send",
+                "broadcast went live", "across every screen", "across every public screen",
+                "on every public screen", "aired the truth", "transmitted the truth",
+                "transmitted the proof", "the whole city saw", "the city saw the truth",
+                "exposed the truth", "leaked the truth", "went out across", "hit send",
                 "揭露真相", "公之于众", "公开真相", "向全城", "真相传遍", "向全城播出",
                 "广播已发出", "已经播出", "公开曝光",
             ], p)
