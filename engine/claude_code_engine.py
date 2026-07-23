@@ -1057,7 +1057,8 @@ def _apply_mutations(
     return knowledge_notifications, elapsed_minutes
 
 
-def _apply_state_effects(effects: dict, player: dict, world_state: dict, inventory: dict) -> int:
+def _apply_state_effects(effects: dict, player: dict, world_state: dict, inventory: dict,
+                         tool_credit_delta: int = 0) -> int:
     """Apply the numeric deltas the model reports in ``state_effects``.
 
     Returns minutes elapsed (from ``time_minutes``). This is the deterministic
@@ -1123,6 +1124,14 @@ def _apply_state_effects(effects: dict, player: dict, world_state: dict, invento
             world_state["fragment_decay"] = decay
 
     dc = _num(effects.get("credits_delta"))
+    # Avoid double-charging: the model often records the SAME purchase in BOTH
+    # channels — a credits_delta AND an update_inventory/update_credits tool call
+    # (seen live: an "8"-credit soup deducting 16, a "20"-credit item deducting
+    # 30-clamped). If an inventory tool already applied a SAME-SIGN credit change
+    # this turn, this credits_delta is that transaction restated — skip it.
+    # Opposite-sign changes (sold one item AND bought another) both apply.
+    if dc and tool_credit_delta and (tool_credit_delta < 0) == (dc < 0):
+        dc = 0
     if dc:
         new_credits = max(0, inventory.get("credits", 0) + dc)
         inventory["credits"] = new_credits
@@ -1755,17 +1764,21 @@ def run_turn(session_dir: str, player_input: str, mode: str = "play") -> dict:
     narrative, mutation_calls = _execute_game_tools(parsed["tool_calls"], narrative, inventory)
 
     # ── Step 7: Apply state mutations ────────────────────────────────
+    _credits_before_tools = inventory.get("credits", 0)
     knowledge_notifications, elapsed_minutes = _apply_mutations(
         mutation_calls, player, knowledge, location,
         inventory, npcs, world_state, log, session_dir,
     )
+    _tool_credit_delta = inventory.get("credits", 0) - _credits_before_tools
 
     # ── Step 7b: Apply numeric state_effects (deterministic meter deltas) ──
     # The model reports consequences as simple numbers here; applying them in
     # Python means integrity/NEXUS/credits move even when it omits the tool_calls,
-    # so death/capture endings can actually fire.
+    # so death/capture endings can actually fire. Pass the credit change the tools
+    # already made so a purchase recorded in BOTH channels isn't charged twice.
     elapsed_minutes += _apply_state_effects(
         parsed.get("state_effects", {}), player, world_state, inventory,
+        tool_credit_delta=_tool_credit_delta,
     )
 
     # ── Step 7c: Persist the model's `record` list as knowledge facts ──────

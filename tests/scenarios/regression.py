@@ -323,6 +323,39 @@ def test_npc_roster_dedups_by_core_identity():
     print("  [PASS] NPC roster dedups by core identity (no per-turn suffix bloat), keeps strongest trust")
 
 
+def test_purchase_not_double_charged():
+    """A purchase must deduct its cost ONCE. The model records the same purchase
+    in BOTH channels — a state_effects credits_delta AND an update_inventory
+    update_credits tool call — so a live run saw an "8"-credit soup deduct 16 and
+    a "20"-credit item deduct 30 (clamped). The credits_delta is skipped when an
+    inventory tool already applied a same-sign credit change that turn.
+    """
+    from engine.claude_code_engine import _apply_state_effects
+
+    # Real flow: the update_credits tool ran first (Step 7) and already deducted
+    # 8 from a 50-credit wallet -> 42, reporting tool_credit_delta=-8. The delta
+    # channel restates the SAME -8; it must NOT deduct again.
+    inv = {"credits": 42}
+    _apply_state_effects({"credits_delta": -8}, {}, {}, inv, tool_credit_delta=-8)
+    assert inv["credits"] == 42, f"purchase double-charged: {inv['credits']} (should stay 42)"
+
+    # Delta-only purchase (no inventory tool) still deducts.
+    inv = {"credits": 50}
+    _apply_state_effects({"credits_delta": -8}, {}, {}, inv, tool_credit_delta=0)
+    assert inv["credits"] == 42, "delta-only purchase did not deduct"
+
+    # Opposite signs (sold an item via tool +10, bought one via delta -8): both apply.
+    inv = {"credits": 60}  # tool already added 10 to a 50 wallet
+    _apply_state_effects({"credits_delta": -8}, {}, {}, inv, tool_credit_delta=10)
+    assert inv["credits"] == 52, f"opposite-sign credit changes mis-handled: {inv['credits']}"
+
+    # Double-recorded EARNING is likewise counted once.
+    inv = {"credits": 58}  # tool already added 8 to a 50 wallet
+    _apply_state_effects({"credits_delta": 8}, {}, {}, inv, tool_credit_delta=8)
+    assert inv["credits"] == 58, f"reward double-counted: {inv['credits']}"
+    print("  [PASS] Purchase/reward recorded in both channels is charged once; single-channel + opposite-sign still apply")
+
+
 def test_districts_unlock_on_trace_and_layer():
     """A district's unlock_trace / unlock_layer gate must actually open it.
 
@@ -2165,6 +2198,7 @@ def main():
         test_cli_runner_kills_hung_process_tree,
         test_trust_gate_reads_highest_of_duplicate_npcs,
         test_npc_roster_dedups_by_core_identity,
+        test_purchase_not_double_charged,
         test_districts_unlock_on_trace_and_layer,
         test_movement_gate_allows_inquiry,
         test_good_endings_reachable_and_not_shadowed,
