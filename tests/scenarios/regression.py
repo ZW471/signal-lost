@@ -285,6 +285,44 @@ def test_trust_gate_reads_highest_of_duplicate_npcs():
     print("  [PASS] Trust gate reads highest trust across duplicate NPC entries")
 
 
+def test_npc_roster_dedups_by_core_identity():
+    """A scene NPC's identity is its name BEFORE any descriptive suffix. The model
+    writes "Bartender — drying glasses" one turn and "Bartender — far end" the
+    next, so over a long run the same person piled up as separate roster entries
+    (a live 13-turn run accumulated 3x Bartender, 3x Wren). Dedup collapses them
+    by core name, keeping the strongest trust and the clean core name; a re-seen
+    NPC never adds a new entry; hyphenated cores ("dock-worker") stay whole.
+    """
+    from engine.claude_code_engine import _dedup_npc_roster, _npc_core, _promote_scene_npcs
+
+    assert _npc_core("Bartender — far end, precisely not watching") == "Bartender"
+    assert _npc_core("Mira, the noodle vendor") == "Mira"
+    assert _npc_core("Nervous dock-worker drinker — watching the door") == "Nervous dock-worker drinker"
+    assert _npc_core("Ghost") == "Ghost"
+
+    roster = [
+        {"name": "Bartender — drying glasses", "trust": "neutral"},
+        {"name": "Bartender — down the bar", "trust": "cautious_ally"},   # earned trust
+        {"name": "Bartender — far end", "trust": "neutral"},
+        {"name": "Wren — by the ladder", "trust": "trusted"},
+        {"name": "Wren — by the curtain", "trust": "neutral"},
+        {"name": "Mira", "trust_level": "trusted"},
+    ]
+    d = _dedup_npc_roster(roster)
+    names = [n["name"] for n in d]
+    assert names.count("Bartender") == 1 and names.count("Wren") == 1, f"roster not deduped: {names}"
+    assert "Mira" in names and len(d) == 3, f"expected Bartender/Wren/Mira, got {names}"
+    bartender = next(n for n in d if n["name"] == "Bartender")
+    assert bartender.get("trust") == "cautious_ally", "dedup did not keep the strongest trust"
+
+    # A re-seen NPC (new descriptive suffix) must NOT add a new roster entry.
+    npcs = {"npcs": [{"name": "Bartender", "trust": "neutral"}]}
+    _promote_scene_npcs({"npcs_present": ["Bartender — now polishing a glass", "New Face — in the corner"]}, npcs, 5)
+    out = [n["name"] for n in npcs["npcs"]]
+    assert out.count("Bartender") == 1 and "New Face" in out, f"scene-promote bloated the roster: {out}"
+    print("  [PASS] NPC roster dedups by core identity (no per-turn suffix bloat), keeps strongest trust")
+
+
 def test_districts_unlock_on_trace_and_layer():
     """A district's unlock_trace / unlock_layer gate must actually open it.
 
@@ -2126,6 +2164,7 @@ def main():
         test_integrity_warning_gives_recovery_window,
         test_cli_runner_kills_hung_process_tree,
         test_trust_gate_reads_highest_of_duplicate_npcs,
+        test_npc_roster_dedups_by_core_identity,
         test_districts_unlock_on_trace_and_layer,
         test_movement_gate_allows_inquiry,
         test_good_endings_reachable_and_not_shadowed,

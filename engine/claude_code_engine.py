@@ -833,18 +833,24 @@ def _apply_mutations(
 
         elif name == "update_npc":
             npc_name = args.get("name", "")
-            changes = args.get("changes", {})
+            changes = args.get("changes", {}) or {}
             npc_list = npcs.get("npcs", [])
+            # Match by CORE identity so "Bartender — drying glasses" and
+            # "Bartender — far end" update ONE roster entry instead of piling up.
+            core = _npc_core(npc_name)
+            core_key = _npc_norm(core)
             found = False
             for npc in npc_list:
-                if npc.get("name", "").lower() == npc_name.lower():
+                if core_key and _npc_norm(_npc_core(npc.get("name", ""))) == core_key:
                     npc.update(changes)
+                    npc["name"] = core  # keep the clean core identity, not the suffix
                     npc["last_interaction_turn"] = player.get("turn", 1)
                     found = True
                     break
             if not found:
-                new_npc = {"name": npc_name, "last_interaction_turn": player.get("turn", 1)}
+                new_npc = {"name": core or npc_name, "last_interaction_turn": player.get("turn", 1)}
                 new_npc.update(changes)
+                new_npc["name"] = core or npc_name
                 npc_list.append(new_npc)
                 npcs["npcs"] = npc_list
 
@@ -1437,6 +1443,60 @@ def _npc_norm(s: str) -> str:
     return re.sub(r"[\s,，。、:：()（）\-—\"'’]", "", str(s)).lower()
 
 
+# A scene NPC's identity is the part BEFORE any descriptive suffix — the model
+# writes "Bartender — drying glasses" / "Bartender — far end, not watching" and
+# the suffix changes every turn, so the same person was piling up as separate
+# roster entries (a long run accumulated 3× "Bartender", 3× "Wren"). Split on
+# em/en-dash, comma, or colon (NOT the hyphen in "dock-worker") to recover the
+# stable core name. Bare-hyphen names are left whole.
+_NPC_SUFFIX_RE = re.compile(r"\s*(?:[—–]|,|，|:|：).*$")
+# Trust levels low→high, so a dedup merge keeps the strongest trust earned.
+_TRUST_RANK = {"hostile": 0, "suspicious": 1, "neutral": 2,
+               "cautious_ally": 3, "trusted": 4, "devoted": 5}
+
+
+def _npc_core(name: str) -> str:
+    """The stable identity of an NPC name — its part before any descriptive
+    suffix ("Bartender — drying glasses" -> "Bartender", "Mira, the vendor" ->
+    "Mira"). Returns the whole (stripped) name when there is no suffix."""
+    core = _NPC_SUFFIX_RE.sub("", str(name or "").strip()).strip()
+    return core or str(name or "").strip()
+
+
+def _trust_rank(npc: dict) -> int:
+    t = str(npc.get("trust_level", npc.get("trust", "neutral"))).lower()
+    return _TRUST_RANK.get(t, 2)
+
+
+def _dedup_npc_roster(roster: list) -> list:
+    """Collapse roster entries that share a core identity into one — keeping the
+    strongest trust and latest interaction, and storing the clean core name."""
+    by_core: dict[str, dict] = {}
+    order: list[str] = []
+    for npc in roster:
+        if not isinstance(npc, dict):
+            continue
+        core = _npc_core(npc.get("name", ""))
+        key = _npc_norm(core)
+        if not key:
+            continue
+        if key not in by_core:
+            merged = {**npc, "name": core}
+            by_core[key] = merged
+            order.append(key)
+        else:
+            cur = by_core[key]
+            # keep the higher-trust entry's fields as the base, layer the other on
+            base, other = (cur, npc) if _trust_rank(cur) >= _trust_rank(npc) else (npc, cur)
+            merged = {**other, **{k: v for k, v in base.items() if v not in (None, "")}}
+            merged["name"] = core
+            li = [x.get("last_interaction_turn") for x in (cur, npc) if isinstance(x.get("last_interaction_turn"), int)]
+            if li:
+                merged["last_interaction_turn"] = max(li)
+            by_core[key] = merged
+    return [by_core[k] for k in order]
+
+
 def _promote_scene_npcs(location: dict, npcs: dict, turn: int) -> None:
     """Register NPCs the narration placed in the scene (``location.npcs_present``)
     into ``npcs.json`` so they are interactable and can satisfy NPC-trust trace
@@ -1448,21 +1508,23 @@ def _promote_scene_npcs(location: dict, npcs: dict, turn: int) -> None:
     """
     present = location.get("npcs_present", []) or []
     if not isinstance(present, list):
-        return
-    roster = npcs.get("npcs", [])
-    existing_norm = [_npc_norm(n.get("name", "")) for n in roster]
+        present = []
+    # Always collapse any dupes that accumulated before this fix / from update_npc.
+    roster = _dedup_npc_roster(npcs.get("npcs", []))
+    existing_cores = [_npc_norm(_npc_core(n.get("name", ""))) for n in roster]
     for entry in present:
         name = entry.get("name") if isinstance(entry, dict) else entry
         name = str(name or "").strip()
         if not name or len(name) < 2 or _CROWD_RE.search(name):
             continue
-        nn = _npc_norm(name)
-        if not nn or any(ex and (nn in ex or ex in nn) for ex in existing_norm):
+        core = _npc_core(name)
+        ck = _npc_norm(core)
+        if not ck or any(ex and (ck in ex or ex in ck) for ex in existing_cores):
             continue
         if len(roster) >= 40:  # guard against unbounded growth
             break
-        roster.append({"name": name, "trust": "neutral", "first_seen_turn": turn})
-        existing_norm.append(nn)
+        roster.append({"name": core, "trust": "neutral", "first_seen_turn": turn})
+        existing_cores.append(ck)
     npcs["npcs"] = roster
 
 
